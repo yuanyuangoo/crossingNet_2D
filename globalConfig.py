@@ -18,11 +18,11 @@ dataset = dataset.upper()
 msra_base_path = 'database/msra15'
 nyu_base_path = 'database/nyu'
 icvl_base_path = 'database/icvl/'
-lsp_base_path='/media/a/D/datasets/lspet_dataset'
+lsp_base_path = '/media/a/D/datasets/lspet_dataset'
 h36m_base_path = '/media/a/D/datasets/h36m'
 # h36m_base_path = 'D:/datasets/h36m'
 cache_base_path = './cache/data/'
-
+skate_base_path = '/media/a/D/datasets/h36m'
 # path to save the network parameter, intermediate outputs and test result
 model_dir = './cache/model/'
 
