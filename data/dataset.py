@@ -34,19 +34,7 @@ class Dataset(object):
         self.dataset = globalConfig.dataset
         print('initialized')
 
-        if self.dataset == 'NYU':
-            self.refPtIdx = [31, 32, 33, 34, 35]
-            self.skel_num = 36
-            self.centerPtIdx = 32
-        elif self.dataset == 'MSRA':
-            self.refPtIdx = [1, 5, 9, 13, 17]
-            self.skel_num = 21
-            self.centerPtIdx = 0
-        elif self.dataset == 'ICVL':
-            self.refPtIdx = [1, 4, 7, 10, 13]
-            self.skel_num = 16
-            self.centerPtIdx = 0
-        elif self.dataset == 'H36M':
+        if self.dataset == 'H36M':
             self.refPtIdx = [1]
             self.skel_num = 17
             self.centerPtIdx = 1
@@ -90,9 +78,9 @@ class Dataset(object):
         frmStartNum = fileIdx*self.h36m_frm_perfile
         frmEndNum = min(frmStartNum+self.h36m_frm_perfile, len(Names))
 
-        print ('frmStartNum={}, frmEndNum={}, fileIdx={}'.format(frmStartNum,
-                                                                 frmEndNum,
-                                                                 fileIdx))
+        print('frmStartNum={}, frmEndNum={}, fileIdx={}'.format(frmStartNum,
+                                                                frmEndNum,
+                                                                fileIdx))
         if not hasattr(self, 'frmList'):
             self.frmList = []
         if not tApp:
@@ -101,14 +89,14 @@ class Dataset(object):
         pickleCachePath = '{}/h36m_{}_{}.pkl'.format(self.cache_base_path,
                                                      mode, fileIdx)
         if os.path.isfile(pickleCachePath) and not replace:
-            print ('direct load from the cache')
+            print('direct load from the cache')
             t1 = time.time()
             f = open(pickleCachePath, 'rb')
 
             # (self.frmList) += pickle.load(f)
             (self.frmList) += pickle.load(f)
             t1 = time.time() - t1
-            print ('loaded with {}s'.format(t1))
+            print('loaded with {}s'.format(t1))
             return self.frmList
 
         f = h5py.File(Hdf5Path, 'r')
@@ -137,7 +125,7 @@ class Dataset(object):
         f = open(pickleCachePath, 'wb')
         pickle.dump((self.frmList), f, protocol=pickle.HIGHEST_PROTOCOL)
         f.close()
-        print ('loaded with {} frames'.format(len(self.frmList)))
+        print('loaded with {} frames'.format(len(self.frmList)))
 
     def loadMSRA(self, seqName, mode='train', replace=False, tApp=False):
         '''seqName: P0 - P8
@@ -153,12 +141,12 @@ class Dataset(object):
         pickleCachePath = '{}/msra_{}.pkl'.format(
             self.cache_base_path, seqName)
         if os.path.isfile(pickleCachePath) and not replace:
-            print ('direct load from the cache')
+            print('direct load from the cache')
             t1 = time.time()
             f = open(pickleCachePath, 'rb')
             (self.frmList) += pickle.load(f)
             t1 = time.time() - t1
-            print ('loaded with {}s'.format(t1))
+            print('loaded with {}s'.format(t1))
             return self.frmList
 
         Camera.setCamera('INTEL')
@@ -198,25 +186,25 @@ class Dataset(object):
         f = open(pickleCachePath, 'wb')
         pickle.dump((self.frmList), f, protocol=pickle.HIGHEST_PROTOCOL)
         f.close()
-        print ('loaded with {} frames'.format(len(self.frmList)))
+        print('loaded with {} frames'.format(len(self.frmList)))
 
     def loadICVLTest(self):
         self.frmList = []
 
         pickleCachePath = '{}/icvl_test.pkl'.format(self.cache_base_path)
         if os.path.isfile(pickleCachePath):
-            print ('direct load from the cache')
+            print('direct load from the cache')
             t1 = time.time()
             f = open(pickleCachePath, 'rb')
             (self.frmList) += pickle.load(f)
             t1 = time.time() - t1
-            print ('loaded with {}s'.format(t1))
+            print('loaded with {}s'.format(t1))
             return
 
         label_path = os.path.join(self.icvl_base_path,
                                   'Testing/labels.txt')
         labels = [line for line in open(label_path)]
-        print ('ICVL testing: %d sequences in total' % (len(labels)))
+        print('ICVL testing: %d sequences in total' % (len(labels)))
 
         Camera.setCamera('INTEL')
         pbar = pb.ProgressBar(maxval=len(labels), widgets=[
@@ -246,7 +234,7 @@ class Dataset(object):
         f = open(pickleCachePath, 'wb')
         pickle.dump((self.frmList), f, protocol=pickle.HIGHEST_PROTOCOL)
         f.close()
-        print ('loaded with {} frames'.format(len(self.frmList)))
+        print('loaded with {} frames'.format(len(self.frmList)))
 
     def loadICVL(self, seqName='2014', tApp=False, tReplace=False):
         '''seqName: corresponding folder names in the icvl dataset 
@@ -262,19 +250,19 @@ class Dataset(object):
         pickleCachePath = '{}/icvl_{}.pkl'.format(
             self.cache_base_path, seqName)
         if os.path.isfile(pickleCachePath) and not tReplace:
-            print ('direct load from the cache')
+            print('direct load from the cache')
             t1 = time.time()
             f = open(pickleCachePath, 'rb')
             (self.frmList) += pickle.load(f)
             t1 = time.time() - t1
-            print ('loaded with {}s'.format(t1))
+            print('loaded with {}s'.format(t1))
             return
 
         label_path = os.path.join(self.icvl_base_path,
                                   'Training/labels.txt')
         labels = [line for line in open(
             label_path) if line.startswith(seqName)]
-        print ('%s: %d sequences in total' % (seqName, len(labels)))
+        print('%s: %d sequences in total' % (seqName, len(labels)))
 
         Camera.setCamera('INTEL')
         pbar = pb.ProgressBar(maxval=len(labels), widgets=[
@@ -303,7 +291,7 @@ class Dataset(object):
         f = open(pickleCachePath, 'wb')
         pickle.dump((self.frmList), f, protocol=pickle.HIGHEST_PROTOCOL)
         f.close()
-        print ('loaded with {} frames'.format(len(self.frmList)))
+        print('loaded with {} frames'.format(len(self.frmList)))
 
     def loadNYU(self, frmStartNum, cameraIdx=1, tFlag='train', tApp=False, isReplace=False):
         '''frmStartNum: starting frame index
@@ -339,9 +327,9 @@ class Dataset(object):
             frmEndNum = min(frmStartNum+self.nyu_frm_perfile, len(joint_xyz))
         elif tFlag == 'test':
             frmEndNum = len(joint_xyz)
-        print ('frmStartNum={}, frmEndNum={}, fileIdx={}'.format(frmStartNum,
-                                                                 frmEndNum,
-                                                                 fileIdx))
+        print('frmStartNum={}, frmEndNum={}, fileIdx={}'.format(frmStartNum,
+                                                                frmEndNum,
+                                                                fileIdx))
 
         pickleCachePath = '{}/nyu_{}_{}_{}.pkl'.format(self.cache_base_path,
                                                        tFlag, cameraIdx, fileIdx)
@@ -351,13 +339,13 @@ class Dataset(object):
             self.frmList = []
 
         if os.path.isfile(pickleCachePath) and isReplace == False:
-            print ('direct load from the cache')
-            print ('cache dir ={}'.format(pickleCachePath))
+            print('direct load from the cache')
+            print('cache dir ={}'.format(pickleCachePath))
             t1 = time.time()
             f = open(pickleCachePath, 'rb')
             self.frmList += pickle.load(f)
             t1 = time.time() - t1
-            print ('loaded with {}s'.format(t1))
+            print('loaded with {}s'.format(t1))
             return
 
         pbar = pb.ProgressBar(maxval=frmEndNum-frmStartNum,
@@ -383,7 +371,7 @@ class Dataset(object):
         f = open(pickleCachePath, 'wb')
         pickle.dump((self.frmList), f, protocol=pickle.HIGHEST_PROTOCOL)
         f.close()
-        print ('loaded with {} frames'.format(len(self.frmList)))
+        print('loaded with {} frames'.format(len(self.frmList)))
 
     '''
     interface to neural network, used for training
@@ -494,32 +482,14 @@ class Dataset(object):
             self.pose_trans[i] = frm.trans
             self.pose_com[i] = frm.com3D
 
-        print ('x_norm range: {} to {}'.format(self.x_norm.min(),
-                                               self.x_norm.max()))
+        print('x_norm range: {} to {}'.format(self.x_norm.min(),
+                                              self.x_norm.max()))
         return self.x_norm, self.y_norm
 
 
 if __name__ == '__main__':
     dataset = globalConfig.dataset
-    if dataset == 'NYU':
-        ds = Dataset()
-        for camera_idx in {1}:
-            for start_frm in range(0, 75000, 20000):
-                ds.loadNYU(start_frm, camera_idx, 'train', isReplace=False)
-            for start_frm in range(0, 8000, 20000):
-                ds.loadNYU(start_frm, camera_idx, 'test', isReplace=False)
-
-    if dataset == 'MSRA':
-        ds = Dataset()
-        for p in range(9):
-            ds.loadMSRA('P%d' % p, mode='train', replace=True)
-
-    if dataset == 'ICVL':
-        ds = Dataset()
-        seqNames = '22-5 45 67-5 90 112-5 135 157-5 -22-5 -45 -67-5 -90 -112-5 -157-5 -180'
-        for seqName in seqNames.split(' '):
-            ds.loadICVL(seqName)
-
+    
     if dataset == 'H36M':
         ds = Dataset()
         for i in range(0, 20000, 20000):
