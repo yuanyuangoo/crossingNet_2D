@@ -38,11 +38,6 @@ class Dataset(object):
             self.centerPtIdx = 1
 
         self.cache_base_path = globalConfig.cache_base_path
-        self.msra_base_path = globalConfig.msra_base_path
-        self.msra_pose_list = '1  2  3  4  5  6  7  8  9  I  IP  L  MP  RP  T  TIP  Y'.split()
-        self.nyu_base_path = globalConfig.nyu_base_path
-        self.nyu_frm_perfile = 20000  # the maximum number of frame to store in each file
-        self.icvl_base_path = globalConfig.icvl_base_path
         self.h36m_base_path = globalConfig.h36m_base_path
         self.h36m_frm_perfile = 200  # the maximum number of frame to store in each file
 
@@ -57,13 +52,13 @@ class Dataset(object):
 
         if mode == 'train':
 
-            annotPath='/'.join([self.h36m_base_path,'annot/train.mat'])
+            annotPath = '/'.join([self.h36m_base_path, 'annot/train.mat'])
             # NamesPath = '/'.join([self.h36m_base_path,
             #                       'annot/train_images.txt'])
             # Hdf5Path = '/'.join([self.h36m_base_path, 'annot/train.h5'])
 
         elif mode == 'test':
-            annotPath='/'.join([self.h36m_base_path,'annot/valid.mat'])
+            annotPath = '/'.join([self.h36m_base_path, 'annot/valid.mat'])
 
             # NamesPath = '/'.join([self.h36m_base_path,
             #                       'annot/test_images.txt'])
@@ -117,17 +112,24 @@ class Dataset(object):
         skels = annot['S_glob'][0][0]
         P2ds = annot['part'][0][0]
 
-        cam=annot['cam'][0][0]
+        cam = annot['cam'][0][0]
         for frmIdx in range(frmStartNum, frmEndNum):
             frmPath = os.path.join(
                 self.h36m_base_path+'/images', imgname[frmIdx][0][0][:]+'.jpg')
             skel = np.asarray(skels[frmIdx])
 
+
+<< << << < HEAD
+
             p2d = np.asarray(P2ds[frmIdx])
             # skel.shape = (-1)
-            Rotation=cam[frmIdx][0]['R'][0][0]
+            Rotation = cam[frmIdx][0]['R'][0][0]
             img = Image('H36M', frmPath)
             self.frmList.append(Frame(img, skel, Rotation, p2d))
+== == == =
+            skel.shape = (-1)
+            dm = DepthMap('H36M', frmPath)
+            self.frmList.append(Frame(dm, skel))
             self.frmList[-1].saveOnlyForTrain()
             pbar.update(pbIdx)
             pbIdx += 1
@@ -139,6 +141,260 @@ class Dataset(object):
         pickle.dump((self.frmList), f, protocol=pickle.HIGHEST_PROTOCOL)
         f.close()
         print('loaded with {} frames'.format(len(self.frmList)))
+
+    def loadMSRA(self, seqName, mode='train', replace=False, tApp=False):
+        '''seqName: P0 - P8
+           mode: if train, only save the cropped image
+           replace: replace the previous cache file if exists
+           tApp: append to previous loaded file if True
+        '''
+        if not hasattr(self, 'frmList'):
+            self.frmList = []
+        if not tApp:
+            self.frmList = []
+
+        pickleCachePath = '{}/msra_{}.pkl'.format(
+            self.cache_base_path, seqName)
+        if os.path.isfile(pickleCachePath) and not replace:
+            print('direct load from the cache')
+            t1 = time.time()
+            f = open(pickleCachePath, 'rb')
+            (self.frmList) += pickle.load(f)
+            t1 = time.time() - t1
+            print('loaded with {}s'.format(t1))
+            return self.frmList
+
+        Camera.setCamera('INTEL')
+        pbar = pb.ProgressBar(maxval=500*len(self.msra_pose_list),
+                              widgets=['Loading MSRA | ', pb.Percentage(), pb.Bar()])
+        pbar.start()
+        pbIdx = 0
+
+        seqPath = '/'.join([self.msra_base_path, seqName])
+        for pose_name in self.msra_pose_list:
+            curPath = '/'.join([seqPath, pose_name, 'joint.txt'])
+            f = open(curPath, 'r')
+            frmNum = int(f.readline()[:-1])
+            for frmIdx in range(frmNum):
+                frmPath = '/'.join([seqPath, pose_name,
+                                    '%06i_depth.bin' % (frmIdx)])
+                dm = DepthMap('MSRA', frmPath)
+                skel = f.readline().split()
+                skel = np.asarray([float(pt) for pt in skel])
+
+                def cvtMSRA_skel(init_skel):
+                    skel = init_skel.copy()
+                    for i in range(len(skel)):
+                        if i % 3 == 2:
+                            skel[i] *= -1.0
+                    return skel
+                skel = cvtMSRA_skel(skel)
+                self.frmList.append(Frame(dm, skel))
+                if mode is 'train':
+                    self.frmList[-1].saveOnlyForTrain()
+                pbar.update(pbIdx)
+                pbIdx += 1
+        pbar.finish()
+
+        if not os.path.exists(self.cache_base_path):
+            os.makedirs(self.cache_base_path)
+        f = open(pickleCachePath, 'wb')
+        pickle.dump((self.frmList), f, protocol=pickle.HIGHEST_PROTOCOL)
+        f.close()
+        print('loaded with {} frames'.format(len(self.frmList)))
+
+    def loadICVLTest(self):
+        self.frmList = []
+
+        pickleCachePath = '{}/icvl_test.pkl'.format(self.cache_base_path)
+        if os.path.isfile(pickleCachePath):
+            print('direct load from the cache')
+            t1 = time.time()
+            f = open(pickleCachePath, 'rb')
+            (self.frmList) += pickle.load(f)
+            t1 = time.time() - t1
+            print('loaded with {}s'.format(t1))
+            return
+
+        label_path = os.path.join(self.icvl_base_path,
+                                  'Testing/labels.txt')
+        labels = [line for line in open(label_path)]
+        print('ICVL testing: %d sequences in total' % (len(labels)))
+
+        Camera.setCamera('INTEL')
+        pbar = pb.ProgressBar(maxval=len(labels), widgets=[
+                              'Loading ICVL | ', pb.Percentage(), pb.Bar()])
+        pbar.start()
+        pbIdx = 0
+        for label in labels:
+            label_cache = label.split(' ')
+            frmPath = os.path.join(self.icvl_base_path,
+                                   'Testing/Depth',
+                                   label_cache[0])
+            label_cache = label_cache[0:49]
+            skel = np.asarray([float(j) for j in label_cache[1:]])
+            skel.shape = (-1, 3)
+            for idx, pt in enumerate(skel):
+                skel[idx] = Camera.to3D(pt)
+            skel.shape = (-1)
+            dm = DepthMap('ICVL', frmPath)
+            dm.dmData[dm.dmData >= 500] = 32001
+            self.frmList.append(Frame(dm, skel))
+            pbar.update(pbIdx)
+            pbIdx += 1
+        pbar.finish()
+
+        if not os.path.exists(self.cache_base_path):
+            os.makedirs(self.cache_base_path)
+        f = open(pickleCachePath, 'wb')
+        pickle.dump((self.frmList), f, protocol=pickle.HIGHEST_PROTOCOL)
+        f.close()
+        print('loaded with {} frames'.format(len(self.frmList)))
+
+    def loadICVL(self, seqName='2014', tApp=False, tReplace=False):
+        '''seqName: corresponding folder names in the icvl dataset 
+           mode: if train, only save the cropped image
+           replace: replace the previous cache file if exists
+           tApp: append to previous loaded file if True
+        '''
+        if not hasattr(self, 'frmList'):
+            self.frmList = []
+        if not tApp:
+            self.frmList = []
+
+        pickleCachePath = '{}/icvl_{}.pkl'.format(
+            self.cache_base_path, seqName)
+        if os.path.isfile(pickleCachePath) and not tReplace:
+            print('direct load from the cache')
+            t1 = time.time()
+            f = open(pickleCachePath, 'rb')
+            (self.frmList) += pickle.load(f)
+            t1 = time.time() - t1
+            print('loaded with {}s'.format(t1))
+            return
+
+        label_path = os.path.join(self.icvl_base_path,
+                                  'Training/labels.txt')
+        labels = [line for line in open(
+            label_path) if line.startswith(seqName)]
+        print('%s: %d sequences in total' % (seqName, len(labels)))
+
+        Camera.setCamera('INTEL')
+        pbar = pb.ProgressBar(maxval=len(labels), widgets=[
+                              'Loading ICVL | ', pb.Percentage(), pb.Bar()])
+        pbar.start()
+        pbIdx = 0
+        for label in labels:
+            label_cache = label.split(' ')
+            frmPath = os.path.join(self.icvl_base_path,
+                                   'Training/Depth',
+                                   label_cache[0])
+            skel = np.asarray([float(j) for j in label_cache[1:]])
+            skel.shape = (-1, 3)
+            for idx, pt in enumerate(skel):
+                skel[idx] = Camera.to3D(pt)
+            skel.shape = (-1)
+            dm = DepthMap('ICVL', frmPath)
+            self.frmList.append(Frame(dm, skel))
+            self.frmList[-1].saveOnlyForTrain()
+            pbar.update(pbIdx)
+            pbIdx += 1
+        pbar.finish()
+
+        if not os.path.exists(self.cache_base_path):
+            os.makedirs(self.cache_base_path)
+        f = open(pickleCachePath, 'wb')
+        pickle.dump((self.frmList), f, protocol=pickle.HIGHEST_PROTOCOL)
+        f.close()
+        print('loaded with {} frames'.format(len(self.frmList)))
+
+    def loadNYU(self, frmStartNum, cameraIdx=1, tFlag='train', tApp=False, isReplace=False):
+        '''frmStartNum: starting frame index
+           cameraIdx: [1,3]
+           tFlag: save only the cropped image if is 'train'
+           tApp: append to the previously loaded file if True
+        '''
+        Camera.setCamera('KINECT')
+        if cameraIdx not in [1]:
+            raise ValueError(
+                'invalid cameraIdx, current only support view from 1')
+
+        if tFlag not in ['train', 'test']:
+            raise ValueError('invalid tFlag, can be only train or test')
+
+        # load the annotation file
+        matPath = '{}/{}/joint_data.mat'.format(self.nyu_base_path, tFlag)
+        joint = sio.loadmat(matPath)
+        joint_xyz = joint['joint_xyz'][cameraIdx-1]
+        joint_uvd = joint['joint_uvd'][cameraIdx-1]
+        matPath = './data/center_uvd_{}.mat'.format(tFlag)
+        center = sio.loadmat(matPath)
+        center = center['center_uvd']
+
+        # determine the start and end frame
+        if frmStartNum >= len(joint_xyz):
+            raise ValueError(
+                'invalid start frame, shoud be lower than {}'.format(len(joint_xyz)))
+
+        fileIdx = int(frmStartNum / self.nyu_frm_perfile)
+        frmStartNum = fileIdx*self.nyu_frm_perfile
+        if tFlag == 'train':
+            frmEndNum = min(frmStartNum+self.nyu_frm_perfile, len(joint_xyz))
+        elif tFlag == 'test':
+            frmEndNum = len(joint_xyz)
+        print('frmStartNum={}, frmEndNum={}, fileIdx={}'.format(frmStartNum,
+                                                                frmEndNum,
+                                                                fileIdx))
+
+        pickleCachePath = '{}/nyu_{}_{}_{}.pkl'.format(self.cache_base_path,
+                                                       tFlag, cameraIdx, fileIdx)
+        if not hasattr(self, 'frmList'):
+            self.frmList = []
+        if not tApp:
+            self.frmList = []
+
+        if os.path.isfile(pickleCachePath) and isReplace == False:
+            print('direct load from the cache')
+            print('cache dir ={}'.format(pickleCachePath))
+            t1 = time.time()
+            f = open(pickleCachePath, 'rb')
+            self.frmList += pickle.load(f)
+            t1 = time.time() - t1
+            print('loaded with {}s'.format(t1))
+            return
+
+        pbar = pb.ProgressBar(maxval=frmEndNum-frmStartNum,
+                              widgets=['Loading NYU | ', pb.Percentage(), pb.Bar()])
+        pbar.start()
+        pbIdx = 0
+
+        for frmIdx in range(frmStartNum, frmEndNum):
+            frmPath = '{}/{}/depth_{}_{:07d}.png'.format(self.nyu_base_path, tFlag,
+                                                         cameraIdx, frmIdx+1)
+            dm = DepthMap('NYU', frmPath)
+            skel = joint_xyz[frmIdx]
+            skel = np.reshape(skel, (-1))
+            com_uvd = center[frmIdx]
+            self.frmList.append(Frame(dm, skel, com_uvd))
+>>>>>>> f17239adcc353f6d087e0a3d10d9033ef84f6ad2
+            self.frmList[-1].saveOnlyForTrain()
+            pbar.update(pbIdx)
+            pbIdx += 1
+        pbar.finish()
+
+        if not os.path.exists(self.cache_base_path):
+            os.makedirs(self.cache_base_path)
+        f = open(pickleCachePath, 'wb')
+        pickle.dump((self.frmList), f, protocol=pickle.HIGHEST_PROTOCOL)
+        f.close()
+        print('loaded with {} frames'.format(len(self.frmList)))
+<<<<<<< HEAD
+=======
+
+    '''
+    interface to neural network, used for training
+    '''
+>>>>>>> f17239adcc353f6d087e0a3d10d9033ef84f6ad2
 
     def normTranslation(self, origin_pt_idx=None):
         if origin_pt_idx is None:
