@@ -109,15 +109,14 @@ class Camera(object):
         pt2[2] = pt3[2]
         return pt2
 
-
 class Frame(object):
     skel_norm_ratio = 50.0
 
-    def __init__(self, dm=None, skel=None, com2D=None, flag=None):
-        if not isinstance(com2D, np.ndarray):
-            (self.crop_dm, self.trans, self.com3D) = dm.Detector()
+    def __init__(self, im=None, skel=None, camR=None, p2d=None):
+        if not isinstance(camR, np.ndarray):
+            (self.crop_dm, self.trans, self.com3D) = im.Detector()
         else:
-            (self.crop_dm, self.trans, self.com3D) = dm.cropArea3D(dm.dmData, com2D)
+            (self.crop_dm, self.trans, self.com3D) = im.cropArea3D(im.Data, com2D)
         self.normDm()
 
         if isinstance(skel, np.ndarray):

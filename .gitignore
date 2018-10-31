@@ -1,3 +1,6 @@
 ./cache/*
 *.png
 *.jpg
+.vscode
+__pycache__
+*.pyc
