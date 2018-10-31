@@ -14,7 +14,6 @@ import matplotlib.pyplot as plt
 from PIL import Image
 
 from collections import namedtuple
-from util import Camera
 
 MSRA_size = namedtuple(
     'MSRA_size', ['cols', 'rows', 'left', 'top', 'right', 'bottom'])
@@ -22,11 +21,7 @@ MSRA_size = namedtuple(
 
 class DepthMap(object):
     # searcing depth range of hand
-    max_depth, min_depth = 1500, 10
     # cropped_size
-    size3 = [250, 250, 250]
-    size2 = [128, 128]
-    invariant_depth = float(size3[0])/float(size2[0])*Camera.focal_x
 
     def __init__(self, dataset, path):
         if dataset.upper() == 'ICVL':
@@ -35,12 +30,21 @@ class DepthMap(object):
             self.loadMSRA(path)
         elif dataset.upper() == 'NYU':
             self.loadNYU(path)
-        elif dataset.upper() == 'H36M':
+        elif dataset.upper() == 'LSP':
             self.loadH36M(path)
+        elif dataset.upper() == 'SKATE':
+            self.loadSKATE(path)
 
     '''
     loading module
     '''
+
+    def loadSKATE(self, path):
+        img = cv2.imread(path, 0)
+
+        self.Data = np.asarray(img, np.float32)/255
+        self.size2 = self.Data.shape
+        return self.Data
 
     def loadICVL(self, path):
         img = Image.open(path)
@@ -106,6 +110,8 @@ class DepthMap(object):
         First try to use the cv2.findContours to find mass and calculate the centroid according to the
         if not find contour with area>200, calculate the arbitrary contour, crop it using crop3D
         '''
+        self.min_depth = 0
+        self.max_depth = 255
         dpt = self.dmData.copy()
         dpt[dpt < self.min_depth] = 0
         dpt[dpt > self.max_depth] = 0

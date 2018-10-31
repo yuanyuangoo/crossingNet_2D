@@ -7,7 +7,7 @@ import cv2
 import cv2
 import globalConfig
 from numpy.random import randn
-import ref
+# import ref
 import torch
 
 CameraOption = namedtuple('CameraOption', [
@@ -50,101 +50,40 @@ msraBones = flattenBones(
     [initFigBone(b*4+1, 4, figColor[b+1]) for b in range(5)])
 
 
-class Camera(object):
-    intel = [241.42, 241.42, 160, 120, 320, 240, 32001]
-    kinect = [588.235, 587.084, 320, 240, 640, 480, 2001]
-    RGB = [241.42, 241.42, 160, 120, 320, 240, 32001]
-    #set as default
-    if globalConfig.dataset == 'NYU':
-        current = CameraOption(*kinect)
-    elif globalConfig.dataset == 'ICVL':
-        current = CameraOption(*intel)
-    elif globalConfig.dataset == 'MSRA':
-        current = CameraOption(*intel)
-    elif globalConfig.dataset == 'H36M':
-        current = CameraOption(*RGB)
-    else:
-        print (globalConfig.dataset)
-        raise NotImplementedError('Unknown dataset %s' % globalConfig.dataset)
-
-    focal_x = current.focal_x
-    focal_y = current.focal_y
-    center_x = current.center_x
-    center_y = current.center_y
-    width = current.width
-    height = current.height
-    far_point = current.far_point
-
-    @classmethod
-    def setCamera(cls_obj, camera_type):
-        if camera_type.upper() == 'INTEL':
-            cls_obj.current = CameraOption(*cls_obj.intel)
-        elif camera_type.upper() == 'KINECT':
-            cls_obj.current = CameraOption(*cls_obj.kinect)
-        else:
-            raise ValueError('the input type is incorrect')
-        cls_obj.focal_x = cls_obj.current.focal_x
-        cls_obj.focal_y = cls_obj.current.focal_y
-        cls_obj.center_x = cls_obj.current.center_x
-        cls_obj.center_y = cls_obj.current.center_y
-        cls_obj.width = cls_obj.current.width
-        cls_obj.height = cls_obj.current.height
-        cls_obj.far_point = cls_obj.current.far_point
-        print ('current camera type is set as {} with {}'.format(
-            camera_type.upper(), cls_obj.current))
-
-    @classmethod
-    def to3D(cls_obj, pt2):
-        pt3 = np.zeros((3), np.float32)
-        pt3[0] = (pt2[0] - cls_obj.center_x)*pt2[2] / cls_obj.focal_x
-        pt3[1] = (cls_obj.center_y - pt2[1])*pt2[2] / cls_obj.focal_y
-        pt3[2] = pt2[2]
-        return pt3
-
-    @classmethod
-    def to2D(cls_obj, pt3):
-        pt2 = np.zeros((3), np.float32)
-        pt2[0] = pt3[0]*cls_obj.focal_x / pt3[2] + cls_obj.center_x
-        pt2[1] = -pt3[1]*cls_obj.focal_y / pt3[2] + cls_obj.center_y
-        pt2[2] = pt3[2]
-        return pt2
-
 class Frame(object):
     skel_norm_ratio = 50.0
 
-    def __init__(self, im=None, skel=None, camR=None, p2d=None):
-        if not isinstance(camR, np.ndarray):
-            (self.crop_dm, self.trans, self.com3D) = im.Detector()
-        else:
-            (self.crop_dm, self.trans, self.com3D) = im.cropArea3D(im.Data, com2D)
-        self.normDm()
-
+    def __init__(self, img=None, skel=None, com2D=None, flag=None):
+        # if not isinstance(com2D, np.ndarray):
+        #     (self.crop_dm, self.trans, self.com3D) = dm.Detector()
+        # else:
+        #     (self.crop_dm, self.trans, self.com3D) = dm.cropArea3D(dm.dmData, com2D)
+        self.norm_img=img.Data
         if isinstance(skel, np.ndarray):
             if len(skel) % 3 != 0:
                 raise ValueError('invalid length of the skeleton mat')
             jntNum = len(skel)/3
+            self.with_skel = True
             self.skel = skel.astype(np.float32)
+            self.norm_skel=skel.astype(np.float32)
             #crop_skel is the training label for neurual network, normalize wrt com3D
-            self.crop_skel = (self.skel - repmat(self.com3D, 1, jntNum))[0]
-            self.crop_skel = self.crop_skel.astype(np.float32)
-            self.normSkel()
+            # self.crop_skel = (self.skel - repmat(self.com3D, 1, jntNum))[0]
+            # self.crop_skel = self.crop_skel.astype(np.float32)
+            # self.normSkel()
+        else:
+            self.skel = None
+            self.crop_skel = None
+            self.with_skel = False
+
 
     # save only the norm_dm and norm_skel for training, clear all initial size data
     def saveOnlyForTrain(self):
-        self.dm = None
-        self.crop_dm = None
+        self.img = None
+        self.crop_img = None
         self.skel = None
         self.crop_skel = None
         # self.trans = None
         # self.com3D = None
-
-    def normDm(self):
-        self.norm_dm = self.crop_dm.copy()
-        m = self.norm_dm.max()
-        if m == 0:
-            return
-        self.norm_dm /= m
-        self.norm_dm -= 0.5
 
     def normSkel(self):
         self.norm_skel = self.crop_skel.copy() / self.skel_norm_ratio
@@ -292,20 +231,20 @@ class Frame(object):
 
 
 def vis_pose(normed_vec):
-    import depth
-    origin_pt = np.array([0, 0, depth.DepthMap.invariant_depth])
+
+    vec = normed_vec.copy()
     vec = normed_vec.copy()*50.0
+    
     vec.shape = (-1, 3)
 
-    offset_x = Camera.center_x - depth.DepthMap.size2[0]/2
-    offset_y = Camera.center_y - depth.DepthMap.size2[1]/2
-
-    img = np.ones((depth.DepthMap.size2[0], depth.DepthMap.size2[1]))*255
+    img = np.ones((128, 128))*225
     img = cv2.cvtColor(img.astype('uint8'), cv2.COLOR_GRAY2BGR)
+
     for idx, pt3 in enumerate(vec):
-        pt = Camera.to2D(pt3+origin_pt)
-        pt = (pt[0]-offset_x, pt[1]-offset_y)
-        cv2.circle(img, (int(pt[0]), int(pt[1])), 2, (255, 0, 0), -1)
+        # pt = Camera.to2D(pt3)
+        # pt = pt3[0:2]
+        # pt = (pt[0], pt[2])
+        cv2.circle(img, (int(pt3[0]), int(pt3[2])), 2, (255, 0, 0), -1)
     return img
 
 

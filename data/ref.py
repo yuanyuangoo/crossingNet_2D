@@ -6,7 +6,7 @@ edges = [[0, 1], [1, 2], [2, 6], [6, 3], [3, 4], [4, 5],
          [10, 11], [11, 12], [12, 8], [8, 13], [13, 14], [14, 15],
          [6, 8], [8, 9]]
 
-h36mImgSize = 224
+h36mImgSize = 128
 
 outputRes = 64
 inputRes = 256
@@ -27,7 +27,8 @@ shiftPX = 50
 disturb = 10
 
 dataDir = '../data'
-mpiiImgDir = '/media/a/D/datasets/mpii/images/'
-h36mImgDir = '/media/a/D/datasets/h36m/images/'
+mpiiImgDir = '/home/zxy/Datasets/mpii/images/'
+h36mImgDir = '/media/a/D/datasets/h36m/resized/'
+expDir = '../exp'
 
 nThreads = 4
