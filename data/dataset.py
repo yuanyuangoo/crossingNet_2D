@@ -53,7 +53,7 @@ class Dataset(object):
            tApp: append to previous loaded file if True
         '''
 
-        NamesPath = '/'.join([self.h36m_base_path, 'annot/train_images.txt'])
+        # NamesPath = '/'.join([self.h36m_base_path, 'annot/train_images.txt'])
 
         if mode == 'train':
 
