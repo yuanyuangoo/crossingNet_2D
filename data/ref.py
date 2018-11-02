@@ -1,3 +1,8 @@
+import os
+import sys
+sys.path.append('./')
+import globalConfig
+
 nJoints = 16
 accIdxs = [0, 1, 2, 3, 4, 5, 10, 11, 14, 15]
 shuffleRef = [[0, 5], [1, 4], [2, 3],
@@ -5,7 +10,7 @@ shuffleRef = [[0, 5], [1, 4], [2, 3],
 edges = [[0, 1], [1, 2], [2, 6], [6, 3], [3, 4], [4, 5],
          [10, 11], [11, 12], [12, 8], [8, 13], [13, 14], [14, 15],
          [6, 8], [8, 9]]
-
+root = 0
 h36mImgSize = 128
 
 outputRes = 64
@@ -28,7 +33,7 @@ disturb = 10
 
 dataDir = '../data'
 mpiiImgDir = '/home/zxy/Datasets/mpii/images/'
-h36mImgDir = '/media/a/D/datasets/h36m/resized/'
+h36mImgDir = os.path.join(globalConfig.h36m_base_path, 'images/')
 expDir = '../exp'
 
 nThreads = 4

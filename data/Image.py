@@ -9,7 +9,7 @@ class Image(object):
             self.loadSKATE(path)
         elif dataset.upper() == 'H36M':
             self.loadH36M(path)
-        self.data=[]
+        self.data = []
     '''
     loading module
     '''
@@ -22,7 +22,7 @@ class Image(object):
         return self.Data
 
     def loadH36M(self, path):
-        if os.path.exists(path)==False:
+        if os.path.exists(path) == False:
             raise IOError('Can''t find the image {}'.format(path))
 
         img = cv2.imread(path, 0)

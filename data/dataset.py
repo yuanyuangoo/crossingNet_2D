@@ -1,35 +1,26 @@
-'''
-import the sequence and pre-process it
-'''
-import sys
-
-sys.path.append('./')
 import h5py
-import globalConfig
-
 import progressbar as pb
 import numpy as np
 from numpy.matlib import repmat
 from numpy.linalg import svd, det
-from depth import DepthMap
 from Image import Image
 from util import Frame
 from geometry import Quaternion, Matrix33
 import os
 import pickle
 import time
-import scipy.io as sio
-
-# for pickle module
-import sys
 import util
+from h36m import H36M
+import globalConfig
+import sys
+sys.path.append('./')
+'''
+import the sequence and pre-process it
+'''
+
+# from depth import DepthMap
+# for pickle module
 sys.modules['util'] = util
-
-
-
-
-
-import h36m
 
 
 class Dataset(object):
@@ -145,7 +136,7 @@ class Dataset(object):
             print ('loaded with {}s'.format(t1))
             return self.frmList
 
-        data = h36m.H36M(mode)
+        data = H36M(mode)
         if frmStartNum >= data.nSamples:
             raise ValueError(
                 'invalid start frame, shoud be lower than {}'.format(data.nSamples))
@@ -157,15 +148,16 @@ class Dataset(object):
                                                                  frmEndNum,
                                                                  fileIdx))
 
-
         pbar = pb.ProgressBar(maxval=frmEndNum-frmStartNum,
                               widgets=['Loading H36M | ', pb.Percentage(), pb.Bar()])
         pbar.start()
         pbIdx = 0
 
         for frmIdx in range(frmStartNum, frmEndNum):
-            frmPath = data.getImgName(frmIdx)
-            skel = np.asarray(data.GetPart(frmIdx))
+            [frmPath, label] = data.GetImgName_Label(frmIdx)
+            # if os.path.exists(frmPath) == False:
+            #     continue
+            skel = np.asarray(data.GetSkel(frmIdx))
             skel.shape = (-1)
 
             img = Image('H36M', frmPath)
@@ -253,7 +245,7 @@ class Dataset(object):
             raise ValueError('frameList is empty')
 
         frmNum = len(self.frmList)
-        
+
         if self.with_pose == True:
             jntNum = len(self.frmList[0].norm_skel)
             self.y_norm = np.zeros((frmNum, jntNum), np.float32)
@@ -302,15 +294,9 @@ class Dataset(object):
 
 if __name__ == '__main__':
     dataset = globalConfig.dataset
-    if dataset == 'ICVL':
-        ds = Dataset()
-        seqNames = '22-5 45 67-5 90 112-5 135 157-5 -22-5 -45 -67-5 -90 -112-5 -157-5 -180'
-        for seqName in seqNames.split(' '):
-            ds.loadICVL(seqName)
 
     if dataset == 'H36M':
-        print('aa')
         ds = Dataset()
         for i in range(0, 20000, 20000):
-            ds.loadH36M(i, tApp=True,replace=False)
+            ds.loadH36M(i, tApp=True, replace=False, mode='valid')
             ds.frmToNp()

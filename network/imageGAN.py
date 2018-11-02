@@ -1,22 +1,19 @@
+import json
+from sklearn.externals import joblib
+import shutil
+import theano.tensor as T
+from numpy.random import RandomState
+from lasagne.layers import batch_norm
+import time
+import cv2
+import theano
+import lasagne
+from data.stream import DataStream
+from data.dataset import *
+import globalConfig
 import sys
 sys.path.append('./')
 
-import globalConfig
-from data.dataset import *
-
-
-from data.stream import DataStream
-
-import lasagne
-import theano
-import cv2
-import time
-from lasagne.layers import batch_norm
-from numpy.random import RandomState
-import theano.tensor as T
-import shutil
-from sklearn.externals import joblib
-import json
 
 theano.config.floatX = "float32"
 

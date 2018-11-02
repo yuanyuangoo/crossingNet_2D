@@ -5,10 +5,10 @@ import matplotlib.pyplot as plt
 import matplotlib
 import cv2
 import cv2
-import globalConfig
+# import globalConfig
 from numpy.random import randn
-# import ref
-import torch
+import ref
+# import torch
 
 CameraOption = namedtuple('CameraOption', [
                           'focal_x', 'focal_y', 'center_x', 'center_y', 'width', 'height', 'far_point'])
@@ -58,14 +58,14 @@ class Frame(object):
         #     (self.crop_dm, self.trans, self.com3D) = dm.Detector()
         # else:
         #     (self.crop_dm, self.trans, self.com3D) = dm.cropArea3D(dm.dmData, com2D)
-        self.norm_img=img.Data
+        self.norm_img = img.Data
         if isinstance(skel, np.ndarray):
             if len(skel) % 3 != 0:
                 raise ValueError('invalid length of the skeleton mat')
             jntNum = len(skel)/3
             self.with_skel = True
             self.skel = skel.astype(np.float32)
-            self.norm_skel=skel.astype(np.float32)
+            self.norm_skel = skel.astype(np.float32)
             #crop_skel is the training label for neurual network, normalize wrt com3D
             # self.crop_skel = (self.skel - repmat(self.com3D, 1, jntNum))[0]
             # self.crop_skel = self.crop_skel.astype(np.float32)
@@ -75,8 +75,8 @@ class Frame(object):
             self.crop_skel = None
             self.with_skel = False
 
-
     # save only the norm_dm and norm_skel for training, clear all initial size data
+
     def saveOnlyForTrain(self):
         self.img = None
         self.crop_img = None
@@ -234,7 +234,7 @@ def vis_pose(normed_vec):
 
     vec = normed_vec.copy()
     vec = normed_vec.copy()*50.0
-    
+
     vec.shape = (-1, 3)
 
     img = np.ones((128, 128))*225

@@ -1,112 +1,96 @@
-# import torch.utils.data as data
-import numpy as np
-import ref
-# import torch
-import h5py
-import cv2
-from util import Rnd, Flip, ShuffleLR
-from img import Crop, DrawGaussian, Transform3D
-# import pprint as pp
+import os
+from pprint import pprint
+import globalConfig
 import random
+from util import Rnd, Flip, ShuffleLR
+import cv2
+import ref
+import numpy as np
+import sys
+sys.path.append('./')
 
 
 class H36M:
-  def __init__(self, split):
-    print ('==> initializing 3D data.')
-    annot = {}
+	def __init__(self, split):
+		print('==>initializing 3D data.')
+		annot = {}
 
-    tags = ['S',     'center',  'index',     'normalize',     'part',
-            'person',     'scale',     'torsoangle',     'visible',     'zind']
-    f = h5py.File('/media/a/D/datasets/h36m/annot/'+split+'.h5', 'r')
-    for tag in tags:
-      annot[tag] = np.asarray(f[tag]).copy()
-    f.close()
-    annot['imgname'] = {}
-    self.nSamples = len(annot['scale'])
+		#tags=['S','center','index','normalize','part',
+		#'person','scale','torsoangle','visible','zind']
+		#f=h5py.File('/media/a/D/datasets/h36m/annot/'+split+'.h5','r')
+		#fortagintags:
+		#annot[tag]=np.asarray(f[tag]).copy()
+		#f.close()
+		#annot['imgname']={}
+		#self.nSamples=len(annot['scale'])
 
-    with open('/media/a/D/datasets/h36m/annot/'+split+'_images.txt', 'r') as f:
-      for i in range(self.nSamples):
-        annot['imgname'][i] = f.readline()[:-1]
+		#withopen('/media/a/D/datasets/h36m/annot/'+split+'_images.txt','r')asf:
+		#foriinrange(self.nSamples):
+		#annot['imgname'][i]=f.readline()[:-1]
 
-    ram = np.asarray(range(self.nSamples))
-    random.shuffle(ram)
+		annotPath = os.path.join(globalConfig.h36m_base_path, 'annot', split+'.mat')
+		from scipy.io import loadmat
+		annot = loadmat(annotPath)['annot']
+		self.nSamples = len(annot['imgname'][0][0])
+		# ram = np.asarray(range(self.nSamples))
+		# random.shuffle(ram)
 
-    self.id = ram
-    self.root = 1
-    # self.opt = opt
-    self.split = split
-    self.annot = annot
+		# self.id = ram
+		self.root = 1
+		#self.opt=opt
+		self.split = split
+		self.annot = annot
 
-    print ('Loaded 3D {} samples'.format(len(self.annot['scale'])))
+		print('Loaded3D{}samples'.format(len(self.annot['scale'])))
 
-  def LoadImage(self, index):
-    id = self.id[index]
-    path = ref.h36mImgDir+self.annot['imgname'][id]
-    img = cv2.imread(path)
-    # while(1):
-    #   cv2.imshow(path, img)
-    #   c = cv2.waitKey(1)
-    #   if c == 27:
-    #     break
-    return img
+	def GetPart3D(self, index):
+		#pts_3d_mono=self.annot['S'][index].copy()
+		pts_3d = self.annot['S_glob'][0][0][index].copy()
+		#pts_3d=pts_3d-pts_3d[self.root]
+		#L2_Norm=np.sum(np.abs(pts_3d)**2,axis=-1)**(1./2)
+		#return (pts_3d/max(L2_Norm)+1)*64
+		return pts_3d
 
-  def GetPart(self, index):
-    index = self.id[index]
-    # pts_3d_mono = self.annot['S'][index].copy()
-    pts_3d = self.annot['S'][index].copy()
-    # pts_3d = pts_3d - pts_3d[self.root]
-    # L2_Norm = np.sum(np.abs(pts_3d)**2, axis=-1)**(1./2)
-    # return (pts_3d/max(L2_Norm)+1)*64
-    return pts_3d
+	def GetPart2D(self, index):
+		pts_2d = self.annot['part'][0][0][index].copy()
+		return pts_2d
 
-  def getImgName(self, index):
-    index = self.id[index]
-    return ref.h36mImgDir+self.annot['imgname'][index]
+	def GetImgName_Label(self, index):
+		# index = self.id[index]
+		imgname = ref.h36mImgDir+self.annot['imgname'][0][0][index][0][0][:]+'.jpg'
+		label = self.GetLabel(imgname)
+		return imgname, label
 
-  def getSize(self):
-    return self.nSamples
-  # def GetPartInfo(self, index):
-  #   pts = self.annot['part'][index].copy()
-  #   pts_3d_mono = self.annot['S'][index].copy()
-  #   pts_3d = self.annot['S'][index].copy()
-  #   c = np.ones(2) * ref.h36mImgSize / 2
-  #   s = ref.h36mImgSize * 1.0
+	def GetLabel(self, imgname):
+		tags = ['Directions', 'Discussion', 'Eating', 'Activities', 'Greeting', 'Taking photo', 'Posing', 'Making purchases',
+                    'Smoking', 'Waiting', 'Walking', 'Sitting on chair', 'Talking on the phone', 'Walking dog', 'Walking together']
+		label = 1
+		return label
 
-  #   pts_3d = pts_3d - pts_3d[self.root]
+	def GetSkel(self, index):
+		# index = self.id[id]
+		R = self.GetRotation(index)
+		P2d = self.GetPart2D(index)
+		P2d_centered = P2d-P2d[ref.root]
+		P3d = self.GetPart3D(index)
 
-  #   s2d, s3d = 0, 0
-  #   for e in ref.edges:
-  #     s2d += ((pts[e[0]] - pts[e[1]]) ** 2).sum() ** 0.5
-  #     s3d += ((pts_3d[e[0], :2] - pts_3d[e[1], :2]) ** 2).sum() ** 0.5
-  #   scale = s2d / s3d
+		P3d_roted = np.dot(R, P3d)
+		P3d_roted_centered = (P3d_roted.T-(P3d_roted[:, 1])).T
+		norm_P3d_roted_centered = np.linalg.norm(P3d_roted_centered[0:2, :])
+		norm_P2d_centered = np.linalg.norm(P2d_centered)
+		P3d_roted_centered_resized = P3d_roted_centered * \
+			norm_P2d_centered/norm_P3d_roted_centered
+		skel = np.vstack((P2d, P3d_roted_centered_resized[2, :]))
+		return skel
 
-  #   for j in range(ref.nJoints):
-  #     pts_3d[j, 0] = pts_3d[j, 0] * scale + pts[self.root, 0]
-  #     pts_3d[j, 1] = pts_3d[j, 1] * scale + pts[self.root, 1]
-  #     pts_3d[j, 2] = pts_3d[j, 2] * scale + ref.h36mImgSize / 2
-  #   return pts, c, s, pts_3d, pts_3d_mono
+	def GetRotation(self, index):
+		camR = self.annot['cam'][0][0][index][0][0][0]['R']
+		return camR
 
-  # def getitem(self, index):
-  #   if self.split == 'train':
-  #     index = np.random.randint(self.nSamples)
-  #   img = self.LoadImage(index)
-  #   pts, c, s, pts_3d, pts_3d_mono = self.GetPartInfo(index)
-  #   pts_3d[7] = (pts_3d[12] + pts_3d[13]) / 2
+	def GetSize(self):
+		return self.nSamples
 
-  #   inp = Crop(img, c, s, 0, ref.inputRes) / 256.
-  #   outMap = np.zeros((ref.nJoints, ref.outputRes, ref.outputRes))
-  #   outReg = np.zeros((ref.nJoints, 3))
-  #   for i in range(ref.nJoints):
-  #     pt = Transform3D(pts_3d[i], c, s, 0, ref.outputRes)
-  #     if pts[i][0] > 1:
-  #       outMap[i] = DrawGaussian(outMap[i], pt[:2], ref.hmGauss)
-  #     outReg[i, 2] = pt[2] / ref.outputRes * 2 - 1
-  #   print(inp.shape)
-  #   # inp = torch.from_numpy(inp)
-  #   return inp, outMap, outReg, pts_3d_mono
 
-  # def __len__(self):
-  #   return self.nSamples
-# a = H36M('train')
-# print(a.getImgName(1))
-# print(a.GetPart(1))
+# a = H36M('valid')
+# print(a.GetRotation(1))
+# print(a.GetPart3D(1))
