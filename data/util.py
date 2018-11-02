@@ -4,7 +4,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib
 import cv2
-import cv2
 # import globalConfig
 from numpy.random import randn
 import ref
@@ -53,7 +52,7 @@ msraBones = flattenBones(
 class Frame(object):
     skel_norm_ratio = 50.0
 
-    def __init__(self, img=None, skel=None, com2D=None, flag=None):
+    def __init__(self, img=None, skel=None, label=None):
         # if not isinstance(com2D, np.ndarray):
         #     (self.crop_dm, self.trans, self.com3D) = dm.Detector()
         # else:
@@ -62,7 +61,8 @@ class Frame(object):
         if isinstance(skel, np.ndarray):
             if len(skel) % 3 != 0:
                 raise ValueError('invalid length of the skeleton mat')
-            jntNum = len(skel)/3
+            # jntNum = len(skel)/3
+            self.label=label
             self.with_skel = True
             self.skel = skel.astype(np.float32)
             self.norm_skel = skel.astype(np.float32)

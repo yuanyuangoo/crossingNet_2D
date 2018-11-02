@@ -10,12 +10,26 @@ shuffleRef = [[0, 5], [1, 4], [2, 3],
 edges = [[0, 1], [1, 2], [2, 6], [6, 3], [3, 4], [4, 5],
          [10, 11], [11, 12], [12, 8], [8, 13], [13, 14], [14, 15],
          [6, 8], [8, 9]]
-root = 0
 h36mImgSize = 128
+
+tags = {"Directions": "Directions",
+        "Discussion": "Discussion",
+        "Eating": "Eating",
+        "Activities": "Down",
+        "Greeting": "Greeting",
+        "Taking photo": "Photo",
+        "Posing": "Posing",
+        "Making purchases": "Purcha",
+        "Smoking": "Smoking",
+        "Waiting": "Waiting",
+        "Sitting on chair": "Sit",
+        "Talking on the phone": "Phon",
+        "Walking dog": "Dog",
+        "Walking together": "Together"}
 
 outputRes = 64
 inputRes = 256
-
+root = 0
 eps = 1e-6
 
 momentum = 0.0

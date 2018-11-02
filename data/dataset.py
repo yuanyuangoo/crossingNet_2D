@@ -161,7 +161,7 @@ class Dataset(object):
             skel.shape = (-1)
 
             img = Image('H36M', frmPath)
-            self.frmList.append(Frame(img, skel))
+            self.frmList.append(Frame(img, skel,labe))
             self.frmList[-1].saveOnlyForTrain()
             pbar.update(pbIdx)
             pbIdx += 1
