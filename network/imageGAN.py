@@ -8,12 +8,12 @@ import time
 import cv2
 import theano
 import lasagne
-from data.stream import DataStream
-from data.dataset import *
-import globalConfig
 import sys
 sys.path.append('./')
-
+import globalConfig
+sys.path.append('./data/')
+from data.stream import DataStream
+from data.dataset import *
 
 theano.config.floatX = "float32"
 

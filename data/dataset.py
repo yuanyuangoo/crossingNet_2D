@@ -154,14 +154,14 @@ class Dataset(object):
         pbIdx = 0
 
         for frmIdx in range(frmStartNum, frmEndNum):
-            [frmPath, label] = data.GetImgName_Label(frmIdx)
+            [frmPath, label] = data.getImgName_Label(frmIdx)
             # if os.path.exists(frmPath) == False:
             #     continue
-            skel = np.asarray(data.GetSkel(frmIdx))
+            skel = np.asarray(data.getSkel(frmIdx))
             skel.shape = (-1)
 
             img = Image('H36M', frmPath)
-            self.frmList.append(Frame(img, skel,labe))
+            self.frmList.append(Frame(img, skel,label))
             self.frmList[-1].saveOnlyForTrain()
             pbar.update(pbIdx)
             pbIdx += 1

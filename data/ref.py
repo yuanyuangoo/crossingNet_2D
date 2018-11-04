@@ -2,7 +2,7 @@ import os
 import sys
 sys.path.append('./')
 import globalConfig
-
+import numpy as np
 nJoints = 16
 accIdxs = [0, 1, 2, 3, 4, 5, 10, 11, 14, 15]
 shuffleRef = [[0, 5], [1, 4], [2, 3],
@@ -12,6 +12,23 @@ edges = [[0, 1], [1, 2], [2, 6], [6, 3], [3, 4], [4, 5],
          [6, 8], [8, 9]]
 h36mImgSize = 128
 
+actions = ["Directions",
+           "Discussion",
+           "Eating",
+           "Activities",
+           "Greeting",
+           "Taking photo",
+           "Posing",
+           "Making purchases",
+           "Smoking",
+           "Waiting",
+           "Sitting on chair",
+           "Talking on the phone",
+           "Walking dog",
+           "Walking together",
+           "Walking"]
+
+oneHoted = np.eye(len(actions))
 tags = {"Directions": "Directions",
         "Discussion": "Discussion",
         "Eating": "Eating",
@@ -47,7 +64,7 @@ disturb = 10
 
 dataDir = '../data'
 mpiiImgDir = '/home/zxy/Datasets/mpii/images/'
-h36mImgDir = os.path.join(globalConfig.h36m_base_path, 'images/')
+h36mImgDir = os.path.join(globalConfig.h36m_base_path, 'resized/')
 expDir = '../exp'
 
 nThreads = 4

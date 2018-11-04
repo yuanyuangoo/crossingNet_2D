@@ -1,6 +1,5 @@
 import os
 from pprint import pprint
-import globalConfig
 import random
 from util import Rnd, Flip, ShuffleLR
 import cv2
@@ -8,14 +7,11 @@ import ref
 import numpy as np
 import sys
 sys.path.append('./')
-from sklearn import preprocessing
-enc = preprocessing.OneHotEncoder()
-enc.fit(list(ref.tags.keys()))
-array = enc.transform("Directions").toarray()
-print(array)
+import globalConfig
+
 class H36M:
     def __init__(self, split):
-        print('==>initializing3Ddata.')
+        print('==>initializing 3D data.')
         annot = {}
 
         #tags=['S','center','index','normalize','part',
@@ -36,67 +32,85 @@ class H36M:
         from scipy.io import loadmat
         annot = loadmat(annotPath)['annot']
         self.nSamples = len(annot['imgname'][0][0])
-        #ram=np.asarray(range(self.nSamples))
-        #random.shuffle(ram)
-
-        #self.id=ram
-        self.root = 1
-        #self.opt=opt
-        self.split = split
         self.annot = annot
 
-        print('Loaded 3D {} samples'.format(len(self.annot['scale'])))
+        self.root = 0
+        self.split = split
 
-    def GetPart3D(self, index):
-        #pts_3d_mono=self.annot['S'][index].copy()
+        # read Bounding Box
+        bbpath = os.path.join(globalConfig.h36m_base_path, 'annot', 'bbox.txt')
+        bbfile = open(bbpath, 'r')
+        bbox = dict()
+        for line in bbfile:
+            filename = line[line.find('S'):line.find(',')]
+            lx = int(line[line.find('lx')+3:line.find(',', line.find('lx'))])
+            ly = int(line[line.find('ly')+3:line.find(',', line.find('ly'))])
+            rx = int(line[line.find('rx')+3:line.find(',', line.find('rx'))])
+            ry = int(line[line.find('ry')+3:-1])
+            bbox[filename] = [lx, ly, rx, ry]
+
+        self.bbox = bbox
+
+        print('Loaded 3D {} samples'.format(self.nSamples))
+
+    def getPart3D(self, index):
         pts_3d = self.annot['S_glob'][0][0][index].copy()
-        #pts_3d=pts_3d-pts_3d[self.root]
-        #L2_Norm=np.sum(np.abs(pts_3d)**2,axis=-1)**(1./2)
-        #return (pts_3d/max(L2_Norm)+1)*64
         return pts_3d
 
-    def GetPart2D(self, index):
+    def getPart2D(self, index):
         pts_2d = self.annot['part'][0][0][index].copy()
         return pts_2d
 
-    def GetImgName_Label(self, index):
-        #index=self.id[index]
+    def getImgName_Label(self, index):
         imgname = ref.h36mImgDir + \
             self.annot['imgname'][0][0][index][0][0][:]+'.jpg'
-        label = self.GetLabel(imgname)
+        label = self.getOneHotedLabel(imgname)
         return imgname, label
 
-    def GetLabel(self, imgname):
+    def Crop(self, p2d, bbox, res=128.0):
+        ratio = max(abs(bbox[2]-bbox[0]), abs(bbox[3]-bbox[1]))/res
+        p2d_croped = (p2d-np.array([bbox[0], bbox[1]]).reshape(2, 1))/ratio
+        return p2d_croped
 
-        for key, tag in tags.items():
+    def getOneHotedLabel(self, imgname):
+        index = None
+        for key, tag in ref.tags.items():
             if tag in imgname:
-                return key
-        return "Walking"
+                index = ref.actions.index(key)
+        if index == None:
+            index = len(ref.actions)
+        return ref.oneHoted[index, :]
 
-    def GetSkel(self, index):
-        #index=self.id[id]
-        R = self.GetRotation(index)
-        P2d = self.GetPart2D(index)
-        P2d_centered = P2d-P2d[ref.root]
-        P3d = self.GetPart3D(index)
+    def getAction(self, oneHot):
+        return ref.actions[np.argmax(oneHot)]
+
+    def getSkel(self, index):
+        R = self.getRotation(index)
+        P2d = self.getPart2D(index)
+        imgname = self.getImgName_Label(index)[0]
+        imgname = imgname[len(ref.h36mImgDir):]
+        P2d_croped = self.Crop(P2d, self.bbox[imgname])
+        P2d_centered = P2d_croped-P2d_croped[self.root]
+        P3d = self.getPart3D(index)
 
         P3d_roted = np.dot(R, P3d)
-        P3d_roted_centered = (P3d_roted.T-(P3d_roted[:, 1])).T
+        P3d_roted_centered = (P3d_roted.T-(P3d_roted[:, self.root])).T
         norm_P3d_roted_centered = np.linalg.norm(P3d_roted_centered[0:2, :])
         norm_P2d_centered = np.linalg.norm(P2d_centered)
         P3d_roted_centered_resized = P3d_roted_centered *\
             norm_P2d_centered/norm_P3d_roted_centered
-        skel = np.vstack((P2d, P3d_roted_centered_resized[2, :]))
+        skel = np.vstack((P2d_croped, P3d_roted_centered_resized[2, :]))
         return skel
 
-    def GetRotation(self, index):
+    def getRotation(self, index):
         camR = self.annot['cam'][0][0][index][0][0][0]['R']
         return camR
 
-    def GetSize(self):
+    def getSize(self):
         return self.nSamples
 
 
-#a=H36M('valid')
-#print(a.GetRotation(1))
-#print(a.GetPart3D(1))
+# a = H36M('valid')
+#print(a.getRotation(1))
+#print(a.getPart3D(1))
+# print(a.getSkel(1412))
