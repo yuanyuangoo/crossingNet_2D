@@ -6,7 +6,7 @@ import cv2
 import ref
 import numpy as np
 import sys
-sys.path.append('./')
+sys.path.append('../')
 import globalConfig
 import time
 import pickle
@@ -120,6 +120,20 @@ class H36M:
         skel = np.vstack((P2d_croped, P3d_roted_centered_resized[2, :]))
         return skel
 
+    def getSkel_Label(self, index):
+        skel = self.getSkel(index)
+        _, label = self.getImgName_Label(index)
+        return skel, label
+
+    def getSkel_Label_all(self, num):
+        from tqdm import tqdm
+        l = random.sample(range(self.nSamples), num)
+        skels = np.zeros((num, ref.nJoints, 3))
+        labels = np.zeros(num)
+        for i, index in tqdm(enumerate(l)):
+            skels[i], labels[i] = self.getSkel_Label(index)
+        return skels, labels
+
     def getRotation(self, index):
         camR = self.annot['cam'][0][0][index][0][0][0]['R']
         return camR
@@ -131,7 +145,7 @@ class H36M:
         from tqdm import tqdm
         self.cache_base_path = globalConfig.cache_base_path
         pickleCachePath = '{}/h36m_{}_{}.pkl'.format(self.cache_base_path,
-                                                  self.split,str(num))
+                                                     self.split, str(num))
         imgs = np.zeros((num, 128, 128, 1))
         labels = np.zeros(num)
         if os.path.isfile(pickleCachePath) and not replace:
@@ -141,7 +155,7 @@ class H36M:
 
             # (self.frmList) += pickle.load(f)
             data = pickle.load(f)
-            
+
             t1 = time.time() - t1
             print('loaded with {}s'.format(t1))
             print(data[1].shape)
