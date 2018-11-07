@@ -4,18 +4,13 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import tensorflow as tf
+from six.moves import urllib
+from scipy import ndimage
+import numpy
+
 import gzip
 import os
-import sys
-sys.path.append('../data/')
-
-import h36m
-import numpy
-from scipy import ndimage
-
-from six.moves import urllib
-
-import tensorflow as tf
 
 
 
@@ -26,7 +21,7 @@ DATA_DIRECTORY = "data"
 IMAGE_SIZE = 28
 NUM_CHANNELS = 1
 PIXEL_DEPTH = 255
-NUM_LABELS = 10
+NUM_LABELS = 15
 VALIDATION_SIZE = 5000  # Size of the validation set.
 
 # Download MNIST data
@@ -140,6 +135,7 @@ def prepare_MNIST_data(use_norm_shift=False, use_norm_scale=True, use_data_augme
     # Extract it into numpy arrays.
     train_data = extract_data(
         train_data_filename, 60000, use_norm_shift, use_norm_scale)
+
     train_labels = extract_labels(train_labels_filename, 60000)
     test_data = extract_data(test_data_filename, 10000,
                              use_norm_shift, use_norm_scale)
@@ -164,16 +160,24 @@ def prepare_MNIST_data(use_norm_shift=False, use_norm_scale=True, use_data_augme
 
 
 def prepare_H36M_data(use_norm_shift=False, use_norm_scale=True, use_data_augmentation=False):
+    import sys
+    sys.path.append('../data/')
+    import h36m
 
     data = h36m.H36M('train')
     train_data, train_labels = data.getSkel_Label_all(100000)
+    train_data = train_data.reshape(
+        train_data.shape[0], train_data.shape[1]*train_data.shape[2])
+
     data = h36m.H36M('valid')
     test_data, test_labels = data.getSkel_Label_all(2000)
+    test_data = test_data.reshape(
+        test_data.shape[0], test_data.shape[1]*test_data.shape[2])
 
-    validation_data = train_data[:VALIDATION_SIZE, :, :]
-    validation_labels = train_labels[:VALIDATION_SIZE]
-    train_data = train_data[VALIDATION_SIZE:, :, :]
-    train_labels = train_labels[VALIDATION_SIZE:]
+    validation_data = train_data[:VALIDATION_SIZE, :, ]
+    validation_labels = train_labels[:VALIDATION_SIZE, :]
+    train_data = train_data[VALIDATION_SIZE:, :]
+    train_labels = train_labels[VALIDATION_SIZE:, :]
 
     if use_data_augmentation:
         train_total_data = expend_training_data(train_data, train_labels)

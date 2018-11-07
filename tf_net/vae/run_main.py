@@ -16,7 +16,8 @@ Num_of_Joints = 17
 def parse_args():
     desc = "Tensorflow implementation of 'Variational AutoEncoder (VAE)'"
     parser = argparse.ArgumentParser(description=desc)
-
+    parser.add_argument('--dataset', type=str,
+                        default='h36m', help='datasets name')
     parser.add_argument('--results_path', type=str, default='results',
                         help='File path of output images')
 
@@ -226,15 +227,17 @@ def main(args):
     # number of labeled samples to plot a map from input data space to the latent space
     PMLR_n_samples = args.PMLR_n_samples
 
-    # """ prepare MNIST data """
+    datasets = args.datasets
 
-    # train_total_data, train_size, _, _, test_data, test_labels = mnist_data.prepare_MNIST_data()
-    # n_samples = train_size
 
-    """ prepare H36m data """
-
-    train_total_data, train_size, _, _, test_data, test_labels = mnist_data.prepare_H36M_data()
-    n_samples = train_size
+    # """ prepare H36m data """
+    if datasets == 'h36m':
+        train_total_data, train_size, _, _, test_data, test_labels = mnist_data.prepare_H36M_data()
+        n_samples = train_size
+    else:
+        # """ prepare MNIST data """
+        train_total_data, train_size, _, _, test_data, test_labels = mnist_data.prepare_MNIST_data()
+        n_samples = train_size
 
     """ build graph """
 

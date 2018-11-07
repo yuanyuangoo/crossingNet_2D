@@ -1,3 +1,6 @@
+import pickle
+import time
+import globalConfig
 import os
 from pprint import pprint
 import random
@@ -7,9 +10,6 @@ import ref
 import numpy as np
 import sys
 sys.path.append('../')
-import globalConfig
-import time
-import pickle
 
 
 class H36M:
@@ -96,7 +96,7 @@ class H36M:
             if tag in imgname:
                 index = ref.actions.index(key)
         if index == None:
-            index = len(ref.actions)
+            index = len(ref.actions)-1
         return ref.oneHoted[index, :]
 
     def getAction(self, oneHot):
@@ -122,14 +122,14 @@ class H36M:
 
     def getSkel_Label(self, index):
         skel = self.getSkel(index)
-        _, label = self.getImgName_Label(index)
+        _, label = self.getImgName_onehotLabel(index)
         return skel, label
 
     def getSkel_Label_all(self, num):
         from tqdm import tqdm
         l = random.sample(range(self.nSamples), num)
         skels = np.zeros((num, 3, ref.nJoints))
-        labels = np.zeros(num)
+        labels = np.zeros((num, len(ref.actions)))
         for i, index in tqdm(enumerate(l)):
             skels[i], labels[i] = self.getSkel_Label(index)
         return skels, labels
