@@ -1,0 +1,133 @@
+import tensorflow as tf
+import numpy as np
+import os
+import vae
+import glob
+import argparse
+import sys
+sys.path.append('../')
+import data.ref as ref
+
+Num_of_Joints = ref.nJoints
+
+
+class PoseVAE(object):
+    def __init__(self, dim_x=Num_of_Joints*3, batch_size=128, lr=1e-3, num_epochs=20000, b1=0.5, dim_z=20, n_hidden=20):
+        #dim_z=dim of noise
+        self.dim_z = dim_z
+        #dim_x: dim of input
+        self.dim_x = dim_x
+
+        self.batch_size = batch_size
+        self.lr = lr
+        self.b1 = b1
+        self.num_epochs = num_epochs
+
+        self.n_hidden = n_hidden
+
+        x_hat = tf.placeholder(
+            tf.float32, shape=[None, dim_x], name='input_pose')
+        x = tf.placeholder(tf.float32, shape=[None, dim_x], name='target_pose')
+
+        keep_prob = tf.placeholder(tf.float32, name='keep_prob')
+        z_in = tf.placeholder(
+            tf.float32, shape=[None, dim_z], name='latent_variable')
+
+        y, z, loss, neg_marginal_likelihood, KL_divergence = self.autoencoder(
+            x_hat, x, dim_x, dim_z, n_hidden, keep_prob)
+
+        train_op = tf.train.AdamOptimizer(lr).minimize(loss)
+
+    def autoencoder(self, x_hat, x, dim_img, dim_z, n_hidden, keep_prob):
+        mu, sigma = self.gaussian_MLP_encoder(
+            x_hat, n_hidden, dim_z, keep_prob)
+
+        # sampling by re-parameterization technique
+        z = mu + sigma * tf.random_normal(tf.shape(mu), 0, 1, dtype=tf.float32)
+
+        # decoding
+        y = self.bernoulli_MLP_decoder(z, n_hidden, dim_img, keep_prob)
+        y = tf.clip_by_value(y, 1e-8, 1 - 1e-8)
+
+        # loss
+        marginal_likelihood = tf.reduce_sum(
+            x * tf.log(y) + (1 - x) * tf.log(1 - y), 1)
+        KL_divergence = 0.5 * \
+            tf.reduce_sum(tf.square(mu) + tf.square(sigma) -
+                          tf.log(1e-8 + tf.square(sigma)) - 1, 1)
+
+        marginal_likelihood = tf.reduce_mean(marginal_likelihood)
+        KL_divergence = tf.reduce_mean(KL_divergence)
+
+        ELBO = marginal_likelihood - KL_divergence
+
+        loss = -ELBO
+
+        return y, z, loss, -marginal_likelihood, KL_divergence
+
+    def gaussian_MLP_encoder(self, x_hat, n_hidden, dim_z, keep_prob):
+        with tf.variable_scope("gaussian_MLP_encoder"):
+            # initializers
+            w_init = tf.contrib.layers.variance_scaling_initializer()
+            b_init = tf.constant_initializer(0.)
+
+            # 1st hidden layer
+            w0 = tf.get_variable(
+                'w0', [x.get_shape()[1], n_hidden], initializer=w_init)
+            b0 = tf.get_variable('b0', [n_hidden], initializer=b_init)
+            h0 = tf.matmul(x, w0) + b0
+            h0 = tf.nn.elu(h0)
+            h0 = tf.nn.dropout(h0, keep_prob)
+
+            # 2nd hidden layer
+            w1 = tf.get_variable(
+                'w1', [h0.get_shape()[1], n_hidden], initializer=w_init)
+            b1 = tf.get_variable('b1', [n_hidden], initializer=b_init)
+            h1 = tf.matmul(h0, w1) + b1
+            h1 = tf.nn.tanh(h1)
+            h1 = tf.nn.dropout(h1, keep_prob)
+
+            # output layer
+            # borrowed from https: // github.com / altosaar / vae / blob / master / vae.py
+            wo = tf.get_variable(
+                'wo', [h1.get_shape()[1], n_output * 2], initializer=w_init)
+            bo = tf.get_variable('bo', [n_output * 2], initializer=b_init)
+            gaussian_params = tf.matmul(h1, wo) + bo
+
+            # The mean parameter is unconstrained
+            mean = gaussian_params[:, :n_output]
+            # The standard deviation must be positive. Parametrize with a softplus and
+            # add a small epsilon for numerical stability
+            stddev = 1e-6 + tf.nn.softplus(gaussian_params[:, n_output:])
+
+        return mean, stddev
+
+    def bernoulli_MLP_decoder(self, z, n_hidden, n_output, keep_prob, reuse=False):
+        with tf.variable_scope("bernoulli_MLP_decoder", reuse=reuse):
+            # initializers
+            w_init = tf.contrib.layers.variance_scaling_initializer()
+            b_init = tf.constant_initializer(0.)
+
+            # 1st hidden layer
+            w0 = tf.get_variable(
+                'w0', [z.get_shape()[1], n_hidden], initializer=w_init)
+            b0 = tf.get_variable('b0', [n_hidden], initializer=b_init)
+            h0 = tf.matmul(z, w0) + b0
+            h0 = tf.nn.tanh(h0)
+            h0 = tf.nn.dropout(h0, keep_prob)
+
+            # 2nd hidden layer
+            w1 = tf.get_variable(
+                'w1', [h0.get_shape()[1], n_hidden], initializer=w_init)
+            b1 = tf.get_variable('b1', [n_hidden], initializer=b_init)
+            h1 = tf.matmul(h0, w1) + b1
+            h1 = tf.nn.elu(h1)
+            h1 = tf.nn.dropout(h1, keep_prob)
+
+            # output layer-mean
+            wo = tf.get_variable(
+                'wo', [h1.get_shape()[1], n_output], initializer=w_init)
+            bo = tf.get_variable('bo', [n_output], initializer=b_init)
+            y = tf.sigmoid(tf.matmul(h1, wo) + bo)
+
+        return y

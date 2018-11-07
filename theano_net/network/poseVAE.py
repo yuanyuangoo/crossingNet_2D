@@ -75,12 +75,12 @@ class PoseVAE(object):
         f = open(path, 'wb')
         cPickle.dump((self.scale, self.pca), f,
                      protocol=cPickle.HIGHEST_PROTOCOL)
-        print ('pca parameters has been saved to %s' % path)
+        print('pca parameters has been saved to %s' % path)
 
     def loadPcaParam(self, path):
         f = open(path, 'rb')
         self.scale, self.pca = cPickle.load(f)
-        print ('pca parameters has been successfully loaded %s' % path)
+        print('pca parameters has been successfully loaded %s' % path)
 
     def build_encoder(self, input_layer):
         # init parameter
@@ -224,7 +224,7 @@ class PoseVAE(object):
             self.z_tvar
         )
 
-        print ('[PoseVAE]function compiled')
+        print('[PoseVAE]function compiled')
 
     def saveParam(self, path):
         encoder_para_val = [param.get_value()
@@ -237,7 +237,7 @@ class PoseVAE(object):
 
         decoder_path = path+'_de_params.npz'
         np.savez(decoder_path, *decoder_para_val)
-        print ('[PoseVAE] parameter has been saved to %s_en/de_params.npz' % path)
+        print('[PoseVAE] parameter has been saved to %s_en/de_params.npz' % path)
 
     def loadParam(self, path):
         encoder_path = path+'_en_params.npz'
@@ -249,10 +249,10 @@ class PoseVAE(object):
         de = np.load(decoder_path)
         for idx, param in enumerate(self.decoder_all_params):
             param.set_value(de['arr_%d' % idx])
-        print ('[PoseVAE] paramter has been loaded from %s_en/de_params.npz' % path)
+        print('[PoseVAE] paramter has been loaded from %s_en/de_params.npz' % path)
 
     def train(self, train_stream, val_stream=None, nepoch=0, desc='dummy'):
-        print ('[PoseVAE] enter the training loop with %d epoches' % nepoch)
+        print('[PoseVAE] enter the training loop with %d epoches' % nepoch)
 
         cache_dir = os.path.join(
             globalConfig.model_dir, 'pose_vae/%s_%s' % (globalConfig.dataset, desc))
@@ -272,7 +272,7 @@ class PoseVAE(object):
         np_rng = RandomState(seed)
 
         if hasattr(self, 'pca_weights'):
-            print ('initialize the weights from PCA weights')
+            print('initialize the weights from PCA weights')
             self.ew.set_value(self.pca_weights.transpose())
             self.dw.set_value(self.pca_weights)
 
@@ -302,7 +302,7 @@ class PoseVAE(object):
                         recons_res *= self.scale
                         recons_res = self.pca.inverse_transform(recons_res)
                         init_res *= self.scale
-                        
+
                         init_res = self.pca.inverse_transform(init_res)
 
                     for recons_pose, init_pose in zip(recons_res, init_res):
@@ -312,7 +312,7 @@ class PoseVAE(object):
                         cv2.imwrite('%s/%d_%d.jpg' % (img_dir, epoch, nval),
                                     img)
 
-                print ('validation error = {}'.format(val_err/nval))
+                print('validation error = {}'.format(val_err/nval))
 
             if epoch % 50 == 0:
                 self.saveParam('%s/%d' % (para_dir, -1))
@@ -320,9 +320,9 @@ class PoseVAE(object):
             if epoch % 100 == 0:
                 self.saveParam('%s/%d' % (para_dir, epoch))
 
-            print ('Epoch {} of {} took {:.3f}s'.format(epoch, nepoch,
-                                                        time.time()-start_time))
-            print ('loss = {}'.format(tr_err/nupdates))
+            print('Epoch {} of {} took {:.3f}s'.format(epoch, nepoch,
+                                                       time.time()-start_time))
+            print('loss = {}'.format(tr_err/nupdates))
 
 
 from data.stream import DataStream
@@ -334,19 +334,19 @@ if __name__ == '__main__':
             ds.loadH36M(i, mode='train', tApp=True, replace=False)
 
         val_ds = Dataset()
-        val_ds.loadH36M(i, mode='valid', tApp=True,replace=False)
+        val_ds.loadH36M(i, mode='valid', tApp=True, replace=False)
 
     else:
         raise ValueError('unknown dataset %s' % globalConfig.dataset)
 
-    print ('loaded over with %d samples' % len(ds.frmList))
+    print('loaded over with %d samples' % len(ds.frmList))
     ds.normTranslation()
     ds.frmToNp()
     ds.frmList = None
     ds.x_norm = None
 
     skel_dim = len(ds.y_norm[0])
-    print ('skeleton dim=%d' % skel_dim)
+    print('skeleton dim=%d' % skel_dim)
     pca_dim = 40
     vae = PoseVAE(x_dim=skel_dim)
     vae.genLossAndGradient()

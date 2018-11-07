@@ -773,4 +773,3 @@ if __name__ == '__main__':
     render.train(101,train_stream, val_stream,\
                  desc=desc)
     render.test(val_stream, desc=desc, modelIdx='-1')
-

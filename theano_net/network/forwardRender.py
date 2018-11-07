@@ -44,6 +44,7 @@ class ForwardRender(object):
     msra_palmPtIdx = [1,5,9,13,17]
 
     icl_centerPtIdx = 0
+
     icl_palmPtIdx = [1,4,7,10,13]
 
     def __init__(self, x_dim):

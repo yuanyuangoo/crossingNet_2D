@@ -11,9 +11,10 @@ import pickle
 import time
 import util
 from h36m import H36M
-import globalConfig
 import sys
 sys.path.append('./')
+import globalConfig
+
 '''
 import the sequence and pre-process it
 '''

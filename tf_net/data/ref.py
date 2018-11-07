@@ -1,7 +1,7 @@
 import os
 import sys
 sys.path.append('./')
-import globalConfig
+import data.globalConfig as globalConfig
 import numpy as np
 nJoints = 17
 accIdxs = [0, 1, 2, 3, 4, 5, 10, 11, 14, 15]
