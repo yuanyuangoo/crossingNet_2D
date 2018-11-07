@@ -140,7 +140,10 @@ def prepare_MNIST_data(use_norm_shift=False, use_norm_scale=True, use_data_augme
 
     return train_total_data, train_size, validation_data, validation_labels, test_data, test_labels
 def prepare_H36M_data(use_norm_shift=False, use_norm_scale=True, use_data_augmentation=False):
+    import sys
+    sys.path.append('data/')
     import h36m
+    
     data=h36m.H36M('train')
     data = h36m.H36M('train')
     trX, trY = data.getSkel(1000)

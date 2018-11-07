@@ -226,9 +226,14 @@ def main(args):
     # number of labeled samples to plot a map from input data space to the latent space
     PMLR_n_samples = args.PMLR_n_samples
 
-    """ prepare MNIST data """
+    # """ prepare MNIST data """
 
-    train_total_data, train_size, _, _, test_data, test_labels = mnist_data.prepare_MNIST_data()
+    # train_total_data, train_size, _, _, test_data, test_labels = mnist_data.prepare_MNIST_data()
+    # n_samples = train_size
+
+    """ prepare H36m data """
+
+    train_total_data, train_size, _, _, test_data, test_labels = mnist_data.prepare_H36M_data()
     n_samples = train_size
 
     """ build graph """
