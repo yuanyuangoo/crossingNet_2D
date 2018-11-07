@@ -161,18 +161,20 @@ def prepare_MNIST_data(use_norm_shift=False, use_norm_scale=True, use_data_augme
 
 def prepare_H36M_data(use_norm_shift=False, use_norm_scale=True, use_data_augmentation=False):
     import sys
-    sys.path.append('../data/')
+    sys.path.append('tf_net/data/')
     import h36m
 
     data = h36m.H36M('train')
     train_data, train_labels = data.getSkel_Label_all(100000)
     train_data = train_data.reshape(
         train_data.shape[0], train_data.shape[1]*train_data.shape[2])
+    train_data=train_data/max(-1*train_data.min(), train_data.max())
 
     data = h36m.H36M('valid')
     test_data, test_labels = data.getSkel_Label_all(2000)
     test_data = test_data.reshape(
         test_data.shape[0], test_data.shape[1]*test_data.shape[2])
+    test_data=test_data/max(-1*test_data.min(), test_data.max())
 
     validation_data = train_data[:VALIDATION_SIZE, :, ]
     validation_labels = train_labels[:VALIDATION_SIZE, :]

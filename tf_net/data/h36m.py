@@ -78,7 +78,7 @@ class H36M:
 
     def Crop(self, p2d, bbox, res=128.0):
         ratio = max(abs(bbox[2]-bbox[0]), abs(bbox[3]-bbox[1]))/res
-        p2d_croped = (p2d-np.array([bbox[0], bbox[1]]).reshape(2, 1))/ratio
+        p2d_croped = (p2d-np.array([bbox[1], bbox[0]]).reshape(2, 1))/ratio
         return p2d_croped
 
     def getLabel(self, imgname):
@@ -108,7 +108,7 @@ class H36M:
         imgname = self.getImgName_Label(index)[0]
         imgname = imgname[len(ref.h36mImgDir):]
         P2d_croped = self.Crop(P2d, self.bbox[imgname])
-        P2d_centered = P2d_croped-P2d_croped[self.root]
+        P2d_centered = (P2d_croped.T-P2d_croped.T[self.root]).T
         P3d = self.getPart3D(index)
 
         P3d_roted = np.dot(R, P3d)

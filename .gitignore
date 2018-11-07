@@ -8,3 +8,4 @@ globalConfig.py
 tf_net/dcgan/checkpoint/
 events*
 .gitignore
+*.gz
