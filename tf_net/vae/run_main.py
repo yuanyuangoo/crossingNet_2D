@@ -35,7 +35,7 @@ def parse_args():
     parser.add_argument('--learn_rate', type=float, default=1e-3,
                         help='Learning rate for Adam optimizer')
 
-    parser.add_argument('--num_epochs', type=int, default=20,
+    parser.add_argument('--num_epochs', type=int, default=20000,
                         help='The number of epochs to run')
 
     parser.add_argument('--batch_size', type=int,

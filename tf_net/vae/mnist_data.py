@@ -161,7 +161,7 @@ def prepare_MNIST_data(use_norm_shift=False, use_norm_scale=True, use_data_augme
 
 def prepare_H36M_data(use_norm_shift=False, use_norm_scale=True, use_data_augmentation=False):
     import sys
-    sys.path.append('tf_net/data/')
+    sys.path.append('../data/')
     import h36m
 
     data = h36m.H36M('train')
