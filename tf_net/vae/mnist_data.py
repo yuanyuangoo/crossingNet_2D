@@ -6,17 +6,16 @@ from __future__ import print_function
 
 import gzip
 import os
+import sys
+sys.path.append('../data/')
 
+import h36m
 import numpy
 from scipy import ndimage
 
 from six.moves import urllib
 
 import tensorflow as tf
-
-import sys
-sys.path.append('../data/')
-import h36m
 
 
 
@@ -166,16 +165,15 @@ def prepare_MNIST_data(use_norm_shift=False, use_norm_scale=True, use_data_augme
 
 def prepare_H36M_data(use_norm_shift=False, use_norm_scale=True, use_data_augmentation=False):
 
-
     data = h36m.H36M('train')
     train_data, train_labels = data.getSkel_Label_all(100000)
     data = h36m.H36M('valid')
-    test_data, test_labels = data.getSkel_Label_all(20000)
+    test_data, test_labels = data.getSkel_Label_all(2000)
 
-    validation_data = train_data[:VALIDATION_SIZE, :]
-    validation_labels = train_labels[:VALIDATION_SIZE, :]
-    train_data = train_data[VALIDATION_SIZE:, :]
-    train_labels = train_labels[VALIDATION_SIZE:, :]
+    validation_data = train_data[:VALIDATION_SIZE, :, :]
+    validation_labels = train_labels[:VALIDATION_SIZE]
+    train_data = train_data[VALIDATION_SIZE:, :, :]
+    train_labels = train_labels[VALIDATION_SIZE:]
 
     if use_data_augmentation:
         train_total_data = expend_training_data(train_data, train_labels)

@@ -128,7 +128,7 @@ class H36M:
     def getSkel_Label_all(self, num):
         from tqdm import tqdm
         l = random.sample(range(self.nSamples), num)
-        skels = np.zeros((num, ref.nJoints, 3))
+        skels = np.zeros((num, 3, ref.nJoints))
         labels = np.zeros(num)
         for i, index in tqdm(enumerate(l)):
             skels[i], labels[i] = self.getSkel_Label(index)

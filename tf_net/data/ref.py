@@ -3,7 +3,7 @@ import sys
 sys.path.append('./')
 import globalConfig
 import numpy as np
-nJoints = 16
+nJoints = 17
 accIdxs = [0, 1, 2, 3, 4, 5, 10, 11, 14, 15]
 shuffleRef = [[0, 5], [1, 4], [2, 3],
               [10, 15], [11, 14], [12, 13]]
