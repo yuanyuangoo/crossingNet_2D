@@ -3,11 +3,8 @@ import matplotlib.pyplot as plt
 from scipy.misc import imsave
 from scipy.misc import imresize
 import math
+from data.util import *
 import cv2
-edges = [[0, 1], [1, 2], [2, 3], [0, 4], [4, 5], [5, 6], [0, 7], [7, 8], [8, 9], [9, 10],
-         [8, 11], [11, 12], [12, 13], [8, 14], [14, 15], [15, 16]]
-color = [[1, 0, 0], [1, 1, 0], [0, 1, 0], [0, 0, 1], [0, 1, 1], [1, 0, 1], [0.5, 0, 0], [0, 0.5, 0], [0, 0, 0.5], [0.5, 0.5, 0], [0.5, 0, 0.5],
-         [0, 0.5, 0.5], [0.5, 1, 0], [0.5, 0, 1], [0.5, 1, 1], [1, 0, 0.5]]
 
 
 class Plot_Reproduce_Performance():
@@ -29,56 +26,21 @@ class Plot_Reproduce_Performance():
 
         self.resize_factor = resize_factor
 
-    def rotation_matrix(self, axis, theta):
-        """
-        Return the rotation matrix associated with counterclockwise rotation about
-        the given axis by theta radians.
-        """
-        axis = np.asarray(axis)
-        axis = axis / math.sqrt(np.dot(axis, axis))
-        a = math.cos(theta / 2.0)
-        b, c, d = -axis * math.sin(theta / 2.0)
-        aa, bb, cc, dd = a * a, b * b, c * c, d * d
-        bc, ad, ac, ab, bd, cd = b * c, a * d, a * c, a * b, b * d, c * d
-        return np.array([[aa + bb - cc - dd, 2 * (bc + ad), 2 * (bd - ac)],
-                         [2 * (bc - ad), aa + cc - bb - dd, 2 * (cd + ab)],
-                         [2 * (bd + ac), 2 * (cd - ab), aa + dd - bb - cc]])
-
-    def drawImageCV(self, skel, axis=(0, 1, 0), theta=0):
-            if not skel.shape == (3, 17):
-                skel = np.reshape(skel, (3, 17))
-            skel = skel.T
-            skel = np.dot(skel, self.rotation_matrix(axis, theta))
-            skel = skel[:, 0:2]
-            min_s = skel.min()
-            max_s = skel.max()
-            mid_s = (min_s+max_s)/2
-            skel = (((skel-mid_s)/(max_s-min_s))+0.52)*125
-
-            img = 255*np.ones((self.img_w, self.img_h, 3))
-            for i, edge in enumerate(edges):
-                pt1 = skel[edge[0]]
-                pt2 = skel[edge[1]]
-
-                cv2.line(img, (int(pt1[0]), int(pt1[1])),
-                         (int(pt2[0]), int(pt2[1])), (np.asarray(color[i])*255).tolist(), 4)
-            return img
-
     def save_images(self, poses, name='result.jpg'):
         images = np.zeros((self.n_img_x*self.n_img_y,
                            self.img_h, self.img_w, 3))
         for idx, pose in enumerate(poses):
-            images[idx] = self.drawImageCV(pose)
+            images[idx] = drawImageCV(skel=pose)
         cv2.imwrite(self.DIR + "/"+name,
-               self._merge(images, [self.n_img_y, self.n_img_x]))
+                    self._merge(images, [self.n_img_y, self.n_img_x]))
 
     def _merge(self, images, size):
         h, w, c = images.shape[1], images.shape[2], images.shape[3]
 
         h_ = int(h * self.resize_factor)
         w_ = int(w * self.resize_factor)
-        c_=c
-        img = np.zeros((h_ * size[0], w_ * size[1],c_))
+        c_ = c
+        img = np.zeros((h_ * size[0], w_ * size[1], c_))
 
         for idx, image in enumerate(images):
             i = int(idx % size[1])
@@ -86,7 +48,7 @@ class Plot_Reproduce_Performance():
 
             image_ = imresize(image, size=(w_, h_), interp='bicubic')
 
-            img[j*h_:j*h_+h_, i*w_:i*w_+w_,:] = image_
+            img[j*h_:j*h_+h_, i*w_:i*w_+w_, :] = image_
 
         return img
 
@@ -134,19 +96,21 @@ class Plot_Manifold_Learning_Result():
 
         self.z = z.reshape([-1, 2])
 
-    def save_images(self, images, name='result.jpg'):
-        images = images.reshape(
-            self.n_img_x*self.n_img_y, self.img_h, self.img_w)
-        imsave(self.DIR + "/"+name,
-               self._merge(images, [self.n_img_y, self.n_img_x]))
+    def save_images(self, poses, name='result.jpg'):
+        images = np.zeros((self.n_img_x*self.n_img_y,
+                           self.img_h, self.img_w, 3))
+        for idx, pose in enumerate(poses):
+            images[idx] = drawImageCV(pose)
+        cv2.imwrite(self.DIR + "/"+name,
+                    self._merge(images, [self.n_img_y, self.n_img_x]))
 
     def _merge(self, images, size):
-        h, w = images.shape[1], images.shape[2]
+        h, w, c = images.shape[1], images.shape[2], images.shape[3]
 
         h_ = int(h * self.resize_factor)
         w_ = int(w * self.resize_factor)
-
-        img = np.zeros((h_ * size[0], w_ * size[1]))
+        c_ = c
+        img = np.zeros((h_ * size[0], w_ * size[1], c_))
 
         for idx, image in enumerate(images):
             i = int(idx % size[1])
@@ -154,7 +118,7 @@ class Plot_Manifold_Learning_Result():
 
             image_ = imresize(image, size=(w_, h_), interp='bicubic')
 
-            img[j * h_:j * h_ + h_, i * w_:i * w_ + w_] = image_
+            img[j*h_:j*h_+h_, i*w_:i*w_+w_, :] = image_
 
         return img
 

@@ -19,8 +19,8 @@ NUM_LABELS = 15
 class PoseVAE(object):
     def __init__(
             self, dim_x=Num_of_Joints*3, batch_size=128, lr=1e-3, num_epochs=110,
-            b1=0.5, dim_z=20, n_hidden=20, ADD_NOISE=True, PRR=True, PRR_n_img_x=10, PRR_n_img_y=10, PRR_resize_factor=1.0,
-            PMLR=False, PMLR_n_img_x=20, PMLR_n_img_y=20, PMLR_resize_factor=1.0, PMLR_z_range=2.0, PMLR_n_samples=5000):
+            b1=0.5, dim_z=2, n_hidden=20, ADD_NOISE=False, PRR=True, PRR_n_img_x=10, PRR_n_img_y=10, PRR_resize_factor=1.0,
+            PMLR=True, PMLR_n_img_x=20, PMLR_n_img_y=20, PMLR_resize_factor=1.0, PMLR_z_range=2.0, PMLR_n_samples=5000):
         #dim_z=dim of noise
         self.dim_z = dim_z
         #dim_x: dim of input
@@ -226,7 +226,7 @@ class PoseVAE(object):
                 x_PMLR = x_PMLR * np.random.randint(2, size=x_PMLR.shape)
                 x_PMLR += np.random.randint(2, size=x_PMLR.shape)
 
-            decoded = vae.decoder(z_in, dim_img, n_hidden)
+            decoded = vae.decoder(self.z_in, self.dim_x, self.n_hidden)
         with tf.Session() as sess:
 
             sess.run(tf.global_variables_initializer(),
@@ -278,17 +278,17 @@ class PoseVAE(object):
                     # Plot for manifold learning result
                     if self.PMLR and self.dim_z == 2:
                         y_PMLR = sess.run(decoded, feed_dict={
-                            self.z_in: self.PMLR.z, self.keep_prob: 1})
+                            self.z_in: PMLR.z, self.keep_prob: 1})
                         y_PMLR_img = y_PMLR.reshape(
                             PMLR.n_tot_imgs, -1)
-                        self.PMLR.save_images(
+                        PMLR.save_images(
                             y_PMLR_img, name="/PMLR_epoch_%02d" % (epoch) + ".jpg")
 
                         # plot distribution of labeled images
                         z_PMLR = sess.run(
-                            z, feed_dict={self.x_hat: self.x_PMLR, self.keep_prob: 1})
-                        self.PMLR.save_scattered_image(
-                            z_PMLR, self.id_PMLR, name="/PMLR_map_epoch_%02d" % (epoch) + ".jpg")
+                            self.z, feed_dict={self.x_hat: x_PMLR, self.keep_prob: 1})
+                        PMLR.save_scattered_image(
+                            z_PMLR, id_PMLR, name="/PMLR_map_epoch_%02d" % (epoch) + ".jpg")
 
 
 if __name__ == '__main__':

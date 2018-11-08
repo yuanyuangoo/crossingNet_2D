@@ -6,7 +6,8 @@ import matplotlib
 import cv2
 # import globalConfig
 from numpy.random import randn
-import data.ref
+import data.ref as ref
+import math
 # import torch
 
 CameraOption = namedtuple('CameraOption', [
@@ -151,3 +152,39 @@ def Rnd(x):
 
 def Flip(img):
   return img[:, :, ::-1].copy()
+
+
+def rotation_matrix(axis, theta):
+    """
+    Return the rotation matrix associated with counterclockwise rotation about
+    the given axis by theta radians.
+    """
+    axis = np.asarray(axis)
+    axis = axis / math.sqrt(np.dot(axis, axis))
+    a = math.cos(theta / 2.0)
+    b, c, d = -axis * math.sin(theta / 2.0)
+    aa, bb, cc, dd = a * a, b * b, c * c, d * d
+    bc, ad, ac, ab, bd, cd = b * c, a * d, a * c, a * b, b * d, c * d
+    return np.array([[aa + bb - cc - dd, 2 * (bc + ad), 2 * (bd - ac)],
+                        [2 * (bc - ad), aa + cc - bb - dd, 2 * (cd + ab)],
+                        [2 * (bd + ac), 2 * (cd - ab), aa + dd - bb - cc]])
+
+def drawImageCV(skel, axis=(0, 1, 0), theta=0):
+        if not skel.shape == (3, 17):
+            skel = np.reshape(skel, (3, 17))
+        skel = skel.T
+        skel = np.dot(skel, rotation_matrix(axis, theta))
+        skel = skel[:, 0:2]
+        min_s = skel.min()
+        max_s = skel.max()
+        mid_s = (min_s+max_s)/2
+        skel = (((skel-mid_s)/(max_s-min_s))+0.52)*125
+
+        img = 255*np.ones((128, 128, 3))
+        for i, edge in enumerate(ref.edges):
+            pt1 = skel[edge[0]]
+            pt2 = skel[edge[1]]
+
+            cv2.line(img, (int(pt1[0]), int(pt1[1])),
+                        (int(pt2[0]), int(pt2[1])), (np.asarray(ref.color[i])*255).tolist(), 4)
+        return img
