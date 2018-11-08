@@ -44,7 +44,7 @@ class Plot_Reproduce_Performance():
                          [2 * (bc - ad), aa + cc - bb - dd, 2 * (cd + ab)],
                          [2 * (bd + ac), 2 * (cd - ab), aa + dd - bb - cc]])
 
-    def drawImageCV(self, skel, axis=(0, 1, 0), theta=30):
+    def drawImageCV(self, skel, axis=(0, 1, 0), theta=0):
             if not skel.shape == (3, 17):
                 skel = np.reshape(skel, (3, 17))
             skel = skel.T

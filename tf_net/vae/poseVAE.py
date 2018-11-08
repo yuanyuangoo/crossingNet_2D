@@ -18,7 +18,7 @@ NUM_LABELS = 15
 
 class PoseVAE(object):
     def __init__(
-            self, dim_x=Num_of_Joints*3, batch_size=128, lr=1e-3, num_epochs=250,
+            self, dim_x=Num_of_Joints*3, batch_size=128, lr=1e-3, num_epochs=110,
             b1=0.5, dim_z=20, n_hidden=20, ADD_NOISE=True, PRR=True, PRR_n_img_x=10, PRR_n_img_y=10, PRR_resize_factor=1.0,
             PMLR=False, PMLR_n_img_x=20, PMLR_n_img_y=20, PMLR_resize_factor=1.0, PMLR_z_range=2.0, PMLR_n_samples=5000):
         #dim_z=dim of noise
@@ -30,7 +30,7 @@ class PoseVAE(object):
         self.lr = lr
         self.b1 = b1
         self.num_epochs = num_epochs
-        self.RESULTS_DIR = './vae/result'
+        self.RESULTS_DIR = './vae/results'
         self.n_hidden = n_hidden
         self.PRR = PRR
         self.PRR_n_img_x = PRR_n_img_x
