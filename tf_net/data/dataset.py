@@ -1,7 +1,7 @@
 import time
 import sys
 sys.path.append('./')
-from util import Frame
+from data.util import Frame
 import globalConfig
 import h5py
 import numpy as np
@@ -32,7 +32,7 @@ class Dataset(object):
         self.h36m_frm_perfile = 10000  # the maximum number of frame to store in each file
         self.cache_base_path = globalConfig.cache_base_path
 
-    def loadH36M(self, frmStartNum, mode='train', replace=True, tApp=False):
+    def loadH36M(self, frmStartNum, mode='train', replace=False, tApp=False):
         '''
            mode: if train, only save the cropped image
            replace: replace the previous cache file if exists
@@ -76,7 +76,7 @@ class Dataset(object):
 
             img = Image('H36M', frmPath)
             self.frmList.append(Frame(img, skel, label))
-            self.frmList[-1].saveOnlyForTrain()
+            # self.frmList[-1].saveOnlyForTrain()
 
         if not os.path.exists(self.cache_base_path):
             os.makedirs(self.cache_base_path)

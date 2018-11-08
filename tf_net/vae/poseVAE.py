@@ -1,14 +1,12 @@
+import sys
+sys.path.append('./')
+import data.ref as ref
+from data.dataset import *
+import globalConfig
 import tensorflow as tf
 import numpy as np
 import os
-import vae
-import glob
-import argparse
-import sys
-sys.path.append('./')
-import data.dataset
-import data.globalConfig as globalConfig
-import data.ref as ref
+
 Num_of_Joints = ref.nJoints
 
 
@@ -133,7 +131,7 @@ class PoseVAE(object):
 
         return y
 
-    def train():
+    def train(self):
         a = 1
 
 
@@ -148,4 +146,8 @@ if __name__ == '__main__':
         val_ds.loadH36M(i, mode='valid', tApp=True, replace=False)
     else:
         raise ValueError('unknown dataset %s' % globalConfig.dataset)
-    train_total_data, train_size, _, _, test_data, test_labels = ds
+
+    vae=PoseVAE()
+
+    # train_total_data, train_size=ds
+    # , _, _, test_data, test_labels = ds
