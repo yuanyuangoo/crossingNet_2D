@@ -5,9 +5,10 @@ import vae
 import glob
 import argparse
 import sys
-sys.path.append('../')
-import data.ref as ref
+sys.path.append('./')
+import data.dataset
 import data.globalConfig as globalConfig
+import data.ref as ref
 Num_of_Joints = ref.nJoints
 
 
@@ -133,7 +134,8 @@ class PoseVAE(object):
         return y
 
     def train():
-        a=1
+        a = 1
+
 
 if __name__ == '__main__':
     if globalConfig.dataset == 'H36M':
@@ -146,5 +148,4 @@ if __name__ == '__main__':
         val_ds.loadH36M(i, mode='valid', tApp=True, replace=False)
     else:
         raise ValueError('unknown dataset %s' % globalConfig.dataset)
-    train_total_data, train_size, _, _, test_data, test_labels = h36m.prepare_H36M_data()
-
+    train_total_data, train_size, _, _, test_data, test_labels = ds

@@ -14,7 +14,7 @@ sys.path.append('../')
 
 class H36M:
     def __init__(self, split):
-        print('==>initializing 3D data.')
+        # print('==>initializing 3D data.')
         annot = {}
 
         #tags=['S','center','index','normalize','part',

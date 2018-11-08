@@ -33,4 +33,4 @@ gan_pretrain_path = os.path.join(
     model_dir, 'depth_gan', '%s_dummy/params/-1' % dataset)
 vae_pretrain_path = os.path.join(
     model_dir, 'pose_vae', '%s_dummy/params/-1' % dataset)
-print('globalConfig.dataset', dataset)
+# print('globalConfig.dataset', dataset)
