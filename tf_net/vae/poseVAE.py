@@ -64,7 +64,8 @@ class PoseVAE(object):
 
         return y, z, loss, -marginal_likelihood, KL_divergence
 
-    def gaussian_MLP_encoder(self, x_hat, n_hidden, dim_z, keep_prob):
+
+    def gaussian_MLP_encoder(self, x, n_hidden, n_output, keep_prob):
         with tf.variable_scope("gaussian_MLP_encoder"):
             # initializers
             w_init = tf.contrib.layers.variance_scaling_initializer()
@@ -148,6 +149,6 @@ if __name__ == '__main__':
         raise ValueError('unknown dataset %s' % globalConfig.dataset)
 
     vae=PoseVAE()
-
+    vae.train()
     # train_total_data, train_size=ds
     # , _, _, test_data, test_labels = ds

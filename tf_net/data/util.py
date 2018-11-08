@@ -101,135 +101,6 @@ class Frame(object):
         self.skel = (self.crop_skel + repmat(self.com3D, 1, jntNum))[0]
         self.skel = self.skel.astype(np.float32)
 
-    def setCropSkel(self, crop_skel):
-        if len(crop_skel) % 3 != 0:
-            raise ValueError('invalid length of the skeleton mat')
-        jntNum = len(crop_skel)/3
-        self.crop_skel = crop_skel.astype(np.float32)
-        self.skel = (self.crop_skel + repmat(self.com3D, 1, jntNum))[0]
-        self.skel = self.skel.astype(np.float32)
-        self.normSkel()
-
-    def setSkel(self, skel):
-        if len(skel) % 3 != 0:
-            raise ValueError('invalid length of the skeleton mat')
-        jntNum = len(skel)/3
-        self.skel = skel.astype(np.float32)
-        #crop_skel is the training label for neurual network, normalize wrt com3D
-        self.crop_skel = (self.skel - repmat(self.com3D, 1, jntNum))[0]
-        self.crop_skel = self.crop_skel.astype(np.float32)
-        self.normSkel()
-
-    def saveAnnotatedSample(self, path):
-        skel2 = self.crop2D()
-        skel2 = skel2.reshape(-1, 3)
-        for i, pt in enumerate(skel2):
-            skel2[i] = Camera.to2D(pt)
-        print('current camera option={}'.format(Camera.focal_x))
-
-        skel = self.skel
-        skel.shape = (-1, 3)
-
-        dm = self.norm_dm.copy()
-        dm[dm == Camera.far_point] = 0
-        ax = fig.add_subplot(121)
-        img = dm.copy()
-        img = img - img.min()
-        img *= 255/img.max()
-        for pt in skel2:
-            cv2.circle(img, (pt[0], pt[1]), 2, (255, 0, 0), -1)
-        cv2.imwrite(path, img)
-
-    def showAnnotatedSample(self):
-        fig = plt.figure()
-        fig.suptitle('annoated example')
-        if self.dm is not None and self.skel is not None:
-            skel2 = self.skel.copy()
-            skel2 = skel2.reshape(-1, 3)
-            for i, pt in enumerate(skel2):
-                skel2[i] = Camera.to2D(pt)
-
-            print('current camera option={}'.format(Camera.focal_x))
-
-            skel = self.skel
-            skel.shape = (-1, 3)
-
-            dm = self.dm.copy()
-            dm[dm == Camera.far_point] = 0
-            ax = fig.add_subplot(121)
-            ax.imshow(dm, cmap=matplotlib.cm.jet)
-            ax.scatter(skel2[:, 0], skel2[:, 1], c='r')
-            ax.set_title('initial')
-
-        if self.crop_dm is not None and self.crop_skel is not None:
-            skel2 = self.crop2D()
-
-            ax = fig.add_subplot(122)
-            ax.imshow(self.crop_dm, cmap=matplotlib.cm.jet)
-            ax.scatter(skel2[:, 0], skel2[:, 1], c='r')
-            ax.set_title('cropped')
-
-        if self.norm_dm is not None and self.norm_skel is not None:
-            skel2 = self.crop2D()
-            ax = fig.add_subplot(122)
-            ax.imshow(self.norm_dm, cmap=matplotlib.cm.jet)
-            ax.scatter(skel2[:, 0], skel2[:, 1], c='r')
-            ax.set_title('normed')
-        plt.show(block=False)
-
-    def crop2D(self):
-        self.crop_skel = self.norm_skel * np.float32(50.0)
-        skel = self.crop_skel.copy()
-        jntNum = len(skel)/3
-        skel = skel.reshape(-1, 3)
-        skel += repmat(self.com3D, jntNum, 1)
-        for i, jnt in enumerate(skel):
-            jnt = Camera.to2D(jnt)
-            pt = np.array([jnt[0], jnt[1], 1.0], np.float32).reshape(3, 1)
-            pt = self.trans*pt
-            skel[i, 0], skel[i, 1] = pt[0], pt[1]
-        return skel
-
-    def full2D(self):
-        '''
-        2D transformation of the cropped_pt(the estimated one) to the initial
-        size image
-        '''
-        skel = self.skel.copy()
-        skel = skel.reshape(-1, 3)
-
-        for i, jnt in enumerate(skel):
-            jnt = Camera.to2D(jnt)
-            skel[i, 0], skel[i, 1] = jnt[0], jnt[1]
-        return skel
-
-    def visualizeCrop(self, norm_skel=None):
-        img = self.norm_dm.copy()
-        img = (img+0.5)*255.0
-        colorImg = cv2.cvtColor(img.astype('uint8'), cv2.COLOR_GRAY2BGR)
-        if norm_skel is None:
-            return colorImg
-
-        self.setNormSkel(norm_skel)
-        skel2D = self.crop2D()
-        for pt in skel2D:
-            cv2.circle(colorImg, (pt[0], pt[1]), 2, (0, 0, 255), -1)
-        return colorImg
-
-    def visualizeFull(self, norm_skel=None):
-        img = self.dm.copy()
-        img[img >= Camera.far_point] = 0
-        img = img*(256/img.max())
-        colorImg = cv2.cvtColor(img.astype('uint8'), cv2.COLOR_GRAY2BGR)
-        if norm_skel is None:
-            return colorImg
-
-        self.setNormSkel(norm_skel)
-        skel2D = self.full2D()
-        for pt in skel2D:
-            cv2.circle(colorImg, (pt[0], pt[1]), 5, (0, 0, 255), -1)
-        return colorImg
-
 
 def vis_pose(normed_vec):
 
@@ -246,20 +117,6 @@ def vis_pose(normed_vec):
         # pt = pt3[0:2]
         # pt = (pt[0], pt[2])
         cv2.circle(img, (int(pt3[0]), int(pt3[2])), 2, (255, 0, 0), -1)
-    return img
-
-
-def vis_normed_pose(normed_vec, img=None):
-    import depth
-    pt2 = projectNormPose3D(normed_vec)
-
-    if not type(img) is np.ndarray:
-        img = np.ones((depth.DepthMap.size2[0], depth.DepthMap.size2[1]))*255
-
-    img = img.reshape(depth.DepthMap.size2[0], depth.DepthMap.size2[1])
-    img = cv2.cvtColor(img.astype('uint8'), cv2.COLOR_GRAY2BGR)
-    for idx, pt in enumerate(pt2):
-        cv2.circle(img, (int(pt[0]), int(pt[1])), 3, (0, 0, 255), -1)
     return img
 
 
@@ -294,9 +151,3 @@ def Rnd(x):
 
 def Flip(img):
   return img[:, :, ::-1].copy()
-
-
-def ShuffleLR(x):
-  for e in ref.shuffleRef:
-    x[e[0]], x[e[1]] = x[e[1]].copy(), x[e[0]].copy()
-  return x
