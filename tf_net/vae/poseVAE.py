@@ -3,10 +3,12 @@ sys.path.append('./')
 import data.ref as ref
 from data.dataset import *
 import globalConfig
-import tensorflow as tf
-import numpy as np
-import os
 import plot_utils
+import os
+import numpy as np
+import tensorflow as tf
+
+
 
 IMAGE_SIZE_H36M = 128
 Num_of_Joints = ref.nJoints
@@ -28,7 +30,7 @@ class PoseVAE(object):
         self.lr = lr
         self.b1 = b1
         self.num_epochs = num_epochs
-        self.RESULTS_DIR = 'result'
+        self.RESULTS_DIR = './vae/result'
         self.n_hidden = n_hidden
         self.PRR = PRR
         self.PRR_n_img_x = PRR_n_img_x
@@ -172,8 +174,8 @@ class PoseVAE(object):
         test_data = np.asarray(test_data)
         test_labels = np.asarray(test_labels)
 
-        train_data=train_data/max(-1*train_data.min(), train_data.max())
-        test_data=test_data/max(-1*test_data.min(), test_data.max())
+        train_data = train_data/max(-1*train_data.min(), train_data.max())
+        test_data = test_data/max(-1*test_data.min(), test_data.max())
 
         # Generate a validation set.
         validation_data = train_data[:VALIDATION_SIZE, :]
@@ -193,14 +195,14 @@ class PoseVAE(object):
 
         if self.PRR:
             PRR = plot_utils.Plot_Reproduce_Performance(
-            self.RESULTS_DIR, self.PRR_n_img_x, self.PRR_n_img_y, IMAGE_SIZE_H36M, IMAGE_SIZE_H36M, 
-            self.PRR_resize_factor)
+                self.RESULTS_DIR, self.PRR_n_img_x, self.PRR_n_img_y, IMAGE_SIZE_H36M, IMAGE_SIZE_H36M,
+                self.PRR_resize_factor)
 
             x_PRR = test_data[0:PRR.n_tot_imgs, :]
 
             x_PRR_img = x_PRR.reshape(
-                PRR.n_tot_imgs, Num_of_Joints*3)
-            print(x_PRR_img[1,:])
+                PRR.n_tot_imgs, -1)
+
             PRR.save_images(x_PRR_img, name='input.jpg')
 
             if self.ADD_NOISE:
@@ -208,7 +210,7 @@ class PoseVAE(object):
                 x_PRR += np.random.randint(2, size=x_PRR.shape)
 
                 x_PRR_img = x_PRR.reshape(
-                    PRR.n_tot_imgs, IMAGE_SIZE_H36M, IMAGE_SIZE_H36M)
+                    PRR.n_tot_imgs, -1)
                 PRR.save_images(x_PRR_img, name='input_noise.jpg')
 
         # Plot for manifold learning result
@@ -267,10 +269,10 @@ class PoseVAE(object):
                     # Plot for reproduce performance
                     if self.PRR:
                         y_PRR = sess.run(
-                            self.y, feed_dict={self.x_hat: self.x_PRR, self.keep_prob: 1})
+                            self.y, feed_dict={self.x_hat: x_PRR, self.keep_prob: 1})
                         y_PRR_img = y_PRR.reshape(
-                            self.PRR.n_tot_imgs, IMAGE_SIZE_H36M, self.IMAGE_SIZE_H36M)
-                        self.PRR.save_images(
+                            PRR.n_tot_imgs, -1)
+                        PRR.save_images(
                             y_PRR_img, name="/PRR_epoch_%02d" % (epoch) + ".jpg")
 
                     # Plot for manifold learning result
@@ -278,7 +280,7 @@ class PoseVAE(object):
                         y_PMLR = sess.run(decoded, feed_dict={
                             self.z_in: self.PMLR.z, self.keep_prob: 1})
                         y_PMLR_img = y_PMLR.reshape(
-                            PMLR.n_tot_imgs, self.IMAGE_SIZE_H36M, self.IMAGE_SIZE_H36M)
+                            PMLR.n_tot_imgs, -1)
                         self.PMLR.save_images(
                             y_PMLR_img, name="/PMLR_epoch_%02d" % (epoch) + ".jpg")
 
