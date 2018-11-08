@@ -7,7 +7,7 @@ import argparse
 import sys
 sys.path.append('../')
 import data.ref as ref
-
+import data.globalConfig as globalConfig
 Num_of_Joints = ref.nJoints
 
 
@@ -131,3 +131,20 @@ class PoseVAE(object):
             y = tf.sigmoid(tf.matmul(h1, wo) + bo)
 
         return y
+
+    def train():
+        a=1
+
+if __name__ == '__main__':
+    if globalConfig.dataset == 'H36M':
+        import data.h36m as h36m
+        ds = Dataset()
+        for i in range(0, 20000, 20000):
+            ds.loadH36M(i, mode='train', tApp=True, replace=False)
+
+        val_ds = Dataset()
+        val_ds.loadH36M(i, mode='valid', tApp=True, replace=False)
+    else:
+        raise ValueError('unknown dataset %s' % globalConfig.dataset)
+    train_total_data, train_size, _, _, test_data, test_labels = h36m.prepare_H36M_data()
+
