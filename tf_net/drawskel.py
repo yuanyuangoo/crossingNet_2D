@@ -65,14 +65,20 @@ def drawskel(skel):
 def drawskelCV(skel):
     if not skel.shape == (3, 17):
         skel = np.reshape(skel, (3, 17))
-    skel=skel.T
+    skel = skel.T
     axis = [1, 1, 0]
     theta = 45
+    skel = np.dot(skel, rotation_matrix(axis, theta))
+    skel = skel[:, 0:2]
+    min_s = min(skel)
+    max_s = max(skel)
+    mid_s = min_s+max_s
+    
 
     img = 255*np.ones((128, 128))
     for edge in edges:
-        pt1 = 128*skel[edge[0]]
-        pt2 = 128*skel[edge[1]]
+        pt1 = skel[edge[0]]
+        pt2 = skel[edge[1]]
 
         cv2.line(img, (int(pt1[0]), int(pt1[1])),
                  (int(pt2[0]), int(pt2[1])), (0, 255, 0), 4)
