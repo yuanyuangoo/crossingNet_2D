@@ -13,4 +13,12 @@ from poseVAE import PoseVAE
 class ForwardRender(object):
     def __init__(self, dim_x):
         self.dim_x = dim_x
-        self.pose_vae = PoseVAE(x_dim=x_dim)
+        self.pose_vae = PoseVAE(dim_x=dim_x)
+        self.image_gan=ImageGAN(dim_z=self.dim_z)
+        self.lr, self.b1 = 0.001, 0.5
+        self.batch_size = 200
+        print ('vae and gan initialized')
+        self.params = self.pose_vae.encoder_params +\
+                self.alignment_params +\
+                self.depth_gan.gen_params
+        print ('all parameters: {}'.format(self.params))
