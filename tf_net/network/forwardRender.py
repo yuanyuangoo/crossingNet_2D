@@ -8,7 +8,7 @@ import cv2
 sys.path.append('./')
 import globalConfig
 import data.util
-from depthGAN import DepthGAN
+from imageGAN import ImageGAN
 from poseVAE import PoseVAE
 class ForwardRender(object):
     def __init__(self, dim_x):
