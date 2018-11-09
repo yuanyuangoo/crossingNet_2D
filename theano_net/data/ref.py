@@ -1,6 +1,6 @@
 import os
 import sys
-sys.path.append('./')
+sys.path.append('../')
 import globalConfig
 import numpy as np
 nJoints = 16

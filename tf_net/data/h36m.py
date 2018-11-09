@@ -1,15 +1,16 @@
 import pickle
 import time
-import globalConfig
 import os
 from pprint import pprint
 import random
 # from util import Rnd, Flip, ShuffleLR
 import cv2
-import ref
 import numpy as np
 import sys
-sys.path.append('../')
+sys.path.append('../data/')
+import ref
+print(os.getcwd())
+import globalConfig
 
 
 class H36M:

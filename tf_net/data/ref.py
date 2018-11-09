@@ -60,7 +60,7 @@ weightDecay = 0.0
 alpha = 0.99
 epsilon = 1e-8
 
-
+globalConfig
 scale = 0.25
 rotate = 30
 hmGauss = 1

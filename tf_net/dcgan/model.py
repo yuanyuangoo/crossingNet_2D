@@ -9,7 +9,10 @@ from six.moves import xrange
 
 from ops import *
 from utils import *
+import sys
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' 
 
+sys.path.append('../data')
 
 def conv_out_size_same(size, stride):
   return int(math.ceil(float(size) / float(stride)))
@@ -488,7 +491,7 @@ class DCGAN(object):
         return tf.nn.sigmoid(deconv2d(h2, [self.batch_size, s_h, s_w, self.c_dim], name='g_h3'))
 
   def load_h36m(self):
-    import h36m
+    import h36m as h36m
     data = h36m.H36M('train')
     trX, trY = data.getAll(1000)
     data = h36m.H36M('valid')

@@ -22,7 +22,7 @@ flags.DEFINE_integer("output_height", 128,
                      "The size of the output images to produce [64]")
 flags.DEFINE_integer("output_width", None,
                      "The size of the output images to produce. If None, same value as output_height [None]")
-flags.DEFINE_string("dataset", "h36m_nolabel",
+flags.DEFINE_string("dataset", "h36m",
                     "The name of dataset [celebA, mnist, lsun, h36m,h36m_nolabel]")
 flags.DEFINE_string("input_fname_pattern", "resized/*.jpg",
                     "Glob pattern of filename of input images [*]")
