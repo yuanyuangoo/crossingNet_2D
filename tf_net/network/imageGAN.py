@@ -32,7 +32,7 @@ except:
 class ImageGAN(object):
     def __init__(self, input_height=128, input_width=128, crop=True,
                  batch_size=64, sample_num=64, output_height=128, output_width=128,
-                 y_dim=15, z_dim=100, gf_dim=64, df_dim=64,
+                 y_dim=15, dim_z=100, gf_dim=64, df_dim=64,
                  gfc_dim=1024, dfc_dim=1024, c_dim=1, dataset_name='h36m',
                  input_fname_pattern='*.jpg', checkpoint_dir="checkpoint", sample_dir="samples", data_dir='./data',
                  learning_rate=0.0002, beta1=0.5, epoch=25, train_size=np.inf):
@@ -48,7 +48,7 @@ class ImageGAN(object):
         self.output_width = output_width
         self.train_size = train_size
         self.y_dim = y_dim
-        self.z_dim = z_dim
+        self.dim_z = dim_z
         self.c_dim = 1
         self.gf_dim = gf_dim
         self.df_dim = df_dim
@@ -98,7 +98,7 @@ class ImageGAN(object):
         inputs = self.inputs
 
         self.z = tf.placeholder(
-            tf.float32, [None, self.z_dim], name='z')
+            tf.float32, [None, self.dim_z], name='z')
         self.z_sum = histogram_summary("z", self.z)
 
         self.G = self.generator(self.z, self.y)
@@ -349,7 +349,7 @@ class ImageGAN(object):
             self.writer = SummaryWriter("./logs", self.sess.graph)
 
             sample_z = np.random.uniform(-1, 1,
-                                         size=(self.sample_num, self.z_dim))
+                                         size=(self.sample_num, self.dim_z))
 
             sample_inputs = self.data_X[0:self.sample_num]
             sample_labels = self.data_y[0:self.sample_num]
@@ -373,7 +373,7 @@ class ImageGAN(object):
                     batch_labels = self.data_y[idx *
                                                self.batch_size:(idx+1)*self.batch_size]
 
-                    batch_z = np.random.uniform(-1, 1, [self.batch_size, self.z_dim]) \
+                    batch_z = np.random.uniform(-1, 1, [self.batch_size, self.dim_z]) \
                         .astype(np.float32)
 
                     # Update D network

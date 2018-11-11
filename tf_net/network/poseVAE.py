@@ -2,12 +2,13 @@ import sys
 sys.path.append('./')
 import data.ref as ref
 from data.dataset import *
+from data.util import *
+
 import globalConfig
 import plot_utils
 import os
 import numpy as np
 import tensorflow as tf
-
 
 
 IMAGE_SIZE_H36M = 128
