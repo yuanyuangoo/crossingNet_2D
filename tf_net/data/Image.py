@@ -15,8 +15,8 @@ class Image(object):
     '''
 
     def loadSKATE(self, path):
-        img = cv2.imread(path, 0)
-
+        img = cv2.imread(path, 1)
+        img = img.reshape(1, 128, 128, 1)
         self.Data = np.asarray(img-127.5, np.float32)/127.5
         self.size2 = self.Data.shape
         return self.Data
@@ -26,7 +26,7 @@ class Image(object):
             raise IOError('Can''t find the image {}'.format(path))
 
         img = cv2.imread(path, 0)
-
+        img = img.reshape(128, 128, 1)
         self.Data = np.asarray(img-127.5, np.float32)/127.5
         self.size2 = self.Data.shape
         return self.Data

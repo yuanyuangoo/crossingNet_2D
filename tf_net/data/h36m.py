@@ -9,7 +9,6 @@ import numpy as np
 import sys
 sys.path.append('../data/')
 import ref
-print(os.getcwd())
 import globalConfig
 
 
@@ -166,7 +165,7 @@ class H36M:
 
         for i, index in tqdm(enumerate(l)):
             imgname, label = self.getImgName_Label(index)
-            img = cv2.imread(imgname, 0)
+            img = cv2.imread(imgname, 1)
             if img is None:
                 print(imgname)
                 break
