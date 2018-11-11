@@ -15,6 +15,7 @@ class ForwardRender(object):
     def __init__(self, dim_x):
         self.dim_x = dim_x
         self.pose_vae = PoseVAE(dim_x=dim_x)
+        a=self.pose_vae.z
         # self.alignment_layer = \
         #     self.build_latent_alignment_layer(self.pose_vae,
         #                                       self.origin_input_layer)
