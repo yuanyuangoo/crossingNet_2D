@@ -15,9 +15,9 @@ class ForwardRender(object):
     def __init__(self, dim_x):
         self.dim_x = dim_x
         self.pose_vae = PoseVAE(dim_x=dim_x)
-        self.alignment_layer = \
-            self.build_latent_alignment_layer(self.pose_vae,
-                                              self.origin_input_layer)
+        # self.alignment_layer = \
+        #     self.build_latent_alignment_layer(self.pose_vae,
+        #                                       self.origin_input_layer)
         # self.image_gan = ImageGAN(dim_z=selfdim_z)
         self.lr, self.b1 = 0.001, 0.5
         self.batch_size = 200
@@ -28,4 +28,10 @@ class ForwardRender(object):
     def build_latent_alignment_layer(self, pose_vae,
                                      origin_layer=None,
                                      quad_layer=None):
-        self.pose_z_dim=pose_vae.dim_z
+        self.pose_z_dim = pose_vae.dim_z
+        self.z_dim = self.pose_z_dim
+        if origin_layer is not None:
+            self.z_dim += 3
+        if quad_layer is not None:
+            self.z_dim += 4
+ForwardRender(100)
