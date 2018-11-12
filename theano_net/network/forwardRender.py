@@ -15,7 +15,7 @@ from numpy.matlib import repmat
 from lasagne.layers import batch_norm
 import lasagne
 import theano, theano.tensor as T
-from data.stream import MultiDataStreamconv2d
+from data.stream import MultiDataStream
 import data.util
 import globalConfig
 if globalConfig.dataset == 'ICVL':

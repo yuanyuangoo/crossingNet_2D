@@ -11,7 +11,7 @@ import math
 import scipy.misc
 from six.moves import xrange
 import data.ref as ref
-
+import tensorflow as tf
 CameraOption = namedtuple('CameraOption', [
                           'focal_x', 'focal_y', 'center_x', 'center_y', 'width', 'height', 'far_point'])
 # Frame = namedtuple('Frame', ['dm', 'skel', 'crop_dm', 'crop_skel', 'file_name'])
