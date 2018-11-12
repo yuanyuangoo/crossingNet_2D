@@ -1,10 +1,10 @@
-# used as the forward path to link the latent space of PoseVAE and DepthGAN
+# used as the forward path to link the latent space of PoseVAE and imageGAN
 import sys, os, cv2
 sys.path.append('./')
 from data.geometry import Quaternion, Matrix33
-from data.util import Camera
+# from data.util import Camera
 
-from depthGAN import DepthGAN
+from imageGAN import ImageGAN
 from poseVAE import PoseVAE
 
 from data.dataset import Dataset
@@ -15,7 +15,7 @@ from numpy.matlib import repmat
 from lasagne.layers import batch_norm
 import lasagne
 import theano, theano.tensor as T
-from data.stream import MultiDataStream
+from data.stream import MultiDataStreamconv2d
 import data.util
 import globalConfig
 if globalConfig.dataset == 'ICVL':
@@ -66,7 +66,7 @@ class ForwardRender(object):
                                                        self.latent_tvar,
                                                        deterministic=True)
 
-        self.depth_gan = DepthGAN(z_dim=self.z_dim)
+        self.depth_gan = ImageGAN(z_dim=self.z_dim)
         self.render_layer = self.depth_gan.gen_depth_layer
         self.render_var = lasagne.layers.get_output(self.render_layer,
                                                    self.alignment_var,

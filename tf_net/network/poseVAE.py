@@ -31,7 +31,7 @@ class PoseVAE(object):
         self.lr = lr
         self.b1 = b1
         self.num_epochs = num_epochs
-        self.RESULTS_DIR = './vae/results'
+        self.RESULTS_DIR = './results'
         self.n_hidden = n_hidden
         self.PRR = PRR
         self.PRR_n_img_x = PRR_n_img_x

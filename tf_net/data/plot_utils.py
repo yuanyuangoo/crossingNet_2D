@@ -133,7 +133,7 @@ class Plot_Manifold_Learning_Result():
         axes.set_xlim([-self.z_range-2, self.z_range+2])
         axes.set_ylim([-self.z_range-2, self.z_range+2])
         plt.grid(True)
-        plt.savefig(self.DIR + "/" + name)
+        plt.savefig(self.DIR  + name)
 
 # borrowed from https://gist.github.com/jakevdp/91077b0cae40f8f8244a
 

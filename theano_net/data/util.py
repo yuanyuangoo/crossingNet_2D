@@ -4,9 +4,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib
 import cv2
-# import globalConfig
+# import data.globalConfig
 from numpy.random import randn
-import ref
+import data.ref as ref
 # import torch
 
 CameraOption = namedtuple('CameraOption', [
