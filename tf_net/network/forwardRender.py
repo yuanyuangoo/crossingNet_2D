@@ -29,7 +29,7 @@ class ForwardRender(object):
             tf.float32, shape=[None, dim_x], name='target_pose')
         self.image_gan = ImageGAN()
         self.render = self.image_gan.G
-
+        
         self.lr, self.b1 = 0.001, 0.5
         self.batch_size = 200
         print('vae and gan initialized')

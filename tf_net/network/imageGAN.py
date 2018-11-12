@@ -1,42 +1,43 @@
+import tensorflow as tf
+from six.moves import xrange
 import shutil
 from numpy.random import RandomState
 import time
 import cv2
 import sys
 sys.path.append('./')
-from data.util import *
-from data.dataset import *
 import globalConfig
-from six.moves import xrange
-import tensorflow as tf
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' 
+from data.dataset import *
+from data.util import *
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 b1 = 0.5
 noise_dim = 23
 K = 1
 try:
-  image_summary = tf.image_summary
-  scalar_summary = tf.scalar_summary
-  histogram_summary = tf.histogram_summary
-  merge_summary = tf.merge_summary
-  SummaryWriter = tf.train.SummaryWriter
+    image_summary = tf.image_summary
+    scalar_summary = tf.scalar_summary
+    histogram_summary = tf.histogram_summary
+    merge_summary = tf.merge_summary
+    SummaryWriter = tf.train.SummaryWriter
 except:
-  image_summary = tf.summary.image
-  scalar_summary = tf.summary.scalar
-  histogram_summary = tf.summary.histogram
-  merge_summary = tf.summary.merge
-  SummaryWriter = tf.summary.FileWriter
+    image_summary = tf.summary.image
+    scalar_summary = tf.summary.scalar
+    histogram_summary = tf.summary.histogram
+    merge_summary = tf.summary.merge
+    SummaryWriter = tf.summary.FileWriter
+
 
 class ImageGAN(object):
     def __init__(self, input_height=128, input_width=128, crop=True,
                  batch_size=64, sample_num=64, output_height=128, output_width=128,
                  y_dim=15, dim_z=100, gf_dim=64, df_dim=64,
                  gfc_dim=1024, dfc_dim=1024, c_dim=1, dataset_name='h36m',
-                 input_fname_pattern='*.jpg', checkpoint_dir="checkpoint", sample_dir="samples", data_dir='./data', 
+                 input_fname_pattern='*.jpg', checkpoint_dir="checkpoint", sample_dir="samples", data_dir='./data',
                  learning_rate=0.0002, beta1=0.5, epoch=25, train_size=np.inf):
         self.epoch = epoch
         self.crop = crop
-        self.learning_rate=learning_rate
+        self.learning_rate = learning_rate
         self.batch_size = batch_size
         self.sample_num = sample_num
         self.beta1 = beta1
@@ -47,7 +48,7 @@ class ImageGAN(object):
         self.train_size = train_size
         self.y_dim = y_dim
         self.dim_z = dim_z
-        self.c_dim=1
+        self.c_dim = 1
         self.gf_dim = gf_dim
         self.df_dim = df_dim
 
@@ -85,9 +86,9 @@ class ImageGAN(object):
             self.y = None
 
         if self.crop:
-            image_dims = [self.output_height, self.output_width,1]
+            image_dims = [self.output_height, self.output_width, 1]
         else:
-            image_dims = [self.input_height, self.input_width,1]
+            image_dims = [self.input_height, self.input_width, 1]
 
         self.inputs = tf.placeholder(
             tf.float32, [self.batch_size] + image_dims, name='real_images')
@@ -134,6 +135,7 @@ class ImageGAN(object):
         self.g_vars = [var for var in t_vars if 'g_' in var.name]
 
         self.saver = tf.train.Saver()
+
     def discriminator(self, image, y=None, reuse=False):
         with tf.variable_scope("discriminator") as scope:
             if reuse:
@@ -141,17 +143,22 @@ class ImageGAN(object):
 
             if not self.y_dim:
                 h0 = lrelu(conv2d(image, self.df_dim, name='d_h0_conv'))
-                h1 = lrelu(self.d_bn1(conv2d(h0, self.df_dim*2, name='d_h1_conv')))
-                h2 = lrelu(self.d_bn2(conv2d(h1, self.df_dim*4, name='d_h2_conv')))
-                h3 = lrelu(self.d_bn3(conv2d(h2, self.df_dim*8, name='d_h3_conv')))
-                h4 = linear(tf.reshape(h3, [self.batch_size, -1]), 1, 'd_h4_lin')
+                h1 = lrelu(self.d_bn1(
+                    conv2d(h0, self.df_dim*2, name='d_h1_conv')))
+                h2 = lrelu(self.d_bn2(
+                    conv2d(h1, self.df_dim*4, name='d_h2_conv')))
+                h3 = lrelu(self.d_bn3(
+                    conv2d(h2, self.df_dim*8, name='d_h3_conv')))
+                h4 = linear(tf.reshape(
+                    h3, [self.batch_size, -1]), 1, 'd_h4_lin')
 
                 return tf.nn.sigmoid(h4), h4
             else:
                 yb = tf.reshape(y, [self.batch_size, 1, 1, self.y_dim])
                 x = conv_cond_concat(image, yb)
 
-                h0 = lrelu(conv2d(x, self.c_dim + self.y_dim, name='d_h0_conv'))
+                h0 = lrelu(
+                    conv2d(x, self.c_dim + self.y_dim, name='d_h0_conv'))
                 h0 = conv_cond_concat(h0, yb)
 
                 h1 = lrelu(self.d_bn1(
@@ -310,7 +317,7 @@ class ImageGAN(object):
 
         VALIDATION_SIZE = 5000  # Size of the validation set.
         NUM_LABELS = 15
-        
+
         # Generate a validation set.
         validation_data = train_data[:VALIDATION_SIZE, :]
         validation_labels = train_labels[:VALIDATION_SIZE, :]
@@ -325,8 +332,8 @@ class ImageGAN(object):
         np.random.shuffle(X)
         np.random.seed(seed)
         np.random.shuffle(y)
-        self.data_X=X
-        self.data_y=y
+        self.data_X = X
+        self.data_y = y
 
         with tf.Session() as self.sess:
             d_optim = tf.train.AdamOptimizer(self.learning_rate, beta1=self.beta1) \
@@ -344,7 +351,8 @@ class ImageGAN(object):
                 [self.z_sum, self.d_sum, self.d_loss_real_sum, self.d_loss_sum])
             self.writer = SummaryWriter("./logs", self.sess.graph)
 
-            sample_z = np.random.uniform(-1, 1, size=(self.sample_num, self.dim_z))
+            sample_z = np.random.uniform(-1, 1,
+                                         size=(self.sample_num, self.dim_z))
 
             sample_inputs = self.data_X[0:self.sample_num]
             sample_labels = self.data_y[0:self.sample_num]
@@ -364,16 +372,16 @@ class ImageGAN(object):
 
                 for idx in xrange(0, int(batch_idxs)):
                     batch_images = self.data_X[idx *
-                                            self.batch_size:(idx+1)*self.batch_size]
+                                               self.batch_size:(idx+1)*self.batch_size]
                     batch_labels = self.data_y[idx *
-                                            self.batch_size:(idx+1)*self.batch_size]
+                                               self.batch_size:(idx+1)*self.batch_size]
 
                     batch_z = np.random.uniform(-1, 1, [self.batch_size, self.dim_z]) \
                         .astype(np.float32)
 
                     # Update D network
                     _, summary_str = self.sess.run([d_optim, self.d_sum],
-                                                feed_dict={
+                                                   feed_dict={
                         self.inputs: batch_images,
                         self.z: batch_z,
                         self.y: batch_labels,
@@ -382,7 +390,7 @@ class ImageGAN(object):
 
                     # Update G network
                     _, summary_str = self.sess.run([g_optim, self.g_sum],
-                                                feed_dict={
+                                                   feed_dict={
                         self.z: batch_z,
                         self.y: batch_labels,
                     })
@@ -390,7 +398,7 @@ class ImageGAN(object):
 
                     # Run g_optim twice to make sure that d_loss does not go to zero (different from paper)
                     _, summary_str = self.sess.run([g_optim, self.g_sum],
-                                                feed_dict={self.z: batch_z, self.y: batch_labels})
+                                                   feed_dict={self.z: batch_z, self.y: batch_labels})
                     self.writer.add_summary(summary_str, counter)
 
                     errD_fake = self.d_loss_fake.eval({
@@ -408,8 +416,8 @@ class ImageGAN(object):
 
                     counter += 1
                     print("Epoch: [%2d/%2d] [%4d/%4d] time: %4.4f, d_loss: %.8f, g_loss: %.8f"
-                        % (epoch, self.epoch, idx, batch_idxs,
-                            time.time() - start_time, errD_fake+errD_real, errG))
+                          % (epoch, self.epoch, idx, batch_idxs,
+                             time.time() - start_time, errD_fake+errD_real, errG))
 
                     if np.mod(counter, 100) == 1:
                         samples, d_loss, g_loss = self.sess.run(
@@ -422,7 +430,9 @@ class ImageGAN(object):
                         )
                         save_images(samples, image_manifold_size(samples.shape[0]),
                                     './{}/train_{:02d}_{:04d}.png'.format(self.sample_dir, epoch, idx))
-                        print("[Sample] d_loss: %.8f, g_loss: %.8f" % (d_loss, g_loss))
+                        print("[Sample] d_loss: %.8f, g_loss: %.8f" %
+                              (d_loss, g_loss))
+
     @property
     def model_dir(self):
         return "{}_{}_{}_{}".format(
@@ -439,6 +449,7 @@ class ImageGAN(object):
         self.saver.save(self.sess,
                         os.path.join(checkpoint_dir, model_name),
                         global_step=step)
+
     def load(self, checkpoint_dir):
         import re
         print(" [*] Reading checkpoints...")
@@ -447,13 +458,16 @@ class ImageGAN(object):
         ckpt = tf.train.get_checkpoint_state(checkpoint_dir)
         if ckpt and ckpt.model_checkpoint_path:
             ckpt_name = os.path.basename(ckpt.model_checkpoint_path)
-            self.saver.restore(self.sess, os.path.join(checkpoint_dir, ckpt_name))
-            counter = int(next(re.finditer("(\d+)(?!.*\d)", ckpt_name)).group(0))
+            self.saver.restore(
+                self.sess, os.path.join(checkpoint_dir, ckpt_name))
+            counter = int(
+                next(re.finditer("(\d+)(?!.*\d)", ckpt_name)).group(0))
             print(" [*] Success to read {}".format(ckpt_name))
             return True, counter
         else:
             print(" [*] Failed to find a checkpoint")
             return False, 0
+
 
 class batch_norm(object):
   def __init__(self, epsilon=1e-5, momentum=0.9, name="batch_norm"):
@@ -482,12 +496,12 @@ def deconv2d(input_, output_shape,
 
         try:
             deconv = tf.nn.conv2d_transpose(input_, w, output_shape=output_shape,
-                                        strides=[1, d_h, d_w,1])
+                                            strides=[1, d_h, d_w, 1])
 
         # Support for verisons of TensorFlow before 0.7.0
         except AttributeError:
             deconv = tf.nn.deconv2d(input_, w, output_shape=output_shape,
-                                    strides=[1, d_h, d_w,1])
+                                    strides=[1, d_h, d_w, 1])
 
         biases = tf.get_variable(
             'biases', [output_shape[-1]], initializer=tf.constant_initializer(0.0))
@@ -497,6 +511,7 @@ def deconv2d(input_, output_shape,
             return deconv, w, biases
         else:
             return deconv
+
 
 def conv_out_size_same(size, stride):
     return int(math.ceil(float(size) / float(stride)))
@@ -509,6 +524,7 @@ def conv_cond_concat(x, y):
     return concat([
         x, y*tf.ones([x_shapes[0], x_shapes[1], x_shapes[2], y_shapes[3]])], 3)
 
+
 if "concat_v2" in dir(tf):
     def concat(tensors, axis, *args, **kwargs):
         return tf.concat_v2(tensors, axis, *args, **kwargs)
@@ -516,8 +532,10 @@ else:
     def concat(tensors, axis, *args, **kwargs):
         return tf.concat(tensors, axis, *args, **kwargs)
 
+
 def lrelu(x, leak=0.2, name="lrelu"):
     return tf.maximum(x, leak*x)
+
 
 def linear(input_, output_size, scope=None, stddev=0.02, bias_start=0.0, with_w=False):
     shape = input_.get_shape().as_list()
@@ -537,6 +555,7 @@ def linear(input_, output_size, scope=None, stddev=0.02, bias_start=0.0, with_w=
         else:
             return tf.matmul(input_, matrix) + bias
 
+
 def conv2d(input_, output_dim,
            k_h=5, k_w=5, d_h=2, d_w=2, stddev=0.02,
            name="conv2d"):
@@ -551,6 +570,8 @@ def conv2d(input_, output_dim,
         conv = tf.reshape(tf.nn.bias_add(conv, biases), conv.get_shape())
 
         return conv
+
+
 if __name__ == '__main__':
     if globalConfig.dataset == 'H36M':
         import data.h36m as h36m
