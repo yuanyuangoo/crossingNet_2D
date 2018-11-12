@@ -32,7 +32,11 @@ nyuFigColorIdx = [1]*6 + [2]*6 + [3]*6 + [4]*6 + [5]*6
 iclColorIdx = [0] + [1]*3 + [2]*3 + [3]*3 + [4]*3 + [5]*3
 msraColorIdx = [0] + [1]*4 + [2]*4 + [3]*4 + [4]*4 + [5]*4
 
-
+import tensorflow.contrib.slim as slim
+def show_all_variables():
+  model_vars = tf.trainable_variables()
+  slim.model_analyzer.analyze_vars(model_vars, print_info=True)
+  
 def initFigBone(startIdx, jntNum, color): return \
     [(sIdx, eIdx, color) for sIdx, eIdx in
      zip(range(startIdx, startIdx+jntNum-1), range(startIdx+1, startIdx+jntNum))]
