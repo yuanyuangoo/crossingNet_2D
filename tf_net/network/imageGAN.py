@@ -33,8 +33,9 @@ class ImageGAN(object):
                  batch_size=64, sample_num=64, output_height=128, output_width=128,
                  y_dim=15, dim_z=100, gf_dim=64, df_dim=64,
                  gfc_dim=1024, dfc_dim=1024, c_dim=1, dataset_name='h36m',
-                 input_fname_pattern='*.jpg', checkpoint_dir="../checkpoint", sample_dir="samples", data_dir='./data',
+                 checkpoint_dir="./checkpoint", sample_dir="samples",
                  learning_rate=0.0002, beta1=0.5, epoch=25, train_size=np.inf):
+        self.sample_dir=sample_dir
         self.epoch = epoch
         self.crop = crop
         self.learning_rate = learning_rate
@@ -70,9 +71,7 @@ class ImageGAN(object):
             self.g_bn3 = batch_norm(name='g_bn3')
 
         self.dataset_name = dataset_name
-        self.input_fname_pattern = input_fname_pattern
         self.checkpoint_dir = checkpoint_dir
-        self.data_dir = data_dir
         # self.data_X, self.data_y = self.load_h36m()
         # self.c_dim = self.data_X[0].shape[-1]
         self.grayscale = True
@@ -103,13 +102,13 @@ class ImageGAN(object):
         self.z_sum = histogram_summary("z", self.z)
 
         #Generator for fake image
-        self.G = self.generator(self.z, self.y)
+        self.G = self.build_generator(self.z, self.y)
         #Discriminator for real image
-        self.D, self.D_logits = self.discriminator(inputs, self.y, reuse=False)
+        self.D, self.D_logits = self.build_discriminator(inputs, self.y, reuse=False)
         #image
-        self.sampler = self.sampler(self.z, self.y)
+        self.sampler = self.build_sampler(self.z, self.y)
         #Discriminator for fake image
-        self.D_, self.D_logits_ = self.discriminator(
+        self.D_, self.D_logits_ = self.build_discriminator(
             self.G, self.y, reuse=True)
 
         self.d_sum = histogram_summary("d", self.D)
@@ -143,7 +142,7 @@ class ImageGAN(object):
 
         self.saver = tf.train.Saver()
 
-    def discriminator(self, image, y=None, reuse=False):
+    def build_discriminator(self, image, y=None, reuse=False):
         with tf.variable_scope("discriminator") as scope:
             if reuse:
                 scope.reuse_variables()
@@ -180,7 +179,7 @@ class ImageGAN(object):
 
                 return tf.nn.sigmoid(h3), h3
 
-    def generator(self, z, y=None):
+    def build_generator(self, z, y=None):
         with tf.variable_scope("generator") as scope:
             if not self.y_dim:
                 s_h, s_w = self.output_height, self.output_width
@@ -244,67 +243,67 @@ class ImageGAN(object):
                 return tf.nn.sigmoid(
                     deconv2d(h2, [self.batch_size, s_h, s_w, 1], name='g_h3'))
 
-    def sampler(self, z, y=None):
+    def build_sampler(self, z, y=None):
         with tf.variable_scope("generator") as scope:
             scope.reuse_variables()
 
-        if not self.y_dim:
-            s_h, s_w = self.output_height, self.output_width
-            s_h2, s_w2 = conv_out_size_same(s_h, 2), conv_out_size_same(s_w, 2)
-            s_h4, s_w4 = conv_out_size_same(
-                s_h2, 2), conv_out_size_same(s_w2, 2)
-            s_h8, s_w8 = conv_out_size_same(
-                s_h4, 2), conv_out_size_same(s_w4, 2)
-            s_h16, s_w16 = conv_out_size_same(
-                s_h8, 2), conv_out_size_same(s_w8, 2)
+            if not self.y_dim:
+                s_h, s_w = self.output_height, self.output_width
+                s_h2, s_w2 = conv_out_size_same(s_h, 2), conv_out_size_same(s_w, 2)
+                s_h4, s_w4 = conv_out_size_same(
+                    s_h2, 2), conv_out_size_same(s_w2, 2)
+                s_h8, s_w8 = conv_out_size_same(
+                    s_h4, 2), conv_out_size_same(s_w4, 2)
+                s_h16, s_w16 = conv_out_size_same(
+                    s_h8, 2), conv_out_size_same(s_w8, 2)
 
-            # project `z` and reshape
-            h0 = tf.reshape(
-                linear(z, self.gf_dim*8*s_h16*s_w16, 'g_h0_lin'),
-                [-1, s_h16, s_w16, self.gf_dim * 8])
-            h0 = tf.nn.relu(self.g_bn0(h0, train=False))
+                    # project `z` and reshape
+                h0 = tf.reshape(
+                    linear(z, self.gf_dim*8*s_h16*s_w16, 'g_h0_lin'),
+                    [-1, s_h16, s_w16, self.gf_dim * 8])
+                h0 = tf.nn.relu(self.g_bn0(h0, train=False))
 
-            h1 = deconv2d(h0, [self.batch_size, s_h8, s_w8,
-                               self.gf_dim*4], name='g_h1')
-            h1 = tf.nn.relu(self.g_bn1(h1, train=False))
+                h1 = deconv2d(h0, [self.batch_size, s_h8, s_w8,
+                                self.gf_dim*4], name='g_h1')
+                h1 = tf.nn.relu(self.g_bn1(h1, train=False))
 
-            h2 = deconv2d(h1, [self.batch_size, s_h4, s_w4,
-                               self.gf_dim*2], name='g_h2')
-            h2 = tf.nn.relu(self.g_bn2(h2, train=False))
+                h2 = deconv2d(h1, [self.batch_size, s_h4, s_w4,
+                                self.gf_dim*2], name='g_h2')
+                h2 = tf.nn.relu(self.g_bn2(h2, train=False))
 
-            h3 = deconv2d(h2, [self.batch_size, s_h2, s_w2,
-                               self.gf_dim*1], name='g_h3')
-            h3 = tf.nn.relu(self.g_bn3(h3, train=False))
+                h3 = deconv2d(h2, [self.batch_size, s_h2, s_w2,
+                                self.gf_dim*1], name='g_h3')
+                h3 = tf.nn.relu(self.g_bn3(h3, train=False))
 
-            h4 = deconv2d(h3, [self.batch_size, s_h,
-                               s_w, self.c_dim], name='g_h4')
+                h4 = deconv2d(h3, [self.batch_size, s_h,
+                                s_w, self.c_dim], name='g_h4')
 
-            return tf.nn.tanh(h4)
-        else:
-            s_h, s_w = self.output_height, self.output_width
-            s_h2, s_h4 = int(s_h/2), int(s_h/4)
-            s_w2, s_w4 = int(s_w/2), int(s_w/4)
-            # yb = tf.reshape(y, [-1, 1, 1, self.y_dim])
-            yb = tf.reshape(y, [self.batch_size, 1, 1, self.y_dim])
-            z = concat([z, y], 1)
+                return tf.nn.tanh(h4)
+            else:
+                s_h, s_w = self.output_height, self.output_width
+                s_h2, s_h4 = int(s_h/2), int(s_h/4)
+                s_w2, s_w4 = int(s_w/2), int(s_w/4)
+                # yb = tf.reshape(y, [-1, 1, 1, self.y_dim])
+                yb = tf.reshape(y, [self.batch_size, 1, 1, self.y_dim])
+                z = concat([z, y], 1)
 
-            h0 = tf.nn.relu(self.g_bn0(
-                linear(z, self.gfc_dim, 'g_h0_lin'), train=False))
-            h0 = concat([h0, y], 1)
+                h0 = tf.nn.relu(self.g_bn0(
+                    linear(z, self.gfc_dim, 'g_h0_lin'), train=False))
+                h0 = concat([h0, y], 1)
 
-            h1 = tf.nn.relu(self.g_bn1(
-                linear(h0, self.gf_dim*2*s_h4*s_w4, 'g_h1_lin'), train=False))
-            h1 = tf.reshape(h1, [self.batch_size, s_h4, s_w4, self.gf_dim * 2])
-            h1 = conv_cond_concat(h1, yb)
+                h1 = tf.nn.relu(self.g_bn1(
+                    linear(h0, self.gf_dim*2*s_h4*s_w4, 'g_h1_lin'), train=False))
+                h1 = tf.reshape(h1, [self.batch_size, s_h4, s_w4, self.gf_dim * 2])
+                h1 = conv_cond_concat(h1, yb)
 
-            h2 = tf.nn.relu(self.g_bn2(
-                deconv2d(h1, [self.batch_size, s_h2, s_w2, self.gf_dim * 2], name='g_h2'), train=False))
-            h2 = conv_cond_concat(h2, yb)
+                h2 = tf.nn.relu(self.g_bn2(
+                    deconv2d(h1, [self.batch_size, s_h2, s_w2, self.gf_dim * 2], name='g_h2'), train=False))
+                h2 = conv_cond_concat(h2, yb)
 
-            return tf.nn.sigmoid(deconv2d(h2, [self.batch_size, s_h, s_w, self.c_dim], name='g_h3'))
+                return tf.nn.sigmoid(deconv2d(h2, [self.batch_size, s_h, s_w, self.c_dim], name='g_h3'))
 
     def train(self, train_dataset, valid_dataset):
-        train_size = len(train_dataset.frmList)
+        show_all_variables()
         train_data = []
         train_labels = []
 
@@ -326,8 +325,7 @@ class ImageGAN(object):
         NUM_LABELS = 15
 
         # Generate a validation set.
-        validation_data = train_data[:VALIDATION_SIZE, :]
-        validation_labels = train_labels[:VALIDATION_SIZE, :]
+
         train_data = train_data[VALIDATION_SIZE:, :]
         train_labels = train_labels[VALIDATION_SIZE:, :]
 
@@ -356,7 +354,7 @@ class ImageGAN(object):
                                         self.G_sum, self.d_loss_fake_sum, self.g_loss_sum])
             self.d_sum = merge_summary(
                 [self.z_sum, self.d_sum, self.d_loss_real_sum, self.d_loss_sum])
-            self.writer = SummaryWriter("./logs", self.sess.graph)
+            self.writer = SummaryWriter("./logs", graph=self.sess.graph,filename_suffix='.imageGAN')
 
             sample_z = np.random.uniform(-1, 1,
                                          size=(self.sample_num, self.dim_z))
@@ -427,6 +425,7 @@ class ImageGAN(object):
                              time.time() - start_time, errD_fake+errD_real, errG))
 
                     if np.mod(counter, 100) == 1:
+                        show_all_variables()
                         samples, d_loss, g_loss = self.sess.run(
                             [self.sampler, self.d_loss, self.g_loss],
                             feed_dict={
@@ -439,7 +438,8 @@ class ImageGAN(object):
                                     './{}/train_{:02d}_{:04d}.png'.format(self.sample_dir, epoch, idx))
                         print("[Sample] d_loss: %.8f, g_loss: %.8f" %
                               (d_loss, g_loss))
-
+                    if np.mod(counter, 500) == 2:
+                        self.save(self.checkpoint_dir, counter)
     @property
     def model_dir(self):
         return "{}_{}_{}_{}".format(

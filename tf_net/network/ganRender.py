@@ -24,6 +24,10 @@ class GanRender(ForwardRender):
         super(GanRender, self).__init__(x_dim)
         self.rndGanInput = rndGanInput
         self.metricCombi = metricCombi
+        gen_vars=self.alignment_vars+self.image_gan.g_vars
+        
+        fake_render_var=self.image_gan.G
+        real_render_var=self.image_gan.inputs
 
     def train(self, nepoch=None, train_dataset=None, valid_dataset=None, desc='dummy'):
         cache_dir = os.path.join(
@@ -33,65 +37,50 @@ class GanRender(ForwardRender):
         if not os.path.exists(cache_dir):
             os.makedirs(cache_dir)
         log_path = os.path.join(cache_dir, 'log.txt')
-        flog = open(log_path, 'w')
+        flog = openopen(log_path, 'w')
         flog.close()
 
         img_dir = os.path.join(cache_dir, 'img')
         if os.path.exists(img_dir):
             shutil.rmtree(img_dir)
         os.mkdir(img_dir)
-        param_dir = os.path.join(cache_dir, 'params')
+        param_dir = os.path.join(cache_dir, 'vars')
         if not os.path.exists(param_dir):
             os.mkdir(param_dir)
 
         self.pose_vae.load(globalConfig.vae_pretrain_path)
         self.image_gan.load(globalConfig.gan_pretrain_path)
 
-        train_size = len(train_dataset.frmList)
-        self.x_hat = tf.placeholder(
-            tf.float32, shape=[None, self.dim_x], name='input_pose')
-        train_data = []
+        #load train dataset
+        train_skel = []
         train_labels = []
-        test_data = []
-        test_labels = []
-        for frm in valid_dataset.frmList:
-            test_data.append(frm.skel)
-            test_labels.append(frm.label)
-
+        train_img=[]
         for frm in train_dataset.frmList:
-            train_data.append(frm.skel)
+            train_skel.append(frm.skel)
             train_labels.append(frm.label)
-
-        train_data = np.asarray(train_data)
+            train_img.append(frm.norm_img)
+        #load valid dataset
+        test_skel = []
+        test_labels = []
+        test_img=[]
+        for frm in valid_dataset.frmList:
+            test_skel.append(frm.skel)
+            test_labels.append(frm.label)
+            test_img.append(frm.norm_img)
+        train_skel = np.asarray(train_skel)
         train_labels = np.asarray(train_labels)
-        test_data = np.asarray(test_data)
+        train_img = np.asarray(train_skel)
+        test_skel = np.asarray(test_skel)
         test_labels = np.asarray(test_labels)
-
-        train_data = train_data/max(-1*train_data.min(), train_data.max())
-        test_data = test_data/max(-1*test_data.min(), test_data.max())
-        VALIDATION_SIZE = 5000  # Size of the validation set.
-
-        # Generate a validation set.
-        validation_data = train_data[:VALIDATION_SIZE, :]
-        validation_labels = train_labels[:VALIDATION_SIZE, :]
-
-        train_data = train_data[VALIDATION_SIZE:, :]
-        train_labels = train_labels[VALIDATION_SIZE:, :]
-        train_total_data = np.concatenate(
-            (train_data, train_labels), axis=1)
-        NUM_LABELS = 15
-        train_data_ = train_total_data[:, :-NUM_LABELS]
-        train_size = train_total_data.shape[0]
-        valid_data = np.concatenate(
-            (validation_data, validation_labels), axis=1)
-        test_data = np.concatenate(
-            (test_data, test_labels), axis=1)
+        test_img=np.asarray(test_img)
+        #normalize skel data
+        train_skel = train_skel/max(-1*train_skel.min(), train_skel.max())
+        test_skel = test_skel/max(-1*test_skel.min(), test_skel.max())
+        n_samples = train_skel.shape[0]
 
         print('[ganRender] begin training loop')
         seed = 42
         np_rng = RandomState(seed)
-        train_size = train_total_data.shape[0]
-        n_samples = train_size
         total_batch = int(n_samples / self.batch_size)
         with tf.Session() as sess:
             try:
@@ -104,9 +93,7 @@ class GanRender(ForwardRender):
                 gen_err, dis_err, nupdates = 0, 0, 0
                 for i in range(total_batch):
                     offset = (i * self.batch_size) % (n_samples)
-                    batch_xs_input = train_data_[
-                        offset:(offset + self.batch_size), :]
-                    batch_xs_target = batch_xs_input
+
                     vae_noises = np_rng.normal(0, 0.05,
                                                (self.batch_size, self.pose_z_dim)
                                                ).astype(np.float32)

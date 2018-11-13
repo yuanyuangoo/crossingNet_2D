@@ -222,7 +222,7 @@ class ForwardRender(object):
              self.origin_input_var,
              # self.quad_input_var,
              self.noise_input_var, 
-             self.real_depth_var],
+             self.real_image_var],
             self.pixel_loss,
             updates = self.updates
         )

@@ -5,7 +5,10 @@ cache
 __pycache__
 *.pyc
 globalConfig.py
-tf_net/dcgan/checkpoint/
+tf_net/checkpoint/*
 events*
 .gitignore
 *.gz
+tf_net/logs/
+tf_net/results/
+tf_net/samples/

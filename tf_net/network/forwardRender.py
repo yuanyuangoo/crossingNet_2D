@@ -24,30 +24,32 @@ class ForwardRender(object):
         self.alignment = \
             self.build_latent_alignment_layer(self.pose_vae,
                                               self.origin_input)
-        self.x_hat = tf.placeholder(
-            tf.float32, shape=[None, dim_x], name='input_pose')
-        self.x = tf.placeholder(
-            tf.float32, shape=[None, dim_x], name='target_pose')
-        self.image_gan = ImageGAN()
-        self.render = self.image_gan.G
 
+        self.image_gan = ImageGAN()
+        self.image_gan.z=self.alignment
+        self.render = self.image_gan.G
         self.lr, self.b1 = 0.001, 0.5
         self.batch_size = 200
         print('vae and gan initialized')
         show_all_variables()
         # print('all parameters: {}'.format(self.params))
 
-
         self.pose_input = self.pose_vae.x
         self.real_image_var = tf.placeholder(
             name='real_image', dtype=tf.float32)
 
-        self.loss = tf.losses.mean_squared_error(
-            self.render, self.real_image_var)
+
+        self.pixel_loss = tf.losses.mean_squared_error(
+            self.real_image_var, self.render)
+
         t_vars = tf.trainable_variables()
-        self.vars = self.pose_vae.encode_vars+self.alignment_vars+self.image_gan.g_vars
+
+        self.alignment_vars = [var for var in t_vars if 'ali' in var.name]
+        self.forwarRender_vars = self.pose_vae.encoder_vars + \
+            self.alignment_vars+self.image_gan.g_vars
+
         self.train_op = tf.train.AdamOptimizer(
-            self.lr, self.b1).minimize(self.loss, var_list=self.vars)
+            self.lr, self.b1).minimize(self.pixel_loss, var_list=self.forwarRender_vars)
 
     def build_latent_alignment_layer(self, pose_vae,
                                      origin_layer=None,
@@ -86,76 +88,64 @@ class ForwardRender(object):
             os.mkdir(img_dir)
 
         train_size = len(train_dataset.frmList)
-        self.x_hat = tf.placeholder(
-            tf.float32, shape=[None, self.dim_x], name='input_pose')
-        train_data = []
+
+        train_skel = []
         train_labels = []
+        train_img=[]
         for frm in train_dataset.frmList:
-            train_data.append(frm.skel)
+            train_skel.append(frm.skel)
             train_labels.append(frm.label)
+            train_img.append(frm.norm_img)
 
-        test_data = []
+        test_skel = []
         test_labels = []
+        test_img=[]
         for frm in valid_dataset.frmList:
-            test_data.append(frm.skel)
+            test_skel.append(frm.skel)
             test_labels.append(frm.label)
+            test_img.append(frm.norm_img)
 
-        train_data = np.asarray(train_data)
+        train_skel = np.asarray(train_skel)
         train_labels = np.asarray(train_labels)
-        test_data = np.asarray(test_data)
+        train_img = np.asarray(train_skel)
+
+        test_skel = np.asarray(test_skel)
         test_labels = np.asarray(test_labels)
+        test_img=np.asarray(test_img)
 
-        train_data = train_data/max(-1*train_data.min(), train_data.max())
-        test_data = test_data/max(-1*test_data.min(), test_data.max())
-        VALIDATION_SIZE = 5000  # Size of the validation set.
+        train_skel = train_skel/max(-1*train_skel.min(), train_skel.max())
+        test_skel = test_skel/max(-1*test_skel.min(), test_skel.max())
 
-        # Generate a validation set.
-        validation_data = train_data[:VALIDATION_SIZE, :]
-        validation_labels = train_labels[:VALIDATION_SIZE, :]
+        train_size = train_skel.shape[0]
 
-        train_data = train_data[VALIDATION_SIZE:, :]
-        train_labels = train_labels[VALIDATION_SIZE:, :]
-
-        valid_data = np.concatenate(
-            (validation_data, validation_labels), axis=1)
-        test_data = np.concatenate(
-            (test_data, test_labels), axis=1)
-
-        train_total_data = np.concatenate(
-            (train_data, train_labels), axis=1)
-        NUM_LABELS = 15
-        train_data_ = train_total_data[:, :-NUM_LABELS]
-        train_size = train_total_data.shape[0]
         print('[ForwardRender] enter training loop with %d epoches' % nepoch)
-        seed = 42
-        np_rng = RandomState(seed)
-        train_size = train_total_data.shape[0]
-        n_samples = train_size
-        total_batch = int(n_samples / self.batch_size)
+        total_batch = int(train_size / self.batch_size)
         with tf.Session() as sess:
             sess.run(tf.global_variables_initializer(),
                      feed_dict={self.keep_prob: 0.9})
             for epoch in tqdm(range(nepoch)):
                 for i in range(total_batch):
                     # Compute the offset of the current minibatch in the data.
-                    offset = (i * self.batch_size) % (n_samples)
+                    offset = (i * self.batch_size) % (total_batch)
+                    _, tot_loss = sess.run((self.train_op, self.pixel_loss), feed_dict={
+                        self.real_image_var: train_img[offset:(offset + self.batch_size), :],
+                        self.pose_vae.x_hat: train_skel[offset:(offset + self.batch_size), :],
+                        self.origin_input: None,
+                        self.image_gan.y: train_labels[offset:(offset + self.batch_size), :],
+                        self.pose_vae.keep_prob: 0.9
+                    })
+                    print("epoch %d: L_tot %03.2f" % (epoch, tot_loss))
 
-                    batch_xs_input = train_data_[
-                        offset:(offset + self.batch_size), :]
-                    batch_xs_target = batch_xs_input
-
-                    _, tot_loss, loss_likelihood, loss_divergence = sess.run(
-                        (self.train_op, self.loss),
-                        feed_dict={self.x_hat: batch_xs_input, self.x: batch_xs_target, self.keep_prob: 0.9})
-                    if epoch % 10 == 0:
-                        batch_xs_input = test_data[
-                            offset:(offset + self.batch_size), :]
-                        batch_xs_target = batch_xs_input
-                        for idx in range(0, len(batch_xs_input), 10):
-                            img = sess.run(
-                                self.render, feed_dict={self.x_hat: batch_xs_input, self.keep_prob: 1})
-                            cv2.imwrite(os.path.join(
-                                img_dir, '%d_%d.jpg' % (epoch, idx)), img)
+                if epoch % 10 == 0:
+                    for idx in range(0, self.batch_size, 10):
+                        self.render.eval({
+                            self.pose_input: test_skel[offset+idx, :, :],
+                            self.origin_input: None,
+                            self.image_gan.y: test_labels[offset+idx, :],
+                            self.pose_vae.keep_prob: 1
+                        })
+                        cv2.imwrite(os.path.join(
+                            img_dir, '%d_%d.jpg' % (epoch, idx)), self.render)
 
     def resumePose(self, norm_pose, tran, quad=None):
         orig_pose = norm_pose.copy()
@@ -195,3 +185,6 @@ class ForwardRender(object):
             color = b[2]
             cv2.line(img, pt1, pt2, color, 2)
         return img
+
+
+ForwardRender(20)

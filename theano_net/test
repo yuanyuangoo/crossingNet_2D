@@ -1,0 +1,19 @@
+
+pose_vae.x_hat
+pose_vae.z
+--pose_vae.z_layer
+--latent_layer deterministic=False
+latent_var
+--alignment_layer
+alignment_var
+--render_layer
+render_var
+--depth_gan.dis_render_layer
+fake_render_var
+
+
+#image_gan.input
+T.ftensor4('real_image')
+depth_gan.image_input_var
+--depth_gan.dis_render_layer
+real_render_var

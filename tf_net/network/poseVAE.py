@@ -59,9 +59,13 @@ class PoseVAE(object):
 
         self.y, self.z, self.loss, self.neg_marginal_likelihood, self.KL_divergence = self.autoencoder(
             self.x_hat, self.x, self.dim_x, self.dim_z, self.n_hidden, self.keep_prob)
-        
+
         self.train_op = tf.train.AdamOptimizer(lr).minimize(self.loss)
         self.saver = tf.train.Saver()
+
+        t_vars = tf.trainable_variables()
+        self.encoder_vars = [var for var in t_vars if 'encoder' in var.name]
+        self.decoder_vars = [var for var in t_vars if 'decoder' in var.name]
 
     def decoder(self, z, dim_img, n_hidden):
         y = self.bernoulli_MLP_decoder(z, n_hidden, dim_img, 1.0, reuse=True)
@@ -128,7 +132,6 @@ class PoseVAE(object):
             # The standard deviation must be positive. Parametrize with a softplus and
             # add a small epsilon for numerical stability
             stddev = 1e-6 + tf.nn.softplus(gaussian_params[:, n_output:])
-
         return mean, stddev
 
     def bernoulli_MLP_decoder(self, z, n_hidden, n_output, keep_prob, reuse=False):
@@ -162,6 +165,7 @@ class PoseVAE(object):
         return y
 
     def train(self, train_dataset, valid_dataset):
+        show_all_variables()
         train_size = len(train_dataset.frmList)
         train_data = []
         train_labels = []
