@@ -16,7 +16,7 @@ from data.util import show_all_variables
 
 class ForwardRender(object):
     def __init__(self, dim_x):
-        self.keep_prob=1.0
+        self.keep_prob = 1.0
         self.dim_x = dim_x
         self.pose_vae = PoseVAE(dim_x=dim_x)
         self.origin_input = tf.placeholder(tf.float32, shape=(None, 3))
@@ -36,12 +36,18 @@ class ForwardRender(object):
         print('vae and gan initialized')
         show_all_variables()
         # print('all parameters: {}'.format(self.params))
+
+
+        self.pose_input = self.pose_vae.x
         self.real_image_var = tf.placeholder(
             name='real_image', dtype=tf.float32)
+
         self.loss = tf.losses.mean_squared_error(
             self.render, self.real_image_var)
-
-        self.train_op = tf.train.AdamOptimizer(self.lr).minimize(self.loss)
+        t_vars = tf.trainable_variables()
+        self.vars = self.pose_vae.encode_vars+self.alignment_vars+self.image_gan.g_vars
+        self.train_op = tf.train.AdamOptimizer(
+            self.lr, self.b1).minimize(self.loss, var_list=self.vars)
 
     def build_latent_alignment_layer(self, pose_vae,
                                      origin_layer=None,
@@ -64,10 +70,10 @@ class ForwardRender(object):
         self.latent = latent
 
         latent = tf.placeholder(tf.float32, shape=(None, self.z_dim))
-        self.bn1 = batch_norm(name="ali_bn1")
-        alignment = self.bn1(tf.layers.dense(
+        self.bn = batch_norm(name="ali_bn1")
+        alignment = self.bn(tf.layers.dense(
             latent, self.z_dim, use_bias=True, name='ali_conv'))
-        
+
         return alignment
 
     def train(self, nepoch,  train_dataset, valid_dataset, desc='dummy'):
@@ -115,10 +121,9 @@ class ForwardRender(object):
         test_data = np.concatenate(
             (test_data, test_labels), axis=1)
 
-
         train_total_data = np.concatenate(
             (train_data, train_labels), axis=1)
-        NUM_LABELS=15
+        NUM_LABELS = 15
         train_data_ = train_total_data[:, :-NUM_LABELS]
         train_size = train_total_data.shape[0]
         print('[ForwardRender] enter training loop with %d epoches' % nepoch)
@@ -154,11 +159,11 @@ class ForwardRender(object):
 
     def resumePose(self, norm_pose, tran, quad=None):
         orig_pose = norm_pose.copy()
-        orig_pose.shape = (-1,3)
+        orig_pose.shape = (-1, 3)
         if quad is not None:
             R = np.matrix(quad)
             orig_pose = np.dot(R.transpose(), orig_pose.transpose())
-        translation = repmat(tran.reshape((1,3)), orig_pose.shape[0], 1)
+        translation = repmat(tran.reshape((1, 3)), orig_pose.shape[0], 1)
         orig_pose = translation + orig_pose
         orig_pose = orig_pose.flatten()
         return orig_pose
@@ -169,7 +174,7 @@ class ForwardRender(object):
         img = cv2.cvtColor(img.astype('uint8'), cv2.COLOR_GRAY2BGR)
         if pose is None:
             return img
-        
+
         skel = pose.copy()
         skel.shape = (-1, 3)
         skel = skel*ratio
@@ -178,15 +183,15 @@ class ForwardRender(object):
             # pt2 = Camera.to2D(pt+com)
             pt2[2] = 1.0
             pt2 = np.dot(trans, pt2)
-            pt2.shape = (3,1)
-            pt2 = (pt2[0],pt2[1])
+            pt2.shape = (3, 1)
+            pt2 = (pt2[0], pt2[1])
             skel2.append(pt2)
         for idx, pt2 in enumerate(skel2):
-            cv2.circle(img, pt2, 3, 
+            cv2.circle(img, pt2, 3,
                        data.util.figColor[colorPlatte[idx]], -1)
         for b in bones:
             pt1 = skel2[b[0]]
             pt2 = skel2[b[1]]
             color = b[2]
-            cv2.line(img,pt1,pt2,color,2)
+            cv2.line(img, pt1, pt2, color, 2)
         return img

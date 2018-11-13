@@ -20,11 +20,11 @@ NUM_LABELS = 15
 class PoseVAE(object):
     def __init__(
             self, dim_x=Num_of_Joints*3, batch_size=128, lr=1e-3, num_epochs=110,
-            b1=0.5, dim_z=2, n_hidden=20, ADD_NOISE=False, PRR=True, PRR_n_img_x=10, PRR_n_img_y=10, PRR_resize_factor=1.0,
+            b1=0.5, dim_z=20, n_hidden=20, ADD_NOISE=False, PRR=True, PRR_n_img_x=10, PRR_n_img_y=10, PRR_resize_factor=1.0,
             PMLR=True, PMLR_n_img_x=20, PMLR_n_img_y=20, PMLR_resize_factor=1.0, PMLR_z_range=2.0, PMLR_n_samples=5000):
         
-        self.checkpoint_dir='/'
-        #dim_z=dim of noise
+        self.checkpoint_dir='./checkpoint'
+        #dim_z=dim of latent space
         self.dim_z = dim_z
         #dim_x: dim of input pose dimension
         self.dim_x = dim_x
@@ -53,13 +53,13 @@ class PoseVAE(object):
             tf.float32, shape=[None, dim_x], name='target_pose')
 
         self.keep_prob = tf.placeholder(tf.float32, name='keep_prob')
-        
+        #latent_variable
         self.z_in = tf.placeholder(
             tf.float32, shape=[None, dim_z], name='latent_variable')
 
         self.y, self.z, self.loss, self.neg_marginal_likelihood, self.KL_divergence = self.autoencoder(
             self.x_hat, self.x, self.dim_x, self.dim_z, self.n_hidden, self.keep_prob)
-
+        
         self.train_op = tf.train.AdamOptimizer(lr).minimize(self.loss)
         self.saver = tf.train.Saver()
 
