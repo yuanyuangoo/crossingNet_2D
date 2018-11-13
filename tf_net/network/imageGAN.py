@@ -33,7 +33,7 @@ class ImageGAN(object):
                  batch_size=64, sample_num=64, output_height=128, output_width=128,
                  y_dim=15, dim_z=100, gf_dim=64, df_dim=64,
                  gfc_dim=1024, dfc_dim=1024, c_dim=1, dataset_name='h36m',
-                 input_fname_pattern='*.jpg', checkpoint_dir="checkpoint", sample_dir="samples", data_dir='./data',
+                 input_fname_pattern='*.jpg', checkpoint_dir="../checkpoint", sample_dir="samples", data_dir='./data',
                  learning_rate=0.0002, beta1=0.5, epoch=25, train_size=np.inf):
         self.epoch = epoch
         self.crop = crop
@@ -80,9 +80,11 @@ class ImageGAN(object):
 
     def build_model(self):
         if self.y_dim:
+            #self.y is label
             self.y = tf.placeholder(
                 tf.float32, [self.batch_size, self.y_dim], name='y')
         else:
+            #self.y is label
             self.y = None
 
         if self.crop:
@@ -92,16 +94,21 @@ class ImageGAN(object):
 
         self.inputs = tf.placeholder(
             tf.float32, [self.batch_size] + image_dims, name='real_images')
-
+        #real image input
         inputs = self.inputs
 
+        #noise
         self.z = tf.placeholder(
             tf.float32, [None, self.dim_z], name='z')
         self.z_sum = histogram_summary("z", self.z)
 
+        #Generator for fake image
         self.G = self.generator(self.z, self.y)
+        #Discriminator for real image
         self.D, self.D_logits = self.discriminator(inputs, self.y, reuse=False)
+        #image
         self.sampler = self.sampler(self.z, self.y)
+        #Discriminator for fake image
         self.D_, self.D_logits_ = self.discriminator(
             self.G, self.y, reuse=True)
 
@@ -113,11 +120,11 @@ class ImageGAN(object):
             return tf.nn.sigmoid_cross_entropy_with_logits(logits=x, labels=y)
 
         self.d_loss_real = tf.reduce_mean(
-            sigmoid_cross_entropy_with_logits(self.D_logits, tf.ones_like(self.D)))
+            sigmoid_cross_entropy_with_logits(self.D_logits, tf.ones_like(self.D)))  #for real image Discriminator
         self.d_loss_fake = tf.reduce_mean(
-            sigmoid_cross_entropy_with_logits(self.D_logits_, tf.zeros_like(self.D_)))
+            sigmoid_cross_entropy_with_logits(self.D_logits_, tf.zeros_like(self.D_))) #for fake image Discriminator
         self.g_loss = tf.reduce_mean(
-            sigmoid_cross_entropy_with_logits(self.D_logits_, tf.ones_like(self.D_)))
+            sigmoid_cross_entropy_with_logits(self.D_logits_, tf.ones_like(self.D_))) #for fake image Generator
 
         self.d_loss_real_sum = scalar_summary(
             "d_loss_real", self.d_loss_real)

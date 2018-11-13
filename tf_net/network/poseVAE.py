@@ -26,7 +26,7 @@ class PoseVAE(object):
         self.checkpoint_dir='/'
         #dim_z=dim of noise
         self.dim_z = dim_z
-        #dim_x: dim of input
+        #dim_x: dim of input pose dimension
         self.dim_x = dim_x
         self.ADD_NOISE = ADD_NOISE
         self.batch_size = batch_size
@@ -45,13 +45,15 @@ class PoseVAE(object):
         self.PMLR_resize_factor = PMLR_resize_factor
         self.PMLR_z_range = PMLR_z_range
         self.PMLR_n_samples = PMLR_n_samples
-
+        #input_pose
         self.x_hat = tf.placeholder(
             tf.float32, shape=[None, dim_x], name='input_pose')
+        #target_pose
         self.x = tf.placeholder(
             tf.float32, shape=[None, dim_x], name='target_pose')
 
         self.keep_prob = tf.placeholder(tf.float32, name='keep_prob')
+        
         self.z_in = tf.placeholder(
             tf.float32, shape=[None, dim_z], name='latent_variable')
 
