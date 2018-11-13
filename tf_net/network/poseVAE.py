@@ -22,6 +22,8 @@ class PoseVAE(object):
             self, dim_x=Num_of_Joints*3, batch_size=128, lr=1e-3, num_epochs=110,
             b1=0.5, dim_z=2, n_hidden=20, ADD_NOISE=False, PRR=True, PRR_n_img_x=10, PRR_n_img_y=10, PRR_resize_factor=1.0,
             PMLR=True, PMLR_n_img_x=20, PMLR_n_img_y=20, PMLR_resize_factor=1.0, PMLR_z_range=2.0, PMLR_n_samples=5000):
+        
+        self.checkpoint_dir='/'
         #dim_z=dim of noise
         self.dim_z = dim_z
         #dim_x: dim of input
@@ -57,6 +59,7 @@ class PoseVAE(object):
             self.x_hat, self.x, self.dim_x, self.dim_z, self.n_hidden, self.keep_prob)
 
         self.train_op = tf.train.AdamOptimizer(lr).minimize(self.loss)
+        self.saver = tf.train.Saver()
 
     def decoder(self, z, dim_img, n_hidden):
         y = self.bernoulli_MLP_decoder(z, n_hidden, dim_img, 1.0, reuse=True)
@@ -229,7 +232,12 @@ class PoseVAE(object):
 
             decoded = vae.decoder(self.z_in, self.dim_x, self.n_hidden)
         with tf.Session() as sess:
-
+            could_load, checkpoint_counter = self.load(self.checkpoint_dir)
+            if could_load:
+                counter = checkpoint_counter
+                print(" [*] Load SUCCESS")
+            else:
+                print(" [!] Load failed...")
             sess.run(tf.global_variables_initializer(),
                      feed_dict={self.keep_prob: 0.9})
 
@@ -290,7 +298,40 @@ class PoseVAE(object):
                             self.z, feed_dict={self.x_hat: x_PMLR, self.keep_prob: 1})
                         PMLR.save_scattered_image(
                             z_PMLR, id_PMLR, name="/PMLR_map_epoch_%02d" % (epoch) + ".jpg")
+    @property
+    def model_dir(self):
+        return "{}_{}_{}".format(
+            globalConfig.dataset, self.batch_size,
+            self.dim_z)
 
+    def load(self, checkpoint_dir):
+        import re
+        print(" [*] Reading checkpoints...")
+        checkpoint_dir = os.path.join(checkpoint_dir, self.model_dir)
+
+        ckpt = tf.train.get_checkpoint_state(checkpoint_dir)
+        if ckpt and ckpt.model_checkpoint_path:
+            ckpt_name = os.path.basename(ckpt.model_checkpoint_path)
+            self.saver.restore(
+                self.sess, os.path.join(checkpoint_dir, ckpt_name))
+            counter = int(
+                next(re.finditer("(\d+)(?!.*\d)", ckpt_name)).group(0))
+            print(" [*] Success to read {}".format(ckpt_name))
+            return True, counter
+        else:
+            print(" [*] Failed to find a checkpoint")
+            return False, 0
+
+    def save(self, checkpoint_dir, step):
+        model_name = "POSEVAE.model"
+        checkpoint_dir = os.path.join(checkpoint_dir, self.model_dir)
+
+        if not os.path.exists(checkpoint_dir):
+            os.makedirs(checkpoint_dir)
+
+        self.saver.save(self.sess,
+                        os.path.join(checkpoint_dir, model_name),
+                        global_step=step)
 
 if __name__ == '__main__':
     if globalConfig.dataset == 'H36M':

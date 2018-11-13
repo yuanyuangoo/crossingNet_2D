@@ -27,6 +27,9 @@ elif globalConfig.dataset == 'NYU':
 elif globalConfig.dataset == 'MSRA':
     colorPlatte = data.util.msraColorIdx
     bones = data.util.msraBones
+elif globalConfig.dataset == 'H36M':
+    colorPlatte = data.util.msraColorIdx
+    bones = data.util.msraBones
 else:
     raise NotImplementedError('unkonwn dataset %s'%globalConfig.dataset)
 
@@ -66,8 +69,8 @@ class ForwardRender(object):
                                                        self.latent_tvar,
                                                        deterministic=True)
 
-        self.depth_gan = ImageGAN(z_dim=self.z_dim)
-        self.render_layer = self.depth_gan.gen_depth_layer
+        self.image_gan = ImageGAN(z_dim=self.z_dim)
+        self.render_layer = self.image_gan.gen_image_layer
         self.render_var = lasagne.layers.get_output(self.render_layer,
                                                    self.alignment_var,
                                                    deterministic=False)
@@ -82,7 +85,7 @@ class ForwardRender(object):
 
         self.params = self.pose_vae.encoder_params +\
                 self.alignment_params +\
-                self.depth_gan.gen_params
+                self.image_gan.gen_params
         print ('all parameters: {}'.format(self.params))
     
     def build_latent_alignment_layer(self, pose_vae, \

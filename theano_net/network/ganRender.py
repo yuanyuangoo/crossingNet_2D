@@ -8,7 +8,7 @@ sys.path.append('./')
 import globalConfig
 from forwardRender import ForwardRender
 from data.dataset import *
-from data.util import Camera
+# from data.util import Camera
 from data.evaluation import Evaluation
 from data.stream import DataStream, MultiDataStream
 import scipy.optimize
@@ -37,7 +37,7 @@ class GanRender(ForwardRender):
             deterministic=False)
         real_render_var = lasagne.layers.get_output(
             self.depth_gan.dis_render_layer,
-            self.depth_gan.depth_input_var,
+            self.depth_gan.image_input_var,
             deterministic=False)
         # recons_loss = abs(real_render_var - fake_render_var)
         recons_loss = (real_render_var - fake_render_var)**2
@@ -757,9 +757,16 @@ if __name__ == '__main__':
 
         val_ds = Dataset()
         val_ds.loadMSRA('P%d'%pid)
+    elif globalConfig.dataset == 'H36M':
+        import data.h36m as h36m
+        ds = Dataset()
+        for i in range(0, 20000, 20000):
+            ds.loadH36M(i, mode='train', tApp=True, replace=False)
 
+        val_ds = Dataset()
+        val_ds.loadH36M(i, mode='valid', tApp=True, replace=False)
     else:
-        raise ValueError('unkonwn dataset %s'%globalConfig.dataset)
+        raise ValueError('unknown dataset %s' % globalConfig.dataset)
 
     print ('validation length = %d'%len(val_ds.frmList))
     skel_num = len(val_ds.frmList[0].norm_skel)
