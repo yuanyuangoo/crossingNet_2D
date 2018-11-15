@@ -68,6 +68,10 @@ class ImageGAN(object):
         self.g_bn1 = batch_norm(name='g_bn1')
         self.g_bn2 = batch_norm(name='g_bn2')
 
+        self.m_bn0 = batch_norm(name='m_bn0')
+        self.m_bn1 = batch_norm(name='m_bn1')
+        self.m_bn2 = batch_norm(name='m_bn2')
+
         if not self.y_dim:
             self.g_bn3 = batch_norm(name='g_bn3')
 
@@ -108,6 +112,8 @@ class ImageGAN(object):
         #Discriminator for fake image
         self.D_, self.D_logits_ = self.build_discriminator(
             self.G, self.y, reuse=True)
+        self.M, self.M_logits = self.build_metric(
+            self.y, reuse=False)
 
         self.d_sum = histogram_summary("d", self.D)
         self.d__sum = histogram_summary("d_", self.D_)
@@ -137,6 +143,7 @@ class ImageGAN(object):
 
         self.d_vars = [var for var in t_vars if 'd_' in var.name]
         self.g_vars = [var for var in t_vars if 'g_' in var.name]
+        self.m_vars = [var for var in t_vars if 'm_' in var.name]
 
         self.saver = tf.train.Saver()
 
@@ -151,6 +158,8 @@ class ImageGAN(object):
             h0 = lrelu(
                 conv2d(x, self.c_dim + self.y_dim, name='d_h0_conv'))
             h0 = conv_cond_concat(h0, yb)
+
+            self.dis_metric = h0
 
             h1 = lrelu(self.d_bn1(
                 conv2d(h0, self.df_dim + self.y_dim, name='d_h1_conv')))
@@ -191,6 +200,32 @@ class ImageGAN(object):
 
             return tf.nn.sigmoid(
                 deconv2d(h2, [self.batch_size, s_h, s_w, 1], name='g_h3'))
+
+    def build_metric(self, y=None, hidden=None):
+        if hidden is None:
+            hidden = self.dis_metric
+        with tf.variable_scope("metric") as scope:
+            scope.reuse_variables()
+            yb = tf.reshape(y, [self.batch_size, 1, 1, self.y_dim])
+            h0 = self.m_bn0(conv2d(hidden, self.c_dim +
+                                   self.y_dim, name='m_h0_conv'))
+            h0 = conv_cond_concat(h0, yb)
+
+            h1 = self.m_bn1(
+                conv2d(h0, self.df_dim + self.y_dim, name='m_h1_conv'))
+            h1 = tf.reshape(h1, [self.batch_size, -1])
+            h1 = concat([h1, y], 1)
+
+            h2 = self.m_bn2(
+                conv2d(h1, self.df_dim + self.y_dim, name='m_h2_conv'))
+            h2 = tf.reshape(h2, [self.batch_size, -1])
+            h2 = concat([h2, y], 1)
+
+            h3 = linear(h2, 1, 'm_h3_lin')
+
+            return tf.nn.sigmoid(h3), h3
+        
+
 
     def build_sampler(self, z, y=None):
         with tf.variable_scope("generator") as scope:

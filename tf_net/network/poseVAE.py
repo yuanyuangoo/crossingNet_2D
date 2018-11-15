@@ -1,14 +1,13 @@
+import tensorflow as tf
+import numpy as np
+import os
+import globalConfig
+import data.plot_utils as plot_utils
+from data.util import *
+from data.dataset import *
+import data.ref as ref
 import sys
 sys.path.append('./')
-import data.ref as ref
-from data.dataset import *
-from data.util import *
-import data.plot_utils as plot_utils
-
-import globalConfig
-import os
-import numpy as np
-import tensorflow as tf
 
 
 IMAGE_SIZE_H36M = 128
@@ -22,8 +21,8 @@ class PoseVAE(object):
             self, dim_x=Num_of_Joints*3, batch_size=128, lr=1e-3, num_epochs=110,
             b1=0.5, dim_z=20, n_hidden=20, ADD_NOISE=False, PRR=True, PRR_n_img_x=10, PRR_n_img_y=10, PRR_resize_factor=1.0,
             PMLR=True, PMLR_n_img_x=20, PMLR_n_img_y=20, PMLR_resize_factor=1.0, PMLR_z_range=2.0, PMLR_n_samples=5000):
-        
-        self.checkpoint_dir='./checkpoint'
+
+        self.checkpoint_dir = './checkpoint'
         #dim_z=dim of latent space
         self.dim_z = dim_z
         #dim_x: dim of input pose dimension
@@ -71,9 +70,10 @@ class PoseVAE(object):
         y = self.bernoulli_MLP_decoder(z, n_hidden, dim_img, 1.0, reuse=True)
         return y
 
-    def autoencoder(self, x_hat, x, dim_img, dim_z, n_hidden, keep_prob):
+    def autoencoder(self, x_hat, x, dim_img, dim_z, n_hidden, keep_prob, reuse=False):
+
         mu, sigma = self.gaussian_MLP_encoder(
-            x_hat, n_hidden, dim_z, keep_prob)
+            x_hat, n_hidden, dim_z, keep_prob, reuse=reuse)
 
         # sampling by re-parameterization technique
         z = mu + sigma * tf.random_normal(tf.shape(mu), 0, 1, dtype=tf.float32)
@@ -98,8 +98,8 @@ class PoseVAE(object):
 
         return y, z, loss, -marginal_likelihood, KL_divergence
 
-    def gaussian_MLP_encoder(self, x, n_hidden, n_output, keep_prob):
-        with tf.variable_scope("gaussian_MLP_encoder"):
+    def gaussian_MLP_encoder(self, x, n_hidden, n_output, keep_prob, reuse=False):
+        with tf.variable_scope("gaussian_MLP_encoder", reuse=reuse):
             # initializers
             w_init = tf.contrib.layers.variance_scaling_initializer()
             b_init = tf.constant_initializer(0.)
@@ -304,6 +304,7 @@ class PoseVAE(object):
                             self.z, feed_dict={self.x_hat: x_PMLR, self.keep_prob: 1})
                         PMLR.save_scattered_image(
                             z_PMLR, id_PMLR, name="/PMLR_map_epoch_%02d" % (epoch) + ".jpg")
+
     @property
     def model_dir(self):
         return "{}_{}_{}".format(
@@ -338,6 +339,7 @@ class PoseVAE(object):
         self.saver.save(self.sess,
                         os.path.join(checkpoint_dir, model_name),
                         global_step=step)
+
 
 if __name__ == '__main__':
     if globalConfig.dataset == 'H36M':

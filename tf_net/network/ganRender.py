@@ -11,8 +11,8 @@ import tensorflow as tf
 from collections import namedtuple
 import sys
 sys.path.append('./')
-import globalConfig
 from data.dataset import *
+import globalConfig
 
 class GanRender(ForwardRender):
     DisErr = namedtuple('disErr', ['gan', 'est', 'metric'])
@@ -39,15 +39,15 @@ class GanRender(ForwardRender):
 
         self.combi_weights_input = tf.placeholder(dtype=tf.float32)
         latent_noises = tf.matmul(self.combi_weights_input, self.latent)
-        aligned_gan_noise = self.alignment
+        # aligned_gan_noise = self.alignment
         fake_image = self.render
-        gan_fake_image_var = tf.concat(1, [fake_image, self.render])
+        # gan_fake_image_var = tf.concat(1, [fake_image, self.render])
 
-        px_fake = self.image_gan.D_
-        px_real = self.image_gan.D
+        # px_fake = self.image_gan.D_
+        # px_real = self.image_gan.D
 
-        loss_dis_fake = self.image_gan.d_loss_fake
-        loss_dis_real = self.image_gan.d_loss_real
+        # loss_dis_fake = self.image_gan.d_loss_fake
+        # loss_dis_real = self.image_gan.d_loss_real
         loss_dis_gan = self.image_gan.d_loss
 
         self.gan_loss_gen = tf.reduce_mean(abs(real_feamat-fake_feamat))
@@ -94,12 +94,13 @@ class GanRender(ForwardRender):
         print('alignment_train_fn compiled')
 
         # estimating the latent variable part
-        self.z_est = self.image_gan.build_recognition(
+        self.z_est = self.image_gan.build_sampler(
             self.z_dim, input=self.image_gan.inputs, reuse=False, keep_prob=0.9)
-        self.z_est_t = self.image_gan.build_recongnition(
+        self.z_est_t = self.image_gan.build_sampler(
             self.z_dim, input=self.image_gan.inputs, reuse=True, keep_prob=1)
 
-        self.loss_dis_est = tf.losses.mean_squared_error(self.z_est_t, self.z_est)
+        self.loss_dis_est = tf.losses.mean_squared_error(
+            self.z_est_t, self.z_est)
         self.dis_loss = loss_dis_gan + self.loss_dis_est + self.metric_loss
 
         self.dis_optim = tf.train.AdamOptimizer(learning_rate=self.lr, beta1=self.b1).minimize(
@@ -107,9 +108,9 @@ class GanRender(ForwardRender):
         print('dis_train_fn compiled')
 
         # initialize the training of recognition, metric part
-        self.init_dis_loss = loss_dis_est+metric_loss
+        self.init_dis_loss = self.loss_dis_est+metric_loss
         self.init_dis_optim = tf.train.AdamOptimizer(learning_rate=self.lr, beta1=self.b1).minimize(
-            init_dis_loss, var_list=self.image_gan.reco_vars+self.image_gan.metric_vars)
+            self.init_dis_loss, var_list=self.image_gan.reco_vars+self.image_gan.metric_vars)
         print('init_dis_fn compiled')
 
         self.est_pose_z = tf.placeholder(dtype=tf.float32)
@@ -264,7 +265,7 @@ class GanRender(ForwardRender):
                             })
                         gen_errs += np.array([0., 1., 0.])*gan_loss_gen+np.array([0., 1., 0.])*recons_loss +\
                             np.array([0., 0., 1.])*metric_loss
-                            
+
                     nupdates += 1
 
                     dis_errs /= nupdates
@@ -279,7 +280,7 @@ class GanRender(ForwardRender):
                     flog.close()
                     if epoch % 10 == 0 and valid_dataset is not None:
                         for i in range(test_skel.shape[0]):
-                            noise=np.zeros((1,self.pose_z_dim),np.float32)
+                            noise = np.zeros((1, self.pose_z_dim), np.float32)
 
                             reco_image = self.render.eval({
                                 self.pose_input: test_skel[offset+i, :],
@@ -306,15 +307,32 @@ class GanRender(ForwardRender):
                             real_img = self.visPair(
                                 test_img[offset], pose, self.origin_input, 50.0)
 
-                            est_z =1
-
-
-
-
-
-
-
-
+                            est_z = self.z_est_t.eval(
+                                {self.image_gan.inputs: test_img[offset+i, :]})
+                            est_z.shape = (17,)
+                            est_z, est_orig = est_z[:20], est_z[20:]
+                            est_z, est_orig = est_z[:20], est_z[20:]
+                            est_z.shape = (1, 20)
+                            est_orig.shape = (1, 3)
+                            est_pose = self.est_pose_t.evel(
+                                {self.est_pose_z: est_z})
+                            est_imageidx = self.render({
+                                self.pose_input: est_pose,
+                                self.pose_vae.y: test_labels[offset+i, :],
+                                self.origin_input: None,
+                                self.image_gan.y: test_labels[offset+i, :],
+                                self.pose_vae.keep_prob: 1
+                            })
+                            pose = self.resumePose(est_pose[0],
+                                                   est_orig[0])
+                            est_img = self.visPair(est_image[0],
+                                                   pose,
+                                                   self.origin_input,
+                                                   50.0)
+                            recons_image = np.hstack(
+                                (real_img, fake_img, est_img))
+                            cv2.imwrite(os.path.join(img_dir, '%d_%d.jpg' % (epoch, idx)),
+                                        recons_image.astype('uint8'))
 
                     if epoch % 10 == 0:
                         self.save(os.path.join(param_dir, '-1'), epoch)

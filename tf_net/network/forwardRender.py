@@ -185,6 +185,3 @@ class ForwardRender(object):
             color = b[2]
             cv2.line(img, pt1, pt2, color, 2)
         return img
-
-
-ForwardRender(20)
