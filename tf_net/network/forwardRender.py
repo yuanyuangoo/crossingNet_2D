@@ -19,7 +19,7 @@ class ForwardRender(object):
         self.keep_prob = 1.0
         self.dim_x = dim_x
         self.pose_vae = PoseVAE(dim_x=dim_x)
-        # self.origin_input = tf.placeholder(tf.float32, shape=(None, 3))
+        self.origin_input = tf.placeholder(tf.float32, shape=(None, 3))
         self.dim_z = 100
         self.alignment = \
             self.build_latent_alignment_layer(self.pose_vae)
@@ -45,7 +45,7 @@ class ForwardRender(object):
 
         self.forwarRender_vars = self.pose_vae.encoder_vars + \
             self.alignment_vars+self.image_gan.g_vars
-            
+
         self.ali_train_op = tf.train.AdamOptimizer(
             self.lr, self.b1).minimize(self.pixel_loss, var_list=self.forwarRender_vars)
 
@@ -127,8 +127,8 @@ class ForwardRender(object):
                 for i in range(total_batch):
                     # Compute the offset of the current minibatch in the data.
                     offset = (i * self.batch_size) % (total_batch)
-                    _, tot_loss = sess.run((self.train_op, self.pixel_loss), feed_dict={
-                        self.real_image_var: train_img[offset:(offset + self.batch_size), :],
+                    _, tot_loss = sess.run((self.ali_train_op, self.pixel_loss), feed_dict={
+                        self.real_image: train_img[offset:(offset + self.batch_size), :],
                         self.pose_vae.x_hat: train_skel[offset:(offset + self.batch_size), :],
                         self.origin_input: None,
                         self.image_gan.y: train_labels[offset:(offset + self.batch_size), :],

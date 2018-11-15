@@ -29,7 +29,7 @@ class GanRender(ForwardRender):
         self.real_render = self.real_image
         recons_loss = (self.real_render-self.fake_render)**2
         recons_loss = tf.clip_by_value(recons_loss, 0, self.golden_max)
-        recons_loss = tf.reduce_mean(recons_loss)
+        self.recons_loss = tf.reduce_mean(recons_loss)
 
         # gan part
         real_feamat = self.image_gan.D_logits
@@ -37,8 +37,8 @@ class GanRender(ForwardRender):
         fake_feamat = self.image_gan.D_logits_
         fake_feamat = tf.reduce_mean(fake_feamat, axis=0)
 
-        combi_weights_input = tf.placeholder(dtype=tf.float32)
-        latent_noises = tf.matmul(combi_weights_input, self.latent)
+        self.combi_weights_input = tf.placeholder(dtype=tf.float32)
+        latent_noises = tf.matmul(self.combi_weights_input, self.latent)
         aligned_gan_noise = self.alignment
         fake_image = self.render
         gan_fake_image_var = tf.concat(1, [fake_image, self.render])
@@ -50,7 +50,7 @@ class GanRender(ForwardRender):
         loss_dis_real = self.image_gan.d_loss_real
         loss_dis_gan = self.image_gan.d_loss
 
-        gan_loss_gen = tf.reduce_mean(abs(real_feamat-fake_feamat))
+        self.gan_loss_gen = tf.reduce_mean(abs(real_feamat-fake_feamat))
 
         # metric part
         if not self.metricCombi:
@@ -81,39 +81,39 @@ class GanRender(ForwardRender):
                 real_fake_combi, output_dim=self.z_dim, reuse=True)
 
         metric_loss = (latent_diff - metric_diff)**2 + self_diff**2
-        metric_loss = metric_loss.mean()
-        gen_loss = gan_loss_gen + recons_loss + metric_loss
+        self.metric_loss = metric_loss.mean()
+        self.gen_loss = self.gan_loss_gen + self.recons_loss + self.metric_loss
 
-        gen_optim = tf.train.AdamOptimizer(
-            learning_rate=self.lr, beta1=self.b1).minimize(gen_loss, var_list=gen_vars)
+        self.gen_optim = tf.train.AdamOptimizer(
+            learning_rate=self.lr, beta1=self.b1).minimize(self.gen_loss, var_list=gen_vars)
         print('gen_train_fn compiled')
 
         # alignment part
-        align_optim = tf.train.AdamOptimizer(
-            learning_rate=self.lr*10, beta1=self.b1).minimize(recons_loss, var_list=self.alignment_vars)
+        self.align_optim = tf.train.AdamOptimizer(
+            learning_rate=self.lr*10, beta1=self.b1).minimize(self.recons_loss, var_list=self.alignment_vars)
         print('alignment_train_fn compiled')
 
         # estimating the latent variable part
-        z_est = self.image_gan.build_recognition(
+        self.z_est = self.image_gan.build_recognition(
             self.z_dim, input=self.image_gan.inputs, reuse=False, keep_prob=0.9)
-        z_est_t = self.image_gan.build_recongnition(
+        self.z_est_t = self.image_gan.build_recongnition(
             self.z_dim, input=self.image_gan.inputs, reuse=True, keep_prob=1)
 
-        loss_dis_est = tf.losses.mean_squared_error(z_est_t, z_est)
-        dis_loss = loss_dis_gan + loss_dis_est + metric_loss
+        self.loss_dis_est = tf.losses.mean_squared_error(self.z_est_t, self.z_est)
+        self.dis_loss = loss_dis_gan + self.loss_dis_est + self.metric_loss
 
-        dis_optim = tf.train.AdamOptimizer(learning_rate=self.lr, beta1=self.b1).minimize(
-            dis_loss, var_list=self.image_gan.d_vars+self.image_gan.reco_vars+self.image_gan.metric_vars)
+        self.dis_optim = tf.train.AdamOptimizer(learning_rate=self.lr, beta1=self.b1).minimize(
+            self.dis_loss, var_list=self.image_gan.d_vars+self.image_gan.reco_vars+self.image_gan.metric_vars)
         print('dis_train_fn compiled')
 
         # initialize the training of recognition, metric part
-        init_dis_loss = loss_dis_est+metric_loss
-        init_dis_optim = tf.train.AdamOptimizer(learning_rate=self.lr, beta1=self.b1).minimize(
+        self.init_dis_loss = loss_dis_est+metric_loss
+        self.init_dis_optim = tf.train.AdamOptimizer(learning_rate=self.lr, beta1=self.b1).minimize(
             init_dis_loss, var_list=self.image_gan.reco_vars+self.image_gan.metric_vars)
         print('init_dis_fn compiled')
 
-        est_pose_z = tf.placeholder(dtype=tf.float32)
-        est_pose_t = self.pose_vae.y
+        self.est_pose_z = tf.placeholder(dtype=tf.float32)
+        self.est_pose_t = self.pose_vae.y
 
     def train(self, nepoch=None, train_dataset=None, valid_dataset=None, desc='dummy'):
         cache_dir = os.path.join(
@@ -168,6 +168,7 @@ class GanRender(ForwardRender):
         seed = 42
         np_rng = RandomState(seed)
         total_batch = int(n_samples / self.batch_size)
+
         with tf.Session() as sess:
             try:
                 tf.global_variables_initializer().run()
@@ -179,7 +180,6 @@ class GanRender(ForwardRender):
                 gen_err, dis_err, nupdates = 0, 0, 0
                 for i in range(total_batch):
                     offset = (i * self.batch_size) % (n_samples)
-
                     vae_noises = np_rng.normal(0, 0.05,
                                                (self.batch_size, self.pose_z_dim)
                                                ).astype(np.float32)
@@ -188,46 +188,83 @@ class GanRender(ForwardRender):
                                                              tar_num=self.batch_size,
                                                              sel_num=5)
                     if epoch < 21:
-                        real_render_var = sess.run(
-                            (self.train_op, self.loss),
-                            feed_dict={self.x_hat: batch_xs_input, self.x: batch_xs_target, self.keep_prob: 0.9})
-
-                        fake_render_var = sess.run(
-                            (self.train_op, self.loss),
-                            feed_dict={self.x_hat: batch_xs_input, self.x: batch_xs_target, self.keep_prob: 0.9})
-
-                        recons_loss = (real_render_var - fake_render_var)**2
-                        recons_loss = tf.clip_by_value(
-                            recons_loss, 0, self.golden_max)
-                        gen_err = tf.reduce_mean(recons_loss)
-
+                        gen_err, _ = sess.run([self.recons_loss, self.align_optim], feed_dict={
+                            self.image_gan.inputs: train_img[offset:(offset + self.batch_size), :],
+                            self.pose_vae.x_hat: train_skel[offset:(offset + self.batch_size), :],
+                            self.origin_input: None,
+                            self.image_gan.y: train_labels[offset:(offset + self.batch_size), :],
+                            self.pose_vae.noise_input: vae_noises,
+                            self.pose_vae.keep_prob: 0.9
+                        })
                         gen_errs += np.array([0., 1., 0.])*gen_err
 
-                        est_err, metr_err = sess.run(
-                            (self.train_op, self.loss),
-                            feed_dict={self.x_hat: batch_xs_input, self.x: batch_xs_target, self.keep_prob: 1})
+                        est_err, metr_err, _ = sess.run([self.loss_dis_est, self.metric_loss, self.init_dis_optim], feed_dict={
+                            self.image_gan.inputs: train_img[offset:(offset + self.batch_size), :],
+                            self.pose_vae.x_hat: train_skel[offset:(offset + self.batch_size), :],
+                            self.origin_input: None,
+                            self.image_gan.y: train_labels[offset:(offset + self.batch_size), :],
+                            self.pose_vae.noise_input_var: vae_noises,
+                            self.image_gan.noise_input: gan_noises,
+                            self.pose_vae.keep_prob: 0.9
+                        })
                         dis_errs += np.array([0., 1., 0.])*est_err +\
                             np.array([0., 0., 1.])*metr_err
                         nupdates += 1
                         continue
+
                     if self.rndGanInput:
-                        dis_errs +=\
-                            sess.run(
-                                (self.train_op, self.loss),
-                                feed_dict={self.x_hat: batch_xs_input, self.x: batch_xs_target, self.keep_prob: 1})
-                        gen_errs += \
-                            sess.run(
-                                (self.train_op, self.loss),
-                                feed_dict={self.x_hat: batch_xs_input, self.x: batch_xs_target, self.keep_prob: 1})
+                        loss_dis_gan, loss_dis_est, metric_loss, _ = sess.run(
+                            [self.dis_loss, self.loss_dis_est, self.metric_loss, self.dis_optim], feed_dict={
+                                self.image_gan.inputs: train_img[offset:(offset + self.batch_size), :],
+                                self.pose_vae.x_hat: train_skel[offset:(offset + self.batch_size), :],
+                                self.origin_input: None,
+                                self.image_gan.y: train_labels[offset:(offset + self.batch_size), :],
+                                self.pose_vae.noise_input_var: vae_noises,
+                                self.image_gan.noise_input: gan_noises,
+                                self.pose_vae.keep_prob: 0.9
+                            })
+                        dis_errs += np.array([0., 1., 0.])*loss_dis_gan+np.array([0., 1., 0.])*loss_dis_est +\
+                            np.array([0., 0., 1.])*metric_loss
+
+                        gan_loss_gen, recons_loss, metric_loss, _ = sess.run(
+                            [self.gan_loss_gen, self.recons_loss, self.metric_loss, self.gen_optim], feed_dict={
+                                self.image_gan.inputs: train_img[offset:(offset + self.batch_size), :],
+                                self.pose_vae.x_hat: train_skel[offset:(offset + self.batch_size), :],
+                                self.origin_input: None,
+                                self.image_gan.y: train_labels[offset:(offset + self.batch_size), :],
+                                self.pose_vae.noise_input_var: vae_noises,
+                                self.image_gan.noise_input: gan_noises,
+                                self.pose_vae.keep_prob: 0.9
+                            })
+                        gen_errs += np.array([0., 1., 0.])*gan_loss_gen+np.array([0., 1., 0.])*recons_loss +\
+                            np.array([0., 0., 1.])*metric_loss
                     else:
-                        dis_errs += \
-                            sess.run(
-                                (self.train_op, self.loss),
-                                feed_dict={self.x_hat: batch_xs_input, self.x: batch_xs_target, self.keep_prob: 1})
-                        gen_errs += \
-                            sess.run(
-                                (self.train_op, self.loss),
-                                feed_dict={self.x_hat: batch_xs_input, self.x: batch_xs_target, self.keep_prob: 1})
+                        loss_dis_gan, loss_dis_est, metric_loss, _ = sess.run(
+                            [self.dis_loss, self.loss_dis_est, self.metric_loss, self.dis_optim], feed_dict={
+                                self.image_gan.inputs: train_img[offset:(offset + self.batch_size), :],
+                                self.pose_vae.x_hat: train_skel[offset:(offset + self.batch_size), :],
+                                self.origin_input: None,
+                                self.image_gan.y: train_labels[offset:(offset + self.batch_size), :],
+                                self.pose_vae.noise_input_var: vae_noises,
+                                self.image_gan.noise_input: None,
+                                self.pose_vae.keep_prob: 0.9
+                            })
+                        dis_errs += np.array([0., 1., 0.])*loss_dis_gan+np.array([0., 1., 0.])*loss_dis_est +\
+                            np.array([0., 0., 1.])*metric_loss
+
+                        gan_loss_gen, recons_loss, metric_loss, _ = sess.run(
+                            [self.gan_loss_gen, self.recons_loss, self.metric_loss, self.gen_optim], feed_dict={
+                                self.image_gan.inputs: train_img[offset:(offset + self.batch_size), :],
+                                self.pose_vae.x_hat: train_skel[offset:(offset + self.batch_size), :],
+                                self.origin_input: None,
+                                self.image_gan.y: train_labels[offset:(offset + self.batch_size), :],
+                                self.pose_vae.noise_input_var: vae_noises,
+                                self.image_gan.noise_input: None,
+                                self.pose_vae.keep_prob: 0.9
+                            })
+                        gen_errs += np.array([0., 1., 0.])*gan_loss_gen+np.array([0., 1., 0.])*recons_loss +\
+                            np.array([0., 0., 1.])*metric_loss
+                            
                     nupdates += 1
 
                     dis_errs /= nupdates
@@ -241,62 +278,49 @@ class GanRender(ForwardRender):
                     flog.write(json.dumps((dis_errs, gen_errs))+'\n')
                     flog.close()
                     if epoch % 10 == 0 and valid_dataset is not None:
-                        idx = 0
-                for i in range(total_batch):
-                    offset = (i * self.batch_size) % (n_samples)
-                    batch_xs_input = train_data_[
-                        offset:(offset + self.batch_size), :]
-                    batch_xs_target = batch_xs_input
-                    noise = np.zeros((1, self.pose_z_dim), np.float32)
-                    reco_image = sess.run(
-                        (self.train_op, self.loss),
-                        feed_dict={self.x_hat: batch_xs_input, self.x: batch_xs_target, self.keep_prob: 1})
-                    reco_pose = sess.run(
-                        (self.train_op, self.loss),
-                        feed_dict={self.x_hat: batch_xs_input, self.x: batch_xs_target, self.keep_prob: 1})
-                    pose = self.resumePose(reco_pose[0], train_data[0]
-                                           )
+                        for i in range(test_skel.shape[0]):
+                            noise=np.zeros((1,self.pose_z_dim),np.float32)
 
-                    fake_img = self.visPair(reco_image[0],
-                                            pose,
-                                            50.0)
+                            reco_image = self.render.eval({
+                                self.pose_input: test_skel[offset+i, :],
+                                self.pose_vae.y: test_labels[offset+i, :],
+                                self.origin_input: None,
+                                self.image_gan.y: test_labels[offset+i, :],
+                                self.pose_vae.keep_prob: 1
+                            })
+                            reco_pose = self.pose_vae.y.eval({
+                                self.pose_input: test_skel[offset+i, :, :],
+                                self.origin_input: None,
+                                # self.pose_vae.label: test_labels[offset+i, :],
+                                self.pose_vae.keep_prob: 1
+                            })
+                            pose = self.resumePose(
+                                reco_pose[0], self.origin_input)
 
-                    pose = self.resumePose(train_data[0],
-                                           train_data[0])
-                    real_img = self.visPair(train_data[0],
-                                            pose,
-                                            50.0)
-                    est_z = sess.run(
-                        (self.train_op, self.loss),
-                        feed_dict={self.x_hat: batch_xs_input, self.x: batch_xs_target, self.keep_prob: 1})
-                    est_z.shape = (23,)
-                    est_z, est_orig = est_z[:20], est_z[20:]
-                    est_z.shape = (1, 20)
-                    est_orig.shape = (1, 3)
-                    est_pose = sess.run(
-                        (self.train_op, self.loss),
-                        feed_dict={self.x_hat: batch_xs_input, self.x: batch_xs_target, self.keep_prob: 1})
-                    est_image = sess.run(
-                        (self.train_op, self.loss),
-                        feed_dict={self.x_hat: batch_xs_input, self.x: batch_xs_target, self.keep_prob: 1})
-                    pose = self.resumePose(est_pose[0],
-                                           est_orig[0])
-                    est_img = self.visPair(est_image[0],
-                                           pose,
-                                           50.0)
-                    com_img = self.visPair(train_data[0],
-                                           pose)
-                    recons_img = np.hstack(
-                        (real_img, fake_img, est_img, com_img))
-                    cv2.imwrite(os.path.join(img_dir, '%d_%d.jpg' % (epoch, idx)),
-                                recons_img.astype('uint8'))
-                    idx += 1
+                            fake_img = self.visPair(
+                                reco_image[0], pose, self.origin_input, 50.0)
 
-            if epoch % 10 == 0:
-                self.save(os.path.join(param_dir, '-1'), epoch)
+                            pose = self.resumePose(
+                                test_skel[offset], self.origin_input)
 
-            if epoch % 100 == 0:
-                self.save(os.path.join(param_dir, '%d' % epoch), epoch)
+                            real_img = self.visPair(
+                                test_img[offset], pose, self.origin_input, 50.0)
+
+                            est_z =1
+
+
+
+
+
+
+
+
+
+                    if epoch % 10 == 0:
+                        self.save(os.path.join(param_dir, '-1'), epoch)
+
+                    if epoch % 100 == 0:
+                        self.save(os.path.join(param_dir, '%d' % epoch), epoch)
 
     @classmethod
     def rndCvxCombination(cls, rng, src_num, tar_num, sel_num):

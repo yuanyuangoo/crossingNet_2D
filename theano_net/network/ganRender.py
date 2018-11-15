@@ -334,7 +334,7 @@ class GanRender(ForwardRender):
             gen_errs, dis_errs = np.zeros((3,)), np.zeros((3,))
             gen_err, dis_err, nupdates = 0, 0, 0 
             start_time = time.time()
-            for pose, orig, trans, com, depth in\
+            for pose, orig, trans, com, image in\
                 train_stream.iterate(batchsize=self.batch_size, shuffle=True):
                 vae_noises = np_rng.normal(0, 0.05,
                                       (self.batch_size, self.pose_z_dim)
@@ -345,24 +345,24 @@ class GanRender(ForwardRender):
                                                          sel_num=5)
 
                 if epoch < 21:
-                    gen_err = self.alignment_train_fn(pose,orig,vae_noises,depth)
+                    gen_err = self.alignment_train_fn(pose,orig,vae_noises,image)
                     gen_errs += np.array([0.,1.,0.])*gen_err
                     est_err, metr_err =\
-                        self.init_dis_train_fn(pose,orig,vae_noises,gan_noises,depth)
+                        self.init_dis_train_fn(pose,orig,vae_noises,gan_noises,image)
                     dis_errs += np.array([0.,1.,0.])*est_err +\
                         np.array([0.,0.,1.])*metr_err
                     nupdates += 1
                     continue
                 if self.rndGanInput:
                     dis_errs +=\
-                        np.asarray(self.dis_train_fn(pose,orig,vae_noises,gan_noises,depth))
+                        np.asarray(self.dis_train_fn(pose,orig,vae_noises,gan_noises,image))
                     gen_errs += \
-                        np.asarray(self.gen_train_fn(pose,orig,vae_noises,gan_noises,depth))
+                        np.asarray(self.gen_train_fn(pose,orig,vae_noises,gan_noises,image))
                 else:
                     dis_errs += \
-                        np.asarray(self.dis_train_fn(pose,orig,vae_noises,depth))
+                        np.asarray(self.dis_train_fn(pose,orig,vae_noises,image))
                     gen_errs += \
-                        np.asarray(self.gen_train_fn(pose,orig,vae_noises,depth))
+                        np.asarray(self.gen_train_fn(pose,orig,vae_noises,image))
                 nupdates += 1
 
             print ('Epoch {} for {} took {:.3f}s'.format(epoch, nepoch, time.time()-start_time))
@@ -379,46 +379,46 @@ class GanRender(ForwardRender):
 
             if epoch % 10 == 0 and val_stream is not None:
                 idx = 0
-                for skel, orig, trans, com, depth in\
+                for skel, orig, trans, com, image in\
                     val_stream.iterate(batchsize=1, shuffle=False):
                         noise = np.zeros((1,self.pose_z_dim), np.float32)
-                        reco_depth = self.render_fn(skel, orig, noise) 
+                        reco_image = self.render_fn(skel, orig, noise) 
                         reco_pose = self.vae_reco_fn(skel, noise)
                         pose = self.resumePose(reco_pose[0], 
                                                orig[0])
-                        fake_img = self.visPair(reco_depth[0],
+                        fake_img = self.visPair(reco_image[0],
                                                 pose,
                                                 trans[0],
                                                 com[0], 50.0)
 
                         pose = self.resumePose(skel[0],
                                                orig[0])
-                        real_img = self.visPair(depth[0], 
+                        real_img = self.visPair(image[0], 
                                                 pose,
                                                 trans[0],
                                                 com[0], 50.0)
 
-                        est_z = self.z_est_fn(depth)
+                        est_z = self.z_est_fn(image)
                         est_z.shape = (23,)
                         est_z, est_orig = est_z[:20], est_z[20:]
                         est_z.shape = (1,20)
                         est_orig.shape = (1,3)
                         est_pose = self.pose_decode_fn(est_z)
-                        est_depth = self.render_fn(est_pose, est_orig, noise)
+                        est_image = self.render_fn(est_pose, est_orig, noise)
                         pose = self.resumePose(est_pose[0],
                                                est_orig[0])
-                        est_img = self.visPair(est_depth[0],
+                        est_img = self.visPair(est_image[0],
                                                pose,
                                                trans[0],
                                                com[0], 50.0)
-                        com_img = self.visPair(depth[0],
+                        com_img = self.visPair(image[0],
                                                pose,
                                                trans[0],
                                                com[0], 50.0)
 
-                        recons_depth = np.hstack((real_img, fake_img, est_img, com_img))
+                        recons_image = np.hstack((real_img, fake_img, est_img, com_img))
                         cv2.imwrite(os.path.join(img_dir,'%d_%d.jpg'%(epoch,idx)),\
-                                    recons_depth.astype('uint8'))
+                                    recons_image.astype('uint8'))
                         idx += 1
             
             if epoch % 10 == 0:
@@ -529,11 +529,11 @@ class GanRender(ForwardRender):
                                          allow_input_downcast=True)
         print ('energy_grad_fn compiled')
 
-    def bfgs(self, est_z, depth, maxiter=20):
+    def bfgs(self, est_z, image, maxiter=20):
         new_z = scipy.optimize.fmin_bfgs(
-            f=lambda x:self.energy_fn(x.reshape(1,-1),depth),
+            f=lambda x:self.energy_fn(x.reshape(1,-1),image),
             x0=est_z,
-            fprime=lambda x:self.energy_grad_fn(x.reshape(1,-1),depth),
+            fprime=lambda x:self.energy_grad_fn(x.reshape(1,-1),image),
             # maxiter=maxiter,
             full_output=False,
             disp=False
@@ -621,28 +621,28 @@ class GanRender(ForwardRender):
         
         codec = cv2.cv.CV_FOURCC('X','V','I','D')
         vid = cv2.VideoWriter(os.path.join(img_dir,'res.avi'), codec, 25, (128*4,128))
-        for skel, orig, trans, com, depth in\
+        for skel, orig, trans, com, image in\
             test_stream.iterate(batchsize=1, shuffle=False):
                 noise = np.zeros((1,self.pose_z_dim), np.float32)
-                reco_depth = self.render_fn(skel, orig, noise) 
+                reco_image = self.render_fn(skel, orig, noise) 
                 reco_pose = self.vae_reco_fn(skel, noise)
                 pose = self.resumePose(reco_pose[0], 
                                        orig[0])
-                fake_img = self.visPair(reco_depth[0],
+                fake_img = self.visPair(reco_image[0],
                                         pose,
                                         trans[0],
                                         com[0], 50.0)
 
                 gt_pose = self.resumePose(skel[0],
                                        orig[0])
-                real_img = self.visPair(depth[0], 
+                real_img = self.visPair(image[0], 
                                         gt_pose,
                                         trans[0],
                                         com[0], 50.0)
 
                 # real calculation part
                 start_time = time.time()
-                est_z = self.z_est_fn(depth)
+                est_z = self.z_est_fn(image)
                 est_z.shape = (23,)
                 est_z, est_orig = est_z[:20], est_z[20:]
                 est_z.shape = (1,20)
@@ -650,27 +650,27 @@ class GanRender(ForwardRender):
                 est_pose = self.pose_decode_fn(est_z)
                 end_time = time.time()
 
-                est_depth = self.render_fn(est_pose, est_orig, noise)
+                est_image = self.render_fn(est_pose, est_orig, noise)
                 est_pose = self.resumePose(est_pose[0],
                                        est_orig[0])
-                est_img = self.visPair(est_depth[0],
+                est_img = self.visPair(est_image[0],
                                        est_pose,
                                        trans[0],
                                        com[0], 50.0)
-                com_img = self.visPair(depth[0],
+                com_img = self.visPair(image[0],
                                        est_pose,
                                        trans[0],
                                        com[0], 50.0)
 
-                recons_err += (abs(reco_depth-depth)).mean()
+                recons_err += (abs(reco_image-image)).mean()
 
-                recons_depth = np.hstack((real_img, fake_img, est_img, com_img))
+                recons_image = np.hstack((real_img, fake_img, est_img, com_img))
                 # cv2.imwrite(os.path.join(img_dir,'%d_0.jpg'%(idx)),\
-                            # recons_depth.astype('uint8'))
+                            # recons_image.astype('uint8'))
                 idx += 1
                 maxJntError.append(Evaluation.maxJntError(gt_pose, est_pose))
                 total_time += end_time - start_time
-                vid.write(recons_depth.astype('uint8'))
+                vid.write(recons_image.astype('uint8'))
         
         print ('average running time = %fs'%(total_time/idx))
         print ('average reconstruction error  = %f'%(recons_err/idx))
@@ -682,7 +682,7 @@ class GanRender(ForwardRender):
         ds.normTranslation()
         ds.frmToNp()
 
-        data_depth = ds.x_norm
+        data_image = ds.x_norm
         data_pose_skel = ds.y_norm # skeleton in conanical view
 
         ndata = len(ds.frmList)
@@ -695,8 +695,8 @@ class GanRender(ForwardRender):
             data_pose_trans[i] = frm.trans
             data_pose_com[i] = frm.com3D
         print ('[ganRender] data prepared with %d samples'%ndata)
-        print ('[ganRender] x_norm range: {} to {}'.format(data_depth.min(),
-                                                          data_depth.max()))
+        print ('[ganRender] x_norm range: {} to {}'.format(data_image.min(),
+                                                          data_image.max()))
         print ('[ganRender] origin range: {} to {}'.format(data_pose_orig.min(),
                                                           data_pose_orig.max()))
 
@@ -704,7 +704,7 @@ class GanRender(ForwardRender):
                                data_pose_orig,
                                data_pose_trans,
                                data_pose_com,
-                               data_depth])
+                               data_image])
     @classmethod
     def rndCvxCombination(cls, rng, src_num, tar_num, sel_num):
         # generate tar_num random convex combinations from src_num point, every
