@@ -19,11 +19,10 @@ class ForwardRender(object):
         self.keep_prob = 1.0
         self.dim_x = dim_x
         self.pose_vae = PoseVAE(dim_x=dim_x)
-        self.origin_input = tf.placeholder(tf.float32, shape=(None, 3))
+        # self.origin_input = tf.placeholder(tf.float32, shape=(None, 3))
         self.dim_z = 100
         self.alignment = \
-            self.build_latent_alignment_layer(self.pose_vae,
-                                              self.origin_input)
+            self.build_latent_alignment_layer(self.pose_vae)
 
         self.image_gan = ImageGAN()
         self.image_gan.z=self.alignment
@@ -35,21 +34,22 @@ class ForwardRender(object):
         # print('all parameters: {}'.format(self.params))
 
         self.pose_input = self.pose_vae.x
-        self.real_image_var = tf.placeholder(
+
+        #Train Ali
+        self.real_image = tf.placeholder(
             name='real_image', dtype=tf.float32)
-
-
         self.pixel_loss = tf.losses.mean_squared_error(
-            self.real_image_var, self.render)
-
+            self.real_image, self.render)
         t_vars = tf.trainable_variables()
-
         self.alignment_vars = [var for var in t_vars if 'ali' in var.name]
+
         self.forwarRender_vars = self.pose_vae.encoder_vars + \
             self.alignment_vars+self.image_gan.g_vars
-
-        self.train_op = tf.train.AdamOptimizer(
+            
+        self.ali_train_op = tf.train.AdamOptimizer(
             self.lr, self.b1).minimize(self.pixel_loss, var_list=self.forwarRender_vars)
+
+
 
     def build_latent_alignment_layer(self, pose_vae,
                                      origin_layer=None,
@@ -70,11 +70,11 @@ class ForwardRender(object):
         print('latent output shape = {}'
               .format(latent.shape))
         self.latent = latent
-
-        latent = tf.placeholder(tf.float32, shape=(None, self.z_dim))
+        
+        # use None input, to adapt z from both pose-vae and real-test
         self.bn = batch_norm(name="ali_bn1")
         alignment = self.bn(tf.layers.dense(
-            latent, self.z_dim, use_bias=True, name='ali_conv'))
+            self.latent, self.z_dim, use_bias=True, name='ali_conv'))
 
         return alignment
 
@@ -117,7 +117,7 @@ class ForwardRender(object):
         test_skel = test_skel/max(-1*test_skel.min(), test_skel.max())
 
         train_size = train_skel.shape[0]
-
+        
         print('[ForwardRender] enter training loop with %d epoches' % nepoch)
         total_batch = int(train_size / self.batch_size)
         with tf.Session() as sess:

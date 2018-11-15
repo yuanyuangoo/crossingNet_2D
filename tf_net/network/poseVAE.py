@@ -3,9 +3,9 @@ sys.path.append('./')
 import data.ref as ref
 from data.dataset import *
 from data.util import *
+import data.plot_utils as plot_utils
 
 import globalConfig
-import plot_utils
 import os
 import numpy as np
 import tensorflow as tf

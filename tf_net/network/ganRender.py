@@ -14,20 +14,106 @@ sys.path.append('./')
 import globalConfig
 from data.dataset import *
 
-
 class GanRender(ForwardRender):
     DisErr = namedtuple('disErr', ['gan', 'est', 'metric'])
     GenErr = namedtuple('genErr', ['gan', 'recons', 'metric'])
     golden_max = 1.0
 
-    def __init__(self, x_dim, rndGanInput=False, metricCombi=False):
+    def __init__(self, x_dim, rndGanInput=False, metricCombi=False,):
         super(GanRender, self).__init__(x_dim)
         self.rndGanInput = rndGanInput
         self.metricCombi = metricCombi
-        gen_vars=self.alignment_vars+self.image_gan.g_vars
-        
-        fake_render_var=self.image_gan.G
-        real_render_var=self.image_gan.inputs
+        gen_vars = self.alignment_vars+self.image_gan.g_vars
+
+        self.fake_render = self.render
+        self.real_render = self.real_image
+        recons_loss = (self.real_render-self.fake_render)**2
+        recons_loss = tf.clip_by_value(recons_loss, 0, self.golden_max)
+        recons_loss = tf.reduce_mean(recons_loss)
+
+        # gan part
+        real_feamat = self.image_gan.D_logits
+        real_feamat = tf.reduce_mean(real_feamat, axis=0)
+        fake_feamat = self.image_gan.D_logits_
+        fake_feamat = tf.reduce_mean(fake_feamat, axis=0)
+
+        combi_weights_input = tf.placeholder(dtype=tf.float32)
+        latent_noises = tf.matmul(combi_weights_input, self.latent)
+        aligned_gan_noise = self.alignment
+        fake_image = self.render
+        gan_fake_image_var = tf.concat(1, [fake_image, self.render])
+
+        px_fake = self.image_gan.D_
+        px_real = self.image_gan.D
+
+        loss_dis_fake = self.image_gan.d_loss_fake
+        loss_dis_real = self.image_gan.d_loss_real
+        loss_dis_gan = self.image_gan.d_loss
+
+        gan_loss_gen = tf.reduce_mean(abs(real_feamat-fake_feamat))
+
+        # metric part
+        if not self.metricCombi:
+            fake_metric = self.image_gan.build_metric(
+                self.fake_image, output_dim=self.z_dim, reuse=False)
+            real_metric = self.image_gan.build_metric(
+                self.image_gan.inputs, output_dim=self.z_dim, reuse=True)
+            self_metric = self.image_gan.build_metric(
+                self.render, output_dim=self.z_dim, reuse=True)
+
+            latent_diff = self.latent-latent_noises
+            metric_diff = real_metric+fake_metric
+            self_diff = real_metric - self_metric
+        else:
+            fake_metric = self.image_gan.build_metric_combi(
+                self.fake_image, output_dim=self.z_dim, reuse=False)
+            real_metric = self.image_gan.build_metric_combi(
+                self.image_gan.inputs, output_dim=self.z_dim, reuse=True)
+            self_metric = self.image_gan.build_metric_combi(
+                self.render, output_dim=self.z_dim, reuse=True)
+
+            latent_diff = self.latent-latent_noises
+            real_fake_combi = tf.concat(1, [real_metric, fake_metric])
+            metric_diff = self.image_gan.build_combilayer(
+                real_fake_combi, output_dim=self.z_dim, reuse=False)
+            self_combi = tf.concat(1, [real_metric, self_metric])
+            self_diff = self.image_gan.build_combilayer(
+                real_fake_combi, output_dim=self.z_dim, reuse=True)
+
+        metric_loss = (latent_diff - metric_diff)**2 + self_diff**2
+        metric_loss = metric_loss.mean()
+        gen_loss = gan_loss_gen + recons_loss + metric_loss
+
+        gen_optim = tf.train.AdamOptimizer(
+            learning_rate=self.lr, beta1=self.b1).minimize(gen_loss, var_list=gen_vars)
+        print('gen_train_fn compiled')
+
+        # alignment part
+        align_optim = tf.train.AdamOptimizer(
+            learning_rate=self.lr*10, beta1=self.b1).minimize(recons_loss, var_list=self.alignment_vars)
+        print('alignment_train_fn compiled')
+
+        # estimating the latent variable part
+        z_est = self.image_gan.build_recognition(
+            self.z_dim, input=self.image_gan.inputs, reuse=False, keep_prob=0.9)
+        z_est_t = self.image_gan.build_recongnition(
+            self.z_dim, input=self.image_gan.inputs, reuse=True, keep_prob=1)
+
+        loss_dis_est = tf.losses.mean_squared_error(z_est_t, z_est)
+        dis_loss = loss_dis_gan + loss_dis_est + metric_loss
+
+        dis_optim = tf.train.AdamOptimizer(learning_rate=self.lr, beta1=self.b1).minimize(
+            dis_loss, var_list=self.image_gan.d_vars+self.image_gan.reco_vars+self.image_gan.metric_vars)
+        print('dis_train_fn compiled')
+
+        # initialize the training of recognition, metric part
+        init_dis_loss = loss_dis_est+metric_loss
+        init_dis_optim = tf.train.AdamOptimizer(learning_rate=self.lr, beta1=self.b1).minimize(
+            init_dis_loss, var_list=self.image_gan.reco_vars+self.image_gan.metric_vars)
+        print('init_dis_fn compiled')
+
+        est_pose_z = tf.placeholder(dtype=tf.float32)
+        est_pose_t = self.pose_vae.y
 
     def train(self, nepoch=None, train_dataset=None, valid_dataset=None, desc='dummy'):
         cache_dir = os.path.join(
@@ -37,7 +123,7 @@ class GanRender(ForwardRender):
         if not os.path.exists(cache_dir):
             os.makedirs(cache_dir)
         log_path = os.path.join(cache_dir, 'log.txt')
-        flog = openopen(log_path, 'w')
+        flog = open(log_path, 'w')
         flog.close()
 
         img_dir = os.path.join(cache_dir, 'img')
@@ -54,7 +140,7 @@ class GanRender(ForwardRender):
         #load train dataset
         train_skel = []
         train_labels = []
-        train_img=[]
+        train_img = []
         for frm in train_dataset.frmList:
             train_skel.append(frm.skel)
             train_labels.append(frm.label)
@@ -62,7 +148,7 @@ class GanRender(ForwardRender):
         #load valid dataset
         test_skel = []
         test_labels = []
-        test_img=[]
+        test_img = []
         for frm in valid_dataset.frmList:
             test_skel.append(frm.skel)
             test_labels.append(frm.label)
@@ -72,7 +158,7 @@ class GanRender(ForwardRender):
         train_img = np.asarray(train_skel)
         test_skel = np.asarray(test_skel)
         test_labels = np.asarray(test_labels)
-        test_img=np.asarray(test_img)
+        test_img = np.asarray(test_img)
         #normalize skel data
         train_skel = train_skel/max(-1*train_skel.min(), train_skel.max())
         test_skel = test_skel/max(-1*test_skel.min(), test_skel.max())
@@ -212,7 +298,6 @@ class GanRender(ForwardRender):
             if epoch % 100 == 0:
                 self.save(os.path.join(param_dir, '%d' % epoch), epoch)
 
-                
     @classmethod
     def rndCvxCombination(cls, rng, src_num, tar_num, sel_num):
         # generate tar_num random convex combinations from src_num point, every
@@ -243,6 +328,7 @@ class GanRender(ForwardRender):
         self.saver.save(self.sess,
                         os.path.join(checkpoint_dir, model_name),
                         global_step=step)
+
 
 if __name__ == '__main__':
     if globalConfig.dataset == 'H36M':

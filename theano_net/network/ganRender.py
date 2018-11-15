@@ -25,19 +25,19 @@ class GanRender(ForwardRender):
         self.metricCombi = metricCombi
 
     def genLossAndGradient(self, isTrain=True):
-        self.depth_gan.linkSubNets()
+        self.image_gan.linkSubNets()
         # similar to GAN, need both discriminative and generative
 
         # the generative part
         gen_params = self.alignment_params +\
-                self.depth_gan.gen_params
+                self.image_gan.gen_params
         fake_render_var = lasagne.layers.get_output(
-            self.depth_gan.dis_render_layer,
+            self.image_gan.dis_render_layer,
             self.render_var,
             deterministic=False)
         real_render_var = lasagne.layers.get_output(
-            self.depth_gan.dis_render_layer,
-            self.depth_gan.image_input_var,
+            self.image_gan.dis_render_layer,
+            self.image_gan.image_input_var,
             deterministic=False)
         # recons_loss = abs(real_render_var - fake_render_var)
         recons_loss = (real_render_var - fake_render_var)**2
@@ -45,27 +45,28 @@ class GanRender(ForwardRender):
         recons_loss = T.mean(recons_loss)
 
         # gan part 
-        real_feamat_var = lasagne.layers.get_output(self.depth_gan.feamat_layer, 
-                                                    self.depth_gan.depth_input_var,
+        real_feamat_var = lasagne.layers.get_output(self.image_gan.feamat_layer, 
+                                                    self.image_gan.image_input_var,
                                                     deterministic=False)
         real_feamat_var = real_feamat_var.mean(axis=0)
+
         combi_weights_input_var = T.fmatrix('noise_combination')
         latent_noises_var = T.dot(combi_weights_input_var, self.latent_var)
 
         aligned_gan_noise_var = lasagne.layers.get_output(self.alignment_layer,
                                                           latent_noises_var,
                                                           deterministic=False)
-        fake_depth_var = lasagne.layers.get_output(self.render_layer,
+        fake_image_var = lasagne.layers.get_output(self.render_layer,
                                                    aligned_gan_noise_var,
                                                    deterministic=False)
-        gan_fake_depth_var = T.concatenate([fake_depth_var, self.render_var],
+        gan_fake_image_var = T.concatenate([fake_image_var, self.render_var],
                                        axis=0)
 
-        px_fake_var = lasagne.layers.get_output(self.depth_gan.dis_px_layer,
-                                                gan_fake_depth_var,
+        px_fake_var = lasagne.layers.get_output(self.image_gan.dis_px_layer,
+                                                gan_fake_image_var,
                                                 deterministic=False)
-        px_real_var = lasagne.layers.get_output(self.depth_gan.dis_px_layer,
-                                                self.depth_gan.depth_input_var,
+        px_real_var = lasagne.layers.get_output(self.image_gan.dis_px_layer,
+                                                self.image_gan.image_input_var,
                                                 deterministic=False)
 
         loss_dis_fake = lasagne.objectives.binary_crossentropy(px_fake_var,
@@ -75,23 +76,24 @@ class GanRender(ForwardRender):
                                                                T.ones(px_real_var.shape))
         loss_dis_real = lasagne.objectives.aggregate(loss_dis_real, mode='mean')
         loss_dis_gan = loss_dis_real + loss_dis_fake
-        fake_feamat_var = lasagne.layers.get_output(self.depth_gan.feamat_layer,
-                                                    gan_fake_depth_var,
+        fake_feamat_var = lasagne.layers.get_output(self.image_gan.feamat_layer,
+                                                    gan_fake_image_var,
                                                     deterministic=False)
         fake_feamat_var = fake_feamat_var.mean(axis=0)
         gan_loss_gen = T.mean(abs(real_feamat_var - fake_feamat_var)) 
         gan_loss_gen = lasagne.objectives.aggregate(gan_loss_gen, mode='mean')
 
-        # metric part 
+        # metric part
         if not self.metricCombi:
-            self.metric_layer = self.depth_gan.build_metric(output_dim = self.z_dim)
+            self.metric_layer = self.image_gan.build_metric(
+                output_dim=self.z_dim)
             fake_metric_var = lasagne.layers.get_output(
                 self.metric_layer,
-                fake_depth_var,
+                fake_image_var,
                 deterministic=False)
             real_metric_var = lasagne.layers.get_output(
                 self.metric_layer,
-                self.depth_gan.depth_input_var,
+                self.image_gan.image_input_var,
                 deterministic=False)
             self_metric_var = lasagne.layers.get_output(
                 self.metric_layer,
@@ -105,14 +107,14 @@ class GanRender(ForwardRender):
 
         else:
             self.metric_layer, self.metric_combilayer = \
-                self.depth_gan.build_metric_combi(output_dim = self.z_dim)
+                self.image_gan.build_metric_combi(output_dim = self.z_dim)
             fake_metric_var = lasagne.layers.get_output(
                 self.metric_layer,
-                fake_depth_var,
+                fake_image_var,
                 deterministic=False)
             real_metric_var = lasagne.layers.get_output(
                 self.metric_layer,
-                self.depth_gan.depth_input_var,
+                self.image_gan.image_input_var,
                 deterministic=False)
             self_metric_var = lasagne.layers.get_output(
                 self.metric_layer,
@@ -146,15 +148,16 @@ class GanRender(ForwardRender):
                  self.origin_input_var,
                  self.pose_vae.noise_input_var,
                  combi_weights_input_var,
-                 self.depth_gan.depth_input_var
+                 self.image_gan.image_input_var
             ]
         else:
             gan_train_fn_input = [
                  self.pose_vae.pose_input_var,
                  self.origin_input_var,
                  self.pose_vae.noise_input_var,
-                 self.depth_gan.depth_input_var
-            ]
+                 self.image_gan.image_input_var
+            ]        
+
         gen_train_fn_output = [
             gan_loss_gen,
             recons_loss,
@@ -179,7 +182,7 @@ class GanRender(ForwardRender):
                  self.pose_vae.pose_input_var,
                  self.origin_input_var,
                  self.pose_vae.noise_input_var,
-                 self.depth_gan.depth_input_var
+                 self.image_gan.image_input_var
                 ],
                 recons_loss,
                 updates = align_update_var)
@@ -187,12 +190,12 @@ class GanRender(ForwardRender):
 
 
         # estimating the latent variable part
-        z_est_layer = self.depth_gan.build_recognition(self.z_dim)
+        z_est_layer = self.image_gan.build_recognition(self.z_dim)
         z_est_var = lasagne.layers.get_output(z_est_layer, 
-                                             self.depth_gan.depth_input_var,
+                                             self.image_gan.image_input_var,
                                              deterministic=False)
         z_est_tvar = lasagne.layers.get_output(z_est_layer,
-                                              self.depth_gan.depth_input_var,
+                                              self.image_gan.image_input_var,
                                               deterministic=True)
         loss_dis_est = (z_est_var - self.latent_var)**2
         # loss_dis_est = loss_dis_est.sum(axis=1)
@@ -203,9 +206,9 @@ class GanRender(ForwardRender):
                    + loss_dis_est\
                    + metric_loss
         dis_update_var = lasagne.updates.adam(dis_loss,
-                                              self.depth_gan.dis_params+\
-                                              self.depth_gan.reco_params+\
-                                              self.depth_gan.metric_params,
+                                              self.image_gan.dis_params+\
+                                              self.image_gan.reco_params+\
+                                              self.image_gan.metric_params,
                                               self.lr,
                                               self.b1)
         if self.rndGanInput:
@@ -214,14 +217,14 @@ class GanRender(ForwardRender):
                  self.origin_input_var,
                  self.pose_vae.noise_input_var,
                  combi_weights_input_var,
-                 self.depth_gan.depth_input_var
+                 self.image_gan.image_input_var
             ]
         else:
             dis_train_fn_input = [
                  self.pose_vae.pose_input_var,
                  self.origin_input_var,
                  self.pose_vae.noise_input_var,
-                 self.depth_gan.depth_input_var
+                 self.image_gan.image_input_var
             ]
         dis_train_fn_output = [
             loss_dis_gan,
@@ -238,8 +241,8 @@ class GanRender(ForwardRender):
         # initialize the training of recognition, metric part
         init_dis_loss = loss_dis_est + metric_loss
         init_dis_update_var = lasagne.updates.adam(init_dis_loss,
-                                                  self.depth_gan.reco_params+\
-                                                  self.depth_gan.metric_params,
+                                                  self.image_gan.reco_params+\
+                                                  self.image_gan.metric_params,
                                                   self.lr*10.,
                                                   self.b1)
         if self.rndGanInput:
@@ -248,14 +251,14 @@ class GanRender(ForwardRender):
                  self.origin_input_var,
                  self.pose_vae.noise_input_var,
                  combi_weights_input_var,
-                 self.depth_gan.depth_input_var
+                 self.image_gan.image_input_var
             ]
         else:
             init_dis_train_fn_input = [
                  self.pose_vae.pose_input_var,
                  self.origin_input_var,
                  self.pose_vae.noise_input_var,
-                 self.depth_gan.depth_input_var
+                 self.image_gan.image_input_var
             ]
         init_dis_train_fn_output = [
             loss_dis_est,
@@ -268,7 +271,7 @@ class GanRender(ForwardRender):
                 updates = init_dis_update_var)
             print ('init_dis_fn compiled')
 
-        # rendering function 
+        # rendering function
         self.render_fn = theano.function(
             [self.pose_vae.pose_input_var,
              self.origin_input_var,
@@ -279,7 +282,7 @@ class GanRender(ForwardRender):
 
         # estimation function
         self.z_est_fn = theano.function(
-            [self.depth_gan.depth_input_var],
+            [self.image_gan.image_input_var],
             z_est_tvar
         )
         print ('z_est function compiled')
@@ -322,7 +325,7 @@ class GanRender(ForwardRender):
             os.mkdir(param_dir)
         
         self.pose_vae.loadParam(globalConfig.vae_pretrain_path)
-        self.depth_gan.loadParam(globalConfig.gan_pretrain_path)
+        self.image_gan.loadParam(globalConfig.gan_pretrain_path)
 
         seed = 42
         np_rng = RandomState(seed)
@@ -720,13 +723,13 @@ class GanRender(ForwardRender):
     def saveParam(self, path):
         self.saveAlignParam(path)
         self.pose_vae.saveParam(path)
-        self.depth_gan.saveParam(path)
+        self.image_gan.saveParam(path)
         print ('parameters has been saved to %s'%path)
 
     def loadParam(self, path):     
         self.loadAlignParam(path)
         self.pose_vae.loadParam(path)
-        self.depth_gan.loadParam(path)
+        self.image_gan.loadParam(path)
         print ('parameters has been loaded from %s'%path)
 
 

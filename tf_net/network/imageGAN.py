@@ -5,11 +5,12 @@ from numpy.random import RandomState
 import time
 import cv2
 import sys
+import os
 sys.path.append('./')
-import globalConfig
-from data.dataset import *
-from data.util import *
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+from data.util import *
+from data.dataset import *
+import globalConfig
 
 b1 = 0.5
 noise_dim = 23
@@ -35,7 +36,7 @@ class ImageGAN(object):
                  gfc_dim=1024, dfc_dim=1024, c_dim=1, dataset_name='h36m',
                  checkpoint_dir="./checkpoint", sample_dir="samples",
                  learning_rate=0.0002, beta1=0.5, epoch=25, train_size=np.inf):
-        self.sample_dir=sample_dir
+        self.sample_dir = sample_dir
         self.epoch = epoch
         self.crop = crop
         self.learning_rate = learning_rate
@@ -78,13 +79,9 @@ class ImageGAN(object):
         self.build_model()
 
     def build_model(self):
-        if self.y_dim:
-            #self.y is label
-            self.y = tf.placeholder(
-                tf.float32, [self.batch_size, self.y_dim], name='y')
-        else:
-            #self.y is label
-            self.y = None
+        #self.y is label
+        self.y = tf.placeholder(
+            tf.float32, [self.batch_size, self.y_dim], name='y')
 
         if self.crop:
             image_dims = [self.output_height, self.output_width, 1]
@@ -104,7 +101,8 @@ class ImageGAN(object):
         #Generator for fake image
         self.G = self.build_generator(self.z, self.y)
         #Discriminator for real image
-        self.D, self.D_logits = self.build_discriminator(inputs, self.y, reuse=False)
+        self.D, self.D_logits = self.build_discriminator(
+            inputs, self.y, reuse=False)
         #image
         self.sampler = self.build_sampler(self.z, self.y)
         #Discriminator for fake image
@@ -119,11 +117,11 @@ class ImageGAN(object):
             return tf.nn.sigmoid_cross_entropy_with_logits(logits=x, labels=y)
 
         self.d_loss_real = tf.reduce_mean(
-            sigmoid_cross_entropy_with_logits(self.D_logits, tf.ones_like(self.D)))  #for real image Discriminator
+            sigmoid_cross_entropy_with_logits(self.D_logits, tf.ones_like(self.D)))  # for real image Discriminator
         self.d_loss_fake = tf.reduce_mean(
-            sigmoid_cross_entropy_with_logits(self.D_logits_, tf.zeros_like(self.D_))) #for fake image Discriminator
+            sigmoid_cross_entropy_with_logits(self.D_logits_, tf.zeros_like(self.D_)))  # for fake image Discriminator
         self.g_loss = tf.reduce_mean(
-            sigmoid_cross_entropy_with_logits(self.D_logits_, tf.ones_like(self.D_))) #for fake image Generator
+            sigmoid_cross_entropy_with_logits(self.D_logits_, tf.ones_like(self.D_)))  # for fake image Generator
 
         self.d_loss_real_sum = scalar_summary(
             "d_loss_real", self.d_loss_real)
@@ -147,160 +145,78 @@ class ImageGAN(object):
             if reuse:
                 scope.reuse_variables()
 
-            if not self.y_dim:
-                h0 = lrelu(conv2d(image, self.df_dim, name='d_h0_conv'))
-                h1 = lrelu(self.d_bn1(
-                    conv2d(h0, self.df_dim*2, name='d_h1_conv')))
-                h2 = lrelu(self.d_bn2(
-                    conv2d(h1, self.df_dim*4, name='d_h2_conv')))
-                h3 = lrelu(self.d_bn3(
-                    conv2d(h2, self.df_dim*8, name='d_h3_conv')))
-                h4 = linear(tf.reshape(
-                    h3, [self.batch_size, -1]), 1, 'd_h4_lin')
+            yb = tf.reshape(y, [self.batch_size, 1, 1, self.y_dim])
+            x = conv_cond_concat(image, yb)
 
-                return tf.nn.sigmoid(h4), h4
-            else:
-                yb = tf.reshape(y, [self.batch_size, 1, 1, self.y_dim])
-                x = conv_cond_concat(image, yb)
+            h0 = lrelu(
+                conv2d(x, self.c_dim + self.y_dim, name='d_h0_conv'))
+            h0 = conv_cond_concat(h0, yb)
 
-                h0 = lrelu(
-                    conv2d(x, self.c_dim + self.y_dim, name='d_h0_conv'))
-                h0 = conv_cond_concat(h0, yb)
+            h1 = lrelu(self.d_bn1(
+                conv2d(h0, self.df_dim + self.y_dim, name='d_h1_conv')))
+            h1 = tf.reshape(h1, [self.batch_size, -1])
+            h1 = concat([h1, y], 1)
 
-                h1 = lrelu(self.d_bn1(
-                    conv2d(h0, self.df_dim + self.y_dim, name='d_h1_conv')))
-                h1 = tf.reshape(h1, [self.batch_size, -1])
-                h1 = concat([h1, y], 1)
+            h2 = lrelu(self.d_bn2(linear(h1, self.dfc_dim, 'd_h2_lin')))
+            h2 = concat([h2, y], 1)
 
-                h2 = lrelu(self.d_bn2(linear(h1, self.dfc_dim, 'd_h2_lin')))
-                h2 = concat([h2, y], 1)
+            h3 = linear(h2, 1, 'd_h3_lin')
 
-                h3 = linear(h2, 1, 'd_h3_lin')
-
-                return tf.nn.sigmoid(h3), h3
+            return tf.nn.sigmoid(h3), h3
 
     def build_generator(self, z, y=None):
         with tf.variable_scope("generator") as scope:
-            if not self.y_dim:
-                s_h, s_w = self.output_height, self.output_width
-                s_h2, s_w2 = conv_out_size_same(
-                    s_h, 2), conv_out_size_same(s_w, 2)
-                s_h4, s_w4 = conv_out_size_same(
-                    s_h2, 2), conv_out_size_same(s_w2, 2)
-                s_h8, s_w8 = conv_out_size_same(
-                    s_h4, 2), conv_out_size_same(s_w4, 2)
-                s_h16, s_w16 = conv_out_size_same(
-                    s_h8, 2), conv_out_size_same(s_w8, 2)
+            s_h, s_w = self.output_height, self.output_width
+            s_h2, s_h4 = int(s_h/2), int(s_h/4)
+            s_w2, s_w4 = int(s_w/2), int(s_w/4)
 
-                # project `z` and reshape
-                self.z_, self.h0_w, self.h0_b = linear(
-                    z, self.gf_dim*8*s_h16*s_w16, 'g_h0_lin', with_w=True)
+            # yb = tf.expand_dims(tf.expand_dims(y, 1),2)
+            yb = tf.reshape(y, [self.batch_size, 1, 1, self.y_dim])
+            z = concat([z, y], 1)
 
-                self.h0 = tf.reshape(
-                    self.z_, [-1, s_h16, s_w16, self.gf_dim * 8])
-                h0 = tf.nn.relu(self.g_bn0(self.h0))
+            h0 = tf.nn.relu(
+                self.g_bn0(linear(z, self.gfc_dim, 'g_h0_lin')))
+            h0 = concat([h0, y], 1)
 
-                self.h1, self.h1_w, self.h1_b = deconv2d(
-                    h0, [self.batch_size, s_h8, s_w8, self.gf_dim*4], name='g_h1', with_w=True)
-                h1 = tf.nn.relu(self.g_bn1(self.h1))
+            h1 = tf.nn.relu(self.g_bn1(
+                linear(h0, self.gf_dim*2*s_h4*s_w4, 'g_h1_lin')))
+            h1 = tf.reshape(
+                h1, [self.batch_size, s_h4, s_w4, self.gf_dim * 2])
 
-                h2, self.h2_w, self.h2_b = deconv2d(
-                    h1, [self.batch_size, s_h4, s_w4, self.gf_dim*2], name='g_h2', with_w=True)
-                h2 = tf.nn.relu(self.g_bn2(h2))
+            h1 = conv_cond_concat(h1, yb)
 
-                h3, self.h3_w, self.h3_b = deconv2d(
-                    h2, [self.batch_size, s_h2, s_w2, self.gf_dim*1], name='g_h3', with_w=True)
-                h3 = tf.nn.relu(self.g_bn3(h3))
+            h2 = tf.nn.relu(self.g_bn2(deconv2d(h1,
+                                                [self.batch_size, s_h2, s_w2, self.gf_dim * 2], name='g_h2')))
+            h2 = conv_cond_concat(h2, yb)
 
-                h4, self.h4_w, self.h4_b = deconv2d(
-                    h3, [self.batch_size, s_h, s_w], name='g_h4', with_w=True)
-
-                return tf.nn.tanh(h4)
-            else:
-                s_h, s_w = self.output_height, self.output_width
-                s_h2, s_h4 = int(s_h/2), int(s_h/4)
-                s_w2, s_w4 = int(s_w/2), int(s_w/4)
-
-                # yb = tf.expand_dims(tf.expand_dims(y, 1),2)
-                yb = tf.reshape(y, [self.batch_size, 1, 1, self.y_dim])
-                z = concat([z, y], 1)
-
-                h0 = tf.nn.relu(
-                    self.g_bn0(linear(z, self.gfc_dim, 'g_h0_lin')))
-                h0 = concat([h0, y], 1)
-
-                h1 = tf.nn.relu(self.g_bn1(
-                    linear(h0, self.gf_dim*2*s_h4*s_w4, 'g_h1_lin')))
-                h1 = tf.reshape(
-                    h1, [self.batch_size, s_h4, s_w4, self.gf_dim * 2])
-
-                h1 = conv_cond_concat(h1, yb)
-
-                h2 = tf.nn.relu(self.g_bn2(deconv2d(h1,
-                                                    [self.batch_size, s_h2, s_w2, self.gf_dim * 2], name='g_h2')))
-                h2 = conv_cond_concat(h2, yb)
-
-                return tf.nn.sigmoid(
-                    deconv2d(h2, [self.batch_size, s_h, s_w, 1], name='g_h3'))
+            return tf.nn.sigmoid(
+                deconv2d(h2, [self.batch_size, s_h, s_w, 1], name='g_h3'))
 
     def build_sampler(self, z, y=None):
         with tf.variable_scope("generator") as scope:
             scope.reuse_variables()
 
-            if not self.y_dim:
-                s_h, s_w = self.output_height, self.output_width
-                s_h2, s_w2 = conv_out_size_same(s_h, 2), conv_out_size_same(s_w, 2)
-                s_h4, s_w4 = conv_out_size_same(
-                    s_h2, 2), conv_out_size_same(s_w2, 2)
-                s_h8, s_w8 = conv_out_size_same(
-                    s_h4, 2), conv_out_size_same(s_w4, 2)
-                s_h16, s_w16 = conv_out_size_same(
-                    s_h8, 2), conv_out_size_same(s_w8, 2)
+            s_h, s_w = self.output_height, self.output_width
+            s_h2, s_h4 = int(s_h/2), int(s_h/4)
+            s_w2, s_w4 = int(s_w/2), int(s_w/4)
+            # yb = tf.reshape(y, [-1, 1, 1, self.y_dim])
+            yb = tf.reshape(y, [self.batch_size, 1, 1, self.y_dim])
+            z = concat([z, y], 1)
 
-                    # project `z` and reshape
-                h0 = tf.reshape(
-                    linear(z, self.gf_dim*8*s_h16*s_w16, 'g_h0_lin'),
-                    [-1, s_h16, s_w16, self.gf_dim * 8])
-                h0 = tf.nn.relu(self.g_bn0(h0, train=False))
+            h0 = tf.nn.relu(self.g_bn0(
+                linear(z, self.gfc_dim, 'g_h0_lin'), train=False))
+            h0 = concat([h0, y], 1)
 
-                h1 = deconv2d(h0, [self.batch_size, s_h8, s_w8,
-                                self.gf_dim*4], name='g_h1')
-                h1 = tf.nn.relu(self.g_bn1(h1, train=False))
+            h1 = tf.nn.relu(self.g_bn1(
+                linear(h0, self.gf_dim*2*s_h4*s_w4, 'g_h1_lin'), train=False))
+            h1 = tf.reshape(h1, [self.batch_size, s_h4, s_w4, self.gf_dim * 2])
+            h1 = conv_cond_concat(h1, yb)
 
-                h2 = deconv2d(h1, [self.batch_size, s_h4, s_w4,
-                                self.gf_dim*2], name='g_h2')
-                h2 = tf.nn.relu(self.g_bn2(h2, train=False))
+            h2 = tf.nn.relu(self.g_bn2(
+                deconv2d(h1, [self.batch_size, s_h2, s_w2, self.gf_dim * 2], name='g_h2'), train=False))
+            h2 = conv_cond_concat(h2, yb)
 
-                h3 = deconv2d(h2, [self.batch_size, s_h2, s_w2,
-                                self.gf_dim*1], name='g_h3')
-                h3 = tf.nn.relu(self.g_bn3(h3, train=False))
-
-                h4 = deconv2d(h3, [self.batch_size, s_h,
-                                s_w, self.c_dim], name='g_h4')
-
-                return tf.nn.tanh(h4)
-            else:
-                s_h, s_w = self.output_height, self.output_width
-                s_h2, s_h4 = int(s_h/2), int(s_h/4)
-                s_w2, s_w4 = int(s_w/2), int(s_w/4)
-                # yb = tf.reshape(y, [-1, 1, 1, self.y_dim])
-                yb = tf.reshape(y, [self.batch_size, 1, 1, self.y_dim])
-                z = concat([z, y], 1)
-
-                h0 = tf.nn.relu(self.g_bn0(
-                    linear(z, self.gfc_dim, 'g_h0_lin'), train=False))
-                h0 = concat([h0, y], 1)
-
-                h1 = tf.nn.relu(self.g_bn1(
-                    linear(h0, self.gf_dim*2*s_h4*s_w4, 'g_h1_lin'), train=False))
-                h1 = tf.reshape(h1, [self.batch_size, s_h4, s_w4, self.gf_dim * 2])
-                h1 = conv_cond_concat(h1, yb)
-
-                h2 = tf.nn.relu(self.g_bn2(
-                    deconv2d(h1, [self.batch_size, s_h2, s_w2, self.gf_dim * 2], name='g_h2'), train=False))
-                h2 = conv_cond_concat(h2, yb)
-
-                return tf.nn.sigmoid(deconv2d(h2, [self.batch_size, s_h, s_w, self.c_dim], name='g_h3'))
+            return tf.nn.sigmoid(deconv2d(h2, [self.batch_size, s_h, s_w, self.c_dim], name='g_h3'))
 
     def train(self, train_dataset, valid_dataset):
         show_all_variables()
@@ -354,7 +270,8 @@ class ImageGAN(object):
                                         self.G_sum, self.d_loss_fake_sum, self.g_loss_sum])
             self.d_sum = merge_summary(
                 [self.z_sum, self.d_sum, self.d_loss_real_sum, self.d_loss_sum])
-            self.writer = SummaryWriter("./logs", graph=self.sess.graph,filename_suffix='.imageGAN')
+            self.writer = SummaryWriter(
+                "./logs", graph=self.sess.graph, filename_suffix='.imageGAN')
 
             sample_z = np.random.uniform(-1, 1,
                                          size=(self.sample_num, self.dim_z))
@@ -440,6 +357,7 @@ class ImageGAN(object):
                               (d_loss, g_loss))
                     if np.mod(counter, 500) == 2:
                         self.save(self.checkpoint_dir, counter)
+
     @property
     def model_dir(self):
         return "{}_{}_{}_{}".format(
