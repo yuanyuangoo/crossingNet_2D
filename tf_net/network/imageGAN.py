@@ -112,8 +112,6 @@ class ImageGAN(object):
         #Discriminator for fake image
         self.D_, self.D_logits_ = self.build_discriminator(
             self.G, self.y, reuse=True)
-        self.M, self.M_logits = self.build_metric(
-            self.y, reuse=False)
 
         self.d_sum = histogram_summary("d", self.D)
         self.d__sum = histogram_summary("d_", self.D_)
@@ -201,11 +199,12 @@ class ImageGAN(object):
             return tf.nn.sigmoid(
                 deconv2d(h2, [self.batch_size, s_h, s_w, 1], name='g_h3'))
 
-    def build_metric(self, y=None, hidden=None):
+    def build_metric(self, y=None, hidden=None, reuse=False):
         if hidden is None:
             hidden = self.dis_metric
         with tf.variable_scope("metric") as scope:
-            scope.reuse_variables()
+            if reuse:
+                scope.reuse_variables()
             yb = tf.reshape(y, [self.batch_size, 1, 1, self.y_dim])
             h0 = self.m_bn0(conv2d(hidden, self.c_dim +
                                    self.y_dim, name='m_h0_conv'))
