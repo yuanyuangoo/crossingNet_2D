@@ -40,7 +40,7 @@ class GanRender(ForwardRender):
         self.combi_weights_input = tf.placeholder(dtype=tf.float32)
         latent_noises = tf.matmul(self.combi_weights_input, self.latent)
         # aligned_gan_noise = self.alignment
-        fake_image = self.render
+        self.fake_image = self.render
         # gan_fake_image_var = tf.concat(1, [fake_image, self.render])
 
         # px_fake = self.image_gan.D_
@@ -55,30 +55,31 @@ class GanRender(ForwardRender):
         # metric part
         if not self.metricCombi:
             fake_metric = self.image_gan.build_metric(
-                self.fake_image, output_dim=self.z_dim, reuse=False)
+                self.fake_image,  y=self.image_gan.y, output_dim=self.z_dim, reuse=False)
             real_metric = self.image_gan.build_metric(
-                self.image_gan.inputs, output_dim=self.z_dim, reuse=True)
+                self.image_gan.inputs,  y=self.image_gan.y, output_dim=self.z_dim, reuse=True)
             self_metric = self.image_gan.build_metric(
-                self.render, output_dim=self.z_dim, reuse=True)
+                self.render,  y=self.image_gan.y, output_dim=self.z_dim, reuse=True)
 
             latent_diff = self.latent-latent_noises
             metric_diff = real_metric+fake_metric
             self_diff = real_metric - self_metric
         else:
+
             fake_metric = self.image_gan.build_metric_combi(
-                self.fake_image, output_dim=self.z_dim, reuse=False)
+                self.fake_image,  y=self.image_gan.y, output_dim=self.z_dim, reuse=False)
             real_metric = self.image_gan.build_metric_combi(
-                self.image_gan.inputs, output_dim=self.z_dim, reuse=True)
+                self.image_gan.inputs,  y=self.image_gan.y, output_dim=self.z_dim, reuse=True)
             self_metric = self.image_gan.build_metric_combi(
-                self.render, output_dim=self.z_dim, reuse=True)
+                self.render, y=self.image_gan.y, output_dim=self.z_dim, reuse=True)
 
             latent_diff = self.latent-latent_noises
             real_fake_combi = tf.concat(1, [real_metric, fake_metric])
-            metric_diff = self.image_gan.build_combilayer(
+            metric_diff = self.image_gan.build_metric_combi(
                 real_fake_combi, output_dim=self.z_dim, reuse=False)
             self_combi = tf.concat(1, [real_metric, self_metric])
-            self_diff = self.image_gan.build_combilayer(
-                real_fake_combi, output_dim=self.z_dim, reuse=True)
+            self_diff = self.image_gan.build_metric_combi(
+                self_combi, output_dim=self.z_dim, reuse=True)
 
         metric_loss = (latent_diff - metric_diff)**2 + self_diff**2
         self.metric_loss = metric_loss.mean()

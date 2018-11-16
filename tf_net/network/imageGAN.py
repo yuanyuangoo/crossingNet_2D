@@ -15,18 +15,11 @@ import globalConfig
 b1 = 0.5
 noise_dim = 23
 K = 1
-try:
-    image_summary = tf.image_summary
-    scalar_summary = tf.scalar_summary
-    histogram_summary = tf.histogram_summary
-    merge_summary = tf.merge_summary
-    SummaryWriter = tf.train.SummaryWriter
-except:
-    image_summary = tf.summary.image
-    scalar_summary = tf.summary.scalar
-    histogram_summary = tf.summary.histogram
-    merge_summary = tf.summary.merge
-    SummaryWriter = tf.summary.FileWriter
+image_summary = tf.summary.image
+scalar_summary = tf.summary.scalar
+histogram_summary = tf.summary.histogram
+merge_summary = tf.summary.merge
+SummaryWriter = tf.summary.FileWriter
 
 
 class ImageGAN(object):
@@ -142,6 +135,8 @@ class ImageGAN(object):
         self.d_vars = [var for var in t_vars if 'd_' in var.name]
         self.g_vars = [var for var in t_vars if 'g_' in var.name]
         self.m_vars = [var for var in t_vars if 'm_' in var.name]
+        self.m_vars = [var for var in t_vars if 'mc_' in var.name]
+
 
         self.saver = tf.train.Saver()
 
@@ -156,8 +151,6 @@ class ImageGAN(object):
             h0 = lrelu(
                 conv2d(x, self.c_dim + self.y_dim, name='d_h0_conv'))
             h0 = conv_cond_concat(h0, yb)
-
-            self.dis_metric = h0
 
             h1 = lrelu(self.d_bn1(
                 conv2d(h0, self.df_dim + self.y_dim, name='d_h1_conv')))
@@ -199,32 +192,67 @@ class ImageGAN(object):
             return tf.nn.sigmoid(
                 deconv2d(h2, [self.batch_size, s_h, s_w, 1], name='g_h3'))
 
-    def build_metric(self, y=None, hidden=None, reuse=False):
-        if hidden is None:
-            hidden = self.dis_metric
+    def build_metric(self, image, output_dim=1, y=None, reuse=False):
+        with tf.variable_scope("discriminator") as scope:
+            scope.reuse_variables()
+            yb = tf.reshape(y, [self.batch_size, 1, 1, self.y_dim])
+            x = conv_cond_concat(image, yb)
+            discriminator_h0 = lrelu(
+                conv2d(x, self.c_dim + self.y_dim, name='d_h0_conv'))
+            self.discriminator_h0 = conv_cond_concat(discriminator_h0, yb)
+
         with tf.variable_scope("metric") as scope:
             if reuse:
                 scope.reuse_variables()
-            yb = tf.reshape(y, [self.batch_size, 1, 1, self.y_dim])
-            h0 = self.m_bn0(conv2d(hidden, self.c_dim +
+            h0 = self.m_bn0(conv2d(self.discriminator_h0, self.c_dim +
                                    self.y_dim, name='m_h0_conv'))
             h0 = conv_cond_concat(h0, yb)
 
             h1 = self.m_bn1(
                 conv2d(h0, self.df_dim + self.y_dim, name='m_h1_conv'))
             h1 = tf.reshape(h1, [self.batch_size, -1])
-            h1 = concat([h1, y], 1)
+            h1 = conv_cond_concat(h1, yb)
 
             h2 = self.m_bn2(
                 conv2d(h1, self.df_dim + self.y_dim, name='m_h2_conv'))
             h2 = tf.reshape(h2, [self.batch_size, -1])
             h2 = concat([h2, y], 1)
 
-            h3 = linear(h2, 1, 'm_h3_lin')
+            h3 = linear(h2, output_dim, 'm_h3_lin')
 
-            return tf.nn.sigmoid(h3), h3
+            return tf.nn.sigmoid(h3)
         
+    def build_metric_combi(self, image, output_dim, y=None, hidden=None, reuse=False):
+        yb = tf.reshape(y, [self.batch_size, 1, 1, self.y_dim])
+        with tf.variable_scope("discriminator") as scope:
+            scope.reuse_variables()
+            x = conv_cond_concat(image, yb)
+            discriminator_h0 = lrelu(
+                conv2d(x, self.c_dim + self.y_dim, name='d_h0_conv'))
+            self.discriminator_h0 = conv_cond_concat(discriminator_h0, yb)
 
+        with tf.variable_scope("metric") as scope:
+            if reuse:
+                scope.reuse_variables()
+            h0 = self.m_bn0(conv2d(self.discriminator_h0, self.c_dim +
+                                   self.y_dim, name='mc_h0_conv'))
+            h0 = conv_cond_concat(h0, yb)
+
+            h1 = self.m_bn1(
+                conv2d(h0, self.df_dim + self.y_dim, name='mc_h1_conv'))
+            h1 = tf.reshape(h1, [self.batch_size, -1])
+            h1 = conv_cond_concat(h1, yb)
+
+            h2 = self.m_bn2(
+                conv2d(h1, self.df_dim + self.y_dim, name='mc_h2_conv'))
+            h2 = tf.reshape(h2, [self.batch_size, -1])
+            h2 = concat([h2, y], 1)
+
+            h3 = linear(h2, 1, 'mc_h3_lin')
+            self.combi_input_layer = tf.placeholder(
+                dtype=tf.float32, shape=2 * 1024)
+            combi_metric = linear(self.combi_input_layer, output_dim)
+            return tf.nn.sigmoid(h3), combi_metric
 
     def build_sampler(self, z, y=None):
         with tf.variable_scope("generator") as scope:
