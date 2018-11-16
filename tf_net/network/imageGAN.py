@@ -193,10 +193,11 @@ class ImageGAN(object):
                 deconv2d(h2, [self.batch_size, s_h, s_w, 1], name='g_h3'))
 
     def build_metric(self, image, output_dim=1, y=None, reuse=False):
+        yb = tf.reshape(y, [self.batch_size, 1, 1, self.y_dim])
+        x = conv_cond_concat(image, yb)
+
         with tf.variable_scope("discriminator") as scope:
             scope.reuse_variables()
-            yb = tf.reshape(y, [self.batch_size, 1, 1, self.y_dim])
-            x = conv_cond_concat(image, yb)
             discriminator_h0 = lrelu(
                 conv2d(x, self.c_dim + self.y_dim, name='d_h0_conv'))
             self.discriminator_h0 = conv_cond_concat(discriminator_h0, yb)
@@ -204,13 +205,12 @@ class ImageGAN(object):
         with tf.variable_scope("metric") as scope:
             if reuse:
                 scope.reuse_variables()
-            h0 = self.m_bn0(conv2d(self.discriminator_h0, self.c_dim +
+            h0 = self.m_bn0(conv2d(self.discriminator_h0, self.df_dim +
                                    self.y_dim, name='m_h0_conv'))
             h0 = conv_cond_concat(h0, yb)
 
             h1 = self.m_bn1(
                 conv2d(h0, self.df_dim + self.y_dim, name='m_h1_conv'))
-            h1 = tf.reshape(h1, [self.batch_size, -1])
             h1 = conv_cond_concat(h1, yb)
 
             h2 = self.m_bn2(

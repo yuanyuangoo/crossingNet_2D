@@ -82,7 +82,7 @@ class GanRender(ForwardRender):
                 self_combi, output_dim=self.z_dim, reuse=True)
 
         metric_loss = (latent_diff - metric_diff)**2 + self_diff**2
-        self.metric_loss = metric_loss.mean()
+        self.metric_loss = tf.reduce_mean(metric_loss)
         self.gen_loss = self.gan_loss_gen + self.recons_loss + self.metric_loss
 
         self.gen_optim = tf.train.AdamOptimizer(
