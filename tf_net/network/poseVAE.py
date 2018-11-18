@@ -18,7 +18,7 @@ NUM_LABELS = 15
 
 class PoseVAE(object):
     def __init__(
-            self, dim_x=Num_of_Joints*3, batch_size=128, lr=1e-3, num_epochs=110,
+            self, dim_x=Num_of_Joints*3, batch_size=64, lr=1e-3, num_epochs=110,
             b1=0.5, dim_z=20, n_hidden=20, ADD_NOISE=False, PRR=True, PRR_n_img_x=10, PRR_n_img_y=10, PRR_resize_factor=1.0,
             PMLR=True, PMLR_n_img_x=20, PMLR_n_img_y=20, PMLR_resize_factor=1.0, PMLR_z_range=2.0, PMLR_n_samples=5000,reuse=False):
         # with tf.variable_scope("pose_vae") as scope:
@@ -30,6 +30,8 @@ class PoseVAE(object):
         #dim_x: dim of input pose dimension
         self.dim_x = dim_x
         self.ADD_NOISE = ADD_NOISE
+        # self.noise_input = tf.placeholder(
+        #     dtype=tf.float32, shape=(None, self.dim_z),name='vaenoise')
         self.batch_size = batch_size
         self.lr = lr
         self.b1 = b1
@@ -53,7 +55,7 @@ class PoseVAE(object):
         self.x = tf.placeholder(
             tf.float32, shape=[None, dim_x], name='target_pose')
 
-        self.keep_prob = tf.placeholder(tf.float32, name='keep_prob')
+        self.keep_prob = 0.9
         #latent_variable
         self.z_in = tf.placeholder(
             tf.float32, shape=[None, dim_z], name='latent_variable')

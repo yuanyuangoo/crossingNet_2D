@@ -137,9 +137,6 @@ class ImageGAN(object):
 
         self.d_vars = [var for var in t_vars if 'd_' in var.name]
         self.g_vars = [var for var in t_vars if 'g_' in var.name]
-        self.m_vars = [var for var in t_vars if 'm_' in var.name]
-        self.m_vars = [var for var in t_vars if 'mc_' in var.name]
-
 
         self.saver = tf.train.Saver()
 
@@ -222,7 +219,7 @@ class ImageGAN(object):
             h2 = tf.reshape(h2, [self.batch_size, -1])
             h2 = concat([h2, y], 1)
 
-            h3 = linear(h2, output_dim, 'm_h3_lin')
+            h3 = linear(h2, output_dim, 'r_h3_lin')
 
             return tf.nn.sigmoid(h3)
 
@@ -269,22 +266,22 @@ class ImageGAN(object):
             if reuse:
                 scope.reuse_variables()
             h0 = self.m_bn0(conv2d(self.discriminator_h0, self.c_dim +
-                                   self.y_dim, name='mc_h0_conv'))
+                                   self.y_dim, name='m_h0_conv'))
             h0 = conv_cond_concat(h0, yb)
 
             h1 = self.m_bn1(
-                conv2d(h0, self.df_dim + self.y_dim, name='mc_h1_conv'))
+                conv2d(h0, self.df_dim + self.y_dim, name='m_h1_conv'))
             h1 = tf.reshape(h1, [self.batch_size, -1])
             h1 = conv_cond_concat(h1, yb)
 
             h2 = self.m_bn2(
-                conv2d(h1, self.df_dim + self.y_dim, name='mc_h2_conv'))
+                conv2d(h1, self.df_dim + self.y_dim, name='m_h2_conv'))
             h2 = tf.reshape(h2, [self.batch_size, -1])
             h2 = concat([h2, y], 1)
 
-            h3 = linear(h2, 1, 'mc_h3_lin')
+            h3 = linear(h2, 1, 'm_h3_lin')
             self.combi_input_layer = tf.placeholder(
-                dtype=tf.float32, shape=2 * 1024)
+                dtype=tf.float32, shape=(None, 2 * 1024), name="combi_input_layer")
             combi_metric = linear(self.combi_input_layer, output_dim)
             return tf.nn.sigmoid(h3), combi_metric
 

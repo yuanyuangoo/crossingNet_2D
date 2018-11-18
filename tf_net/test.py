@@ -11,8 +11,8 @@ def show_all_variables():
 
 
 input = np.asarray([1, 0, 2])
-a = tf.placeholder(dtype=tf.float32, shape=(3))
-b = tf.placeholder(dtype=tf.float32, shape=(3))
+# a = tf.placeholder(dtype=tf.float32, shape=(3))
+# b = tf.placeholder(dtype=tf.float32, shape=(3))
 
 # b = tf.placeholder(dtype=tf.float32)
 with tf.variable_scope("father") as scope:

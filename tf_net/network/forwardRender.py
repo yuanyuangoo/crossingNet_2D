@@ -18,14 +18,14 @@ class ForwardRender(object):
     def __init__(self, dim_x):
         self.keep_prob = 1.0
         self.dim_x = dim_x
-        self.pose_vae = PoseVAE(dim_x=dim_x)
-        self.origin_input = tf.placeholder(tf.float32, shape=(None, 3))
+        self.pose_vae = PoseVAE(dim_x=dim_x, ADD_NOISE=True)
+        self.origin_input = tf.placeholder(tf.float32, shape=(None, 3),name="origin")
         self.dim_z = 100
 
         self.image_gan = ImageGAN()
         self.render = self.build_latent_alignment_layer(self.pose_vae)
         self.lr, self.b1 = 0.001, 0.5
-        self.batch_size = 200
+        self.batch_size = self.pose_vae.batch_size
         print('vae and gan initialized')
         show_all_variables()
         # print('all parameters: {}'.format(self.params))
@@ -33,8 +33,7 @@ class ForwardRender(object):
         self.pose_input = self.pose_vae.x
 
         #Train Ali
-        self.real_image = tf.placeholder(
-            name='real_image', dtype=tf.float32)
+        self.real_image = self.image_gan.inputs
         self.pixel_loss = tf.losses.mean_squared_error(
             self.real_image, self.render)
         t_vars = tf.trainable_variables()
