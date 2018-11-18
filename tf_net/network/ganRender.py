@@ -362,7 +362,7 @@ class GanRender(ForwardRender):
 
     @property
     def model_dir(self):
-        return "{}_{}_{}_{}".format(
+        return "{}_{}".format(
             globalConfig.dataset, self.batch_size,
         )
 
@@ -396,6 +396,6 @@ if __name__ == '__main__':
     render = GanRender(x_dim=skel_num, rndGanInput=True, metricCombi=False)
 
     desc = 'pretrained'
-    render.train(5, ds, val_ds,
+    render.train(1001, ds, val_ds,
                  desc=desc)
     # render.test(val_ds, desc=desc, modelIdx='-1')
