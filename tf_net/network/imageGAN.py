@@ -28,7 +28,10 @@ class ImageGAN(object):
                  y_dim=15, dim_z=100, gf_dim=64, df_dim=64,
                  gfc_dim=1024, dfc_dim=1024, c_dim=1, dataset_name='h36m',
                  checkpoint_dir="./checkpoint", sample_dir="samples",
-                 learning_rate=0.0002, beta1=0.5, epoch=25, train_size=np.inf):
+                 learning_rate=0.0002, beta1=0.5, epoch=25, train_size=np.inf,reuse=False):
+        # with tf.variable_scope("image_gan") as scope:
+        #     if reuse:
+        #         scope.reuse_variables()
         self.sample_dir = sample_dir
         self.epoch = epoch
         self.crop = crop
@@ -192,7 +195,38 @@ class ImageGAN(object):
             return tf.nn.sigmoid(
                 deconv2d(h2, [self.batch_size, s_h, s_w, 1], name='g_h3'))
 
-    def build_metric(self, image, output_dim=1, y=None, reuse=False):
+    def build_recognition(self, image, y, output_dim=1, reuse=False, keep_prob=1):
+        yb = tf.reshape(y, [self.batch_size, 1, 1, self.y_dim])
+        x = conv_cond_concat(image, yb)
+        with tf.variable_scope("discriminator") as scope:
+            scope.reuse_variables()
+            discriminator_h0 = lrelu(
+                conv2d(x, self.c_dim + self.y_dim, name='d_h0_conv'))
+            self.discriminator_h0 = conv_cond_concat(discriminator_h0, yb)
+
+        with tf.variable_scope("recognition") as scope:
+            if reuse:
+                scope.reuse_variables()
+
+            h0 = self.m_bn0(conv2d(self.discriminator_h0, self.df_dim +
+                                   self.y_dim, name='r_h0_conv'))
+            h0 = conv_cond_concat(h0, yb)
+
+            h1 = self.m_bn1(
+                conv2d(h0, self.df_dim + self.y_dim, name='r_h1_conv'))
+            h1 = conv_cond_concat(h1, yb)
+
+            h2 = self.m_bn2(
+                conv2d(h1, self.df_dim + self.y_dim, name='r_h2_conv'))
+
+            h2 = tf.reshape(h2, [self.batch_size, -1])
+            h2 = concat([h2, y], 1)
+
+            h3 = linear(h2, output_dim, 'm_h3_lin')
+
+            return tf.nn.sigmoid(h3)
+
+    def build_metric(self, image, y, output_dim=1, reuse=False):
         yb = tf.reshape(y, [self.batch_size, 1, 1, self.y_dim])
         x = conv_cond_concat(image, yb)
 
@@ -222,7 +256,7 @@ class ImageGAN(object):
 
             return tf.nn.sigmoid(h3)
         
-    def build_metric_combi(self, image, output_dim, y=None, hidden=None, reuse=False):
+    def build_metric_combi(self, image, y, output_dim, hidden=None, reuse=False):
         yb = tf.reshape(y, [self.batch_size, 1, 1, self.y_dim])
         with tf.variable_scope("discriminator") as scope:
             scope.reuse_variables()
@@ -254,7 +288,7 @@ class ImageGAN(object):
             combi_metric = linear(self.combi_input_layer, output_dim)
             return tf.nn.sigmoid(h3), combi_metric
 
-    def build_sampler(self, z, y=None):
+    def build_sampler(self, z, y=None,keep_prob=0.9):
         with tf.variable_scope("generator") as scope:
             scope.reuse_variables()
 

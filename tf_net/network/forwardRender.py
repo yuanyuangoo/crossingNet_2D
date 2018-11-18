@@ -21,12 +21,9 @@ class ForwardRender(object):
         self.pose_vae = PoseVAE(dim_x=dim_x)
         self.origin_input = tf.placeholder(tf.float32, shape=(None, 3))
         self.dim_z = 100
-        self.alignment = \
-            self.build_latent_alignment_layer(self.pose_vae)
 
         self.image_gan = ImageGAN()
-        self.image_gan.z=self.alignment
-        self.render = self.image_gan.G
+        self.render = self.build_latent_alignment_layer(self.pose_vae)
         self.lr, self.b1 = 0.001, 0.5
         self.batch_size = 200
         print('vae and gan initialized')
@@ -54,29 +51,30 @@ class ForwardRender(object):
     def build_latent_alignment_layer(self, pose_vae,
                                      origin_layer=None,
                                      quad_layer=None):
-        self.pose_z_dim = pose_vae.z.shape[1]
+        
+        self.pose_z_dim = int(pose_vae.z.shape[1])
         self.z_dim = self.pose_z_dim
         if origin_layer is not None:
             self.z_dim += 3
         if quad_layer is not None:
             self.z_dim += 4
-
         latent = pose_vae.z
+
         if origin_layer is not None:
             latent = tf.concat([latent, origin_layer], axis=1)
         if quad_layer is not None:
             latent = tf.concat([latent, quad_layer], axis=1)
+        with tf.variable_scope("ali", reuse=False) as scope:
+            print('latent output shape = {}'
+                  .format(latent.shape))
+            self.latent = latent
 
-        print('latent output shape = {}'
-              .format(latent.shape))
-        self.latent = latent
-        
-        # use None input, to adapt z from both pose-vae and real-test
-        self.bn = batch_norm(name="ali_bn1")
-        alignment = self.bn(tf.layers.dense(
-            self.latent, self.z_dim, use_bias=True, name='ali_conv'))
-
-        return alignment
+            # use None input, to adapt z from both pose-vae and real-test
+            self.bn = batch_norm(name="bn1")
+            self.alignment = self.bn(
+                tf.contrib.layers.fully_connected(self.latent, num_outputs=self.image_gan.dim_z, activation_fn=None))
+        render = self.image_gan.build_sampler(self.alignment, self.image_gan.y)
+        return render
 
     def train(self, nepoch,  train_dataset, valid_dataset, desc='dummy'):
         cache_dir = os.path.join(

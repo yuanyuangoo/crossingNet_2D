@@ -20,8 +20,10 @@ class PoseVAE(object):
     def __init__(
             self, dim_x=Num_of_Joints*3, batch_size=128, lr=1e-3, num_epochs=110,
             b1=0.5, dim_z=20, n_hidden=20, ADD_NOISE=False, PRR=True, PRR_n_img_x=10, PRR_n_img_y=10, PRR_resize_factor=1.0,
-            PMLR=True, PMLR_n_img_x=20, PMLR_n_img_y=20, PMLR_resize_factor=1.0, PMLR_z_range=2.0, PMLR_n_samples=5000):
-
+            PMLR=True, PMLR_n_img_x=20, PMLR_n_img_y=20, PMLR_resize_factor=1.0, PMLR_z_range=2.0, PMLR_n_samples=5000,reuse=False):
+        # with tf.variable_scope("pose_vae") as scope:
+        #     if reuse:
+        #         scope.reuse_variables()
         self.checkpoint_dir = './checkpoint'
         #dim_z=dim of latent space
         self.dim_z = dim_z
@@ -59,12 +61,13 @@ class PoseVAE(object):
         self.y, self.z, self.loss, self.neg_marginal_likelihood, self.KL_divergence = self.autoencoder(
             self.x_hat, self.x, self.dim_x, self.dim_z, self.n_hidden, self.keep_prob)
 
-        self.train_op = tf.train.AdamOptimizer(lr).minimize(self.loss)
-        self.saver = tf.train.Saver()
-
         t_vars = tf.trainable_variables()
         self.encoder_vars = [var for var in t_vars if 'encoder' in var.name]
         self.decoder_vars = [var for var in t_vars if 'decoder' in var.name]
+
+        self.train_op = tf.train.AdamOptimizer(lr).minimize(
+            self.loss)
+        self.saver = tf.train.Saver()
 
     def decoder(self, z, dim_img, n_hidden):
         y = self.bernoulli_MLP_decoder(z, n_hidden, dim_img, 1.0, reuse=True)
@@ -98,8 +101,10 @@ class PoseVAE(object):
 
         return y, z, loss, -marginal_likelihood, KL_divergence
 
-    def gaussian_MLP_encoder(self, x, n_hidden, n_output, keep_prob, reuse=False):
-        with tf.variable_scope("gaussian_MLP_encoder", reuse=reuse):
+    def gaussian_MLP_encoder(self, x, n_hidden, n_output, keep_prob, reuse=True):
+        with tf.variable_scope("gaussian_MLP_encoder") as scope:
+            if reuse:
+                scope.reuse_variables()
             # initializers
             w_init = tf.contrib.layers.variance_scaling_initializer()
             b_init = tf.constant_initializer(0.)
@@ -132,7 +137,7 @@ class PoseVAE(object):
             # The standard deviation must be positive. Parametrize with a softplus and
             # add a small epsilon for numerical stability
             stddev = 1e-6 + tf.nn.softplus(gaussian_params[:, n_output:])
-        return mean, stddev
+            return mean, stddev
 
     def bernoulli_MLP_decoder(self, z, n_hidden, n_output, keep_prob, reuse=False):
         with tf.variable_scope("bernoulli_MLP_decoder", reuse=reuse):
