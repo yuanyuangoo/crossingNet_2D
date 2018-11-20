@@ -1,5 +1,4 @@
 import scipy.optimize
-from forwardRender import ForwardRender
 import cv2
 import time
 import shutil
@@ -10,9 +9,11 @@ from numpy.random import RandomState
 import tensorflow as tf
 from collections import namedtuple
 import sys
+from forwardRender import ForwardRender
 sys.path.append('./')
-from data.dataset import *
+sys.path.append('./data/')
 import globalConfig
+from dataset import *
 
 class GanRender(ForwardRender):
     # gan=Lgan, est=Lpos, metric=Lsmo, recons=Lrecons
@@ -132,6 +133,7 @@ class GanRender(ForwardRender):
         self.est_pose_t = self.pose_vae.decoder(
             self.est_pose_z, self.pose_vae.dim_x, self.pose_vae.n_hidden)
         self.saver = tf.train.Saver()
+
     def train(self, nepoch=None, train_dataset=None, valid_dataset=None, desc='dummy'):
         cache_dir = os.path.join(
             globalConfig.model_dir, 'gan_render/%s_%s' % (globalConfig.dataset, desc))
@@ -186,7 +188,7 @@ class GanRender(ForwardRender):
         np_rng = RandomState(seed)
         total_batch = int(n_samples / self.batch_size)
 
-        with tf.Session() as sess:
+        with tf.Session() as self.sess:
             try:
                 tf.global_variables_initializer().run()
             except:
@@ -204,8 +206,8 @@ class GanRender(ForwardRender):
                                                              src_num=self.batch_size,
                                                              tar_num=self.batch_size,
                                                              sel_num=5)
-                    if epoch < 0:
-                        gen_err, _ = sess.run([self.recons_loss, self.align_optim], feed_dict={
+                    if epoch < 21:
+                        gen_err, _ = self.sess.run([self.recons_loss, self.align_optim], feed_dict={
                             self.image_gan.inputs: train_img[offset:(offset + self.batch_size), :, :, :],
                             self.pose_vae.x_hat: train_skel[offset:(offset + self.batch_size), :],
                             # self.origin_input: None,
@@ -216,7 +218,7 @@ class GanRender(ForwardRender):
                         })
                         gen_errs += np.array([0., 1., 0.])*gen_err
 
-                        est_err, metr_err, _ = sess.run([self.loss_dis_est, self.metric_loss, self.init_dis_optim], feed_dict={
+                        est_err, metr_err, _ = self.sess.run([self.loss_dis_est, self.metric_loss, self.init_dis_optim], feed_dict={
                             self.image_gan.inputs: train_img[offset:(offset + self.batch_size), :],
                             self.pose_vae.x_hat: train_skel[offset:(offset + self.batch_size), :],
                             # self.origin_input: None,
@@ -232,7 +234,7 @@ class GanRender(ForwardRender):
                         continue
 
                     if self.rndGanInput:
-                        loss_dis_gan, loss_dis_est, metric_loss, _ = sess.run(
+                        loss_dis_gan, loss_dis_est, metric_loss, _ = self.sess.run(
                             [self.dis_loss, self.loss_dis_est, self.metric_loss, self.dis_optim], feed_dict={
                                 self.image_gan.inputs: train_img[offset:(offset + self.batch_size), :],
                                 self.pose_vae.x_hat: train_skel[offset:(offset + self.batch_size), :],
@@ -246,7 +248,7 @@ class GanRender(ForwardRender):
                         dis_errs += np.array([1., 0., 0.])*loss_dis_gan+np.array([0., 1., 0.])*loss_dis_est +\
                             np.array([0., 0., 1.])*metric_loss
 
-                        gan_loss_gen, recons_loss, metric_loss, _ = sess.run(
+                        gan_loss_gen, recons_loss, metric_loss, _ = self.sess.run(
                             [self.gan_loss_gen, self.recons_loss, self.metric_loss, self.gen_optim], feed_dict={
                                 self.image_gan.inputs: train_img[offset:(offset + self.batch_size), :],
                                 self.pose_vae.x_hat: train_skel[offset:(offset + self.batch_size), :],
@@ -260,7 +262,7 @@ class GanRender(ForwardRender):
                         gen_errs += np.array([1., 0., 0.])*gan_loss_gen+np.array([0., 1., 0.])*recons_loss +\
                             np.array([0., 0., 1.])*metric_loss
                     else:
-                        loss_dis_gan, loss_dis_est, metric_loss, _ = sess.run(
+                        loss_dis_gan, loss_dis_est, metric_loss, _ = self.sess.run(
                             [self.dis_loss, self.loss_dis_est, self.metric_loss, self.dis_optim], feed_dict={
                                 self.image_gan.inputs: train_img[offset:(offset + self.batch_size), :],
                                 self.pose_vae.x_hat: train_skel[offset:(offset + self.batch_size), :],
@@ -274,7 +276,7 @@ class GanRender(ForwardRender):
                         dis_errs += np.array([1., 0., 0.])*loss_dis_gan+np.array([0., 1., 0.])*loss_dis_est +\
                             np.array([0., 0., 1.])*metric_loss
 
-                        gan_loss_gen, recons_loss, metric_loss, _ = sess.run(
+                        gan_loss_gen, recons_loss, metric_loss, _ = self.sess.run(
                             [self.gan_loss_gen, self.recons_loss, self.metric_loss, self.gen_optim], feed_dict={
                                 self.image_gan.inputs: train_img[offset:(offset + self.batch_size), :],
                                 self.pose_vae.x_hat: train_skel[offset:(offset + self.batch_size), :],
@@ -337,7 +339,7 @@ class GanRender(ForwardRender):
                                     self.image_gan.y: test_labels[offset:(
                                         offset + self.batch_size), :]
                                 })
-                            est_z.shape = (self.batch_size,self.dim_z)
+                            est_z.shape = (self.batch_size, self.dim_z)
                             # est_z, est_orig = est_z[:20], est_z[20:]
                             # est_z.shape = (1, 20)
                             # est_orig.shape = (1, 3)
@@ -351,7 +353,8 @@ class GanRender(ForwardRender):
                                 self.image_gan.y: test_labels[offset:(offset + self.batch_size), :],
                                 # self.pose_vae.keep_prob: 1
                             })
-                            pose = self.resumePose(est_pose[0], self.origin_input)
+                            pose = self.resumePose(
+                                est_pose[0], self.origin_input)
                             est_img = self.visPair(est_image[0],
                                                    pose,
                                                    self.origin_input,
