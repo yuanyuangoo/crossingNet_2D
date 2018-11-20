@@ -10,6 +10,8 @@ import tensorflow as tf
 from collections import namedtuple
 import sys
 from forwardRender import ForwardRender
+import numpy as np
+from tqdm import tqdm
 sys.path.append('./')
 sys.path.append('./data/')
 import globalConfig
@@ -179,8 +181,8 @@ class GanRender(ForwardRender):
         test_labels = np.asarray(test_labels)
         test_img = np.asarray(test_img)
         #normalize skel data
-        train_skel = train_skel/max(-1*train_skel.min(), train_skel.max())
-        test_skel = test_skel/max(-1*test_skel.min(), test_skel.max())
+        # train_skel = train_skel/max(-1*train_skel.min(), train_skel.max())
+        # test_skel = test_skel/max(-1*test_skel.min(), test_skel.max())
         n_samples = train_skel.shape[0]
 
         print('[ganRender] begin training loop')
@@ -206,7 +208,7 @@ class GanRender(ForwardRender):
                                                              src_num=self.batch_size,
                                                              tar_num=self.batch_size,
                                                              sel_num=5)
-                    if epoch < 21:
+                    if epoch < 23:
                         gen_err, _ = self.sess.run([self.recons_loss, self.align_optim], feed_dict={
                             self.image_gan.inputs: train_img[offset:(offset + self.batch_size), :, :, :],
                             self.pose_vae.x_hat: train_skel[offset:(offset + self.batch_size), :],
@@ -407,7 +409,7 @@ if __name__ == '__main__':
         import data.h36m as h36m
         ds = Dataset()
         for i in range(0, 20000, 20000):
-            ds.loadH36M(i, mode='train', tApp=True, replace=False)
+            ds.loadH36M(i, mode='train', tApp=True, replace=True)
 
         val_ds = Dataset()
         val_ds.loadH36M(i, mode='valid', tApp=True, replace=False)
