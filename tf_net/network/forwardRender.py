@@ -24,13 +24,16 @@ class ForwardRender(object):
 
         self.image_gan = ImageGAN()
         self.render = self.build_latent_alignment_layer(self.pose_vae)
+        _, self.dis_px_layer, self.feamat_layer,  = self.image_gan.build_discriminator(
+            self.render, self.image_gan.y, reuse=True)
+
         self.lr, self.b1 = 0.001, 0.5
         self.batch_size = self.pose_vae.batch_size
         print('vae and gan initialized')
         show_all_variables()
         # print('all parameters: {}'.format(self.params))
 
-        self.pose_input = self.pose_vae.x
+        self.pose_input = self.pose_vae.x_hat
 
         #Train Ali
         self.real_image = self.image_gan.inputs
@@ -150,13 +153,14 @@ class ForwardRender(object):
         if quad is not None:
             R = np.matrix(quad)
             orig_pose = np.dot(R.transpose(), orig_pose.transpose())
-        translation = repmat(tran.reshape((1, 3)), orig_pose.shape[0], 1)
-        orig_pose = translation + orig_pose
+        if tran.shape[0].value is not None:
+            translation = repmat(tran.reshape((1, 3)), orig_pose.shape[0], 1)
+            orig_pose = translation + orig_pose
         orig_pose = orig_pose.flatten()
         return orig_pose
 
     def visPair(self, image, pose=None, trans=None, com=None, ratio=None):
-        img = image[0].copy()
+        img = image.copy()
         img = (img+1)*127.0
         img = cv2.cvtColor(img.astype('uint8'), cv2.COLOR_GRAY2BGR)
         if pose is None:
@@ -164,21 +168,32 @@ class ForwardRender(object):
 
         skel = pose.copy()
         skel.shape = (-1, 3)
-        skel = skel*ratio
-        skel2 = []
-        for pt in skel:
-            # pt2 = Camera.to2D(pt+com)
-            pt2[2] = 1.0
-            pt2 = np.dot(trans, pt2)
-            pt2.shape = (3, 1)
-            pt2 = (pt2[0], pt2[1])
-            skel2.append(pt2)
-        for idx, pt2 in enumerate(skel2):
-            cv2.circle(img, pt2, 3,
-                       data.util.figColor[colorPlatte[idx]], -1)
-        for b in bones:
-            pt1 = skel2[b[0]]
-            pt2 = skel2[b[1]]
-            color = b[2]
-            cv2.line(img, pt1, pt2, color, 2)
+        if ratio is not None:
+            skel = skel*ratio
+        # skel2 = []
+        # for pt in skel:
+        #     # pt2 = Camera.to2D(pt+com)
+        #     pt2[2] = 1.0
+        #     pt2 = np.dot(trans, pt2)
+        #     pt2.shape = (3, 1)
+        #     pt2 = (pt2[0], pt2[1])
+        #     skel2.append(pt2)
+        # for idx, pt2 in enumerate(skel2):
+        #     cv2.circle(img, pt2, 3,
+        #                data.util.figColor[colorPlatte[idx]], -1)
+        edges = [[0, 1], [1, 2], [2, 3], [0, 4], [4, 5], [5, 6], [0, 7], [7, 8], [8, 9], [9, 10],
+                 [8, 11], [11, 12], [12, 13], [8, 14], [14, 15], [15, 16]]
+        color = [[1, 0, 0], [1, 1, 0], [0, 1, 0], [0, 0, 1], [0, 1, 1], [1, 0, 1], [0.5, 0, 0],
+                 [0, 0.5, 0], [0, 0, 0.5], [0.5, 0.5, 0], [0.5, 0, 0.5],
+                 [0, 0.5, 0.5], [0.5, 1, 0], [0.5, 0, 1], [0.5, 1, 1], [1, 0, 0.5]]
+        for i, edge in enumerate(edges):
+            pt1 = skel[edge[0]]
+            pt2 = skel[edge[1]]
+            cv2.line(img, (int(pt1[0]), int(pt1[1])),
+                     (int(pt2[0]), int(pt2[1])), (np.asarray(color[i])*255).tolist(), 4)
+        # for b in bones:
+        #     pt1 = skel2[b[0]]
+        #     pt2 = skel2[b[1]]
+        #     color = b[2]
+        #     cv2.line(img, pt1, pt2, color, 2)
         return img

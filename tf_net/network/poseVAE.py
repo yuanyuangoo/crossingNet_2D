@@ -19,7 +19,7 @@ NUM_LABELS = 15
 class PoseVAE(object):
     def __init__(
             self, dim_x=Num_of_Joints*3, batch_size=64, lr=1e-3, num_epochs=110,
-            b1=0.5, dim_z=20, n_hidden=20, ADD_NOISE=False, PRR=True, PRR_n_img_x=10, PRR_n_img_y=10, PRR_resize_factor=1.0,
+            b1=0.5, dim_z=23, n_hidden=20, ADD_NOISE=False, PRR=True, PRR_n_img_x=10, PRR_n_img_y=10, PRR_resize_factor=1.0,
             PMLR=True, PMLR_n_img_x=20, PMLR_n_img_y=20, PMLR_resize_factor=1.0, PMLR_z_range=2.0, PMLR_n_samples=5000,reuse=False):
         # with tf.variable_scope("pose_vae") as scope:
         #     if reuse:

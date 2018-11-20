@@ -25,10 +25,10 @@ SummaryWriter = tf.summary.FileWriter
 class ImageGAN(object):
     def __init__(self, input_height=128, input_width=128, crop=True,
                  batch_size=64, sample_num=64, output_height=128, output_width=128,
-                 y_dim=15, dim_z=100, gf_dim=64, df_dim=64,
+                 y_dim=15, dim_z=23, gf_dim=64, df_dim=64,
                  gfc_dim=1024, dfc_dim=1024, c_dim=1, dataset_name='h36m',
                  checkpoint_dir="./checkpoint", sample_dir="samples",
-                 learning_rate=0.0002, beta1=0.5, epoch=25, train_size=np.inf,reuse=False):
+                 learning_rate=0.0002, beta1=0.5, epoch=25, train_size=np.inf, reuse=False):
         # with tf.variable_scope("image_gan") as scope:
         #     if reuse:
         #         scope.reuse_variables()
@@ -101,12 +101,12 @@ class ImageGAN(object):
         #Generator for fake image
         self.G = self.build_generator(self.z, self.y)
         #Discriminator for real image
-        self.D, self.D_logits = self.build_discriminator(
+        self.D, self.D_logits, _ = self.build_discriminator(
             inputs, self.y, reuse=False)
         #image
         self.sampler = self.build_sampler(self.z, self.y)
         #Discriminator for fake image
-        self.D_, self.D_logits_ = self.build_discriminator(
+        self.D_, self.D_logits_, _ = self.build_discriminator(
             self.G, self.y, reuse=True)
 
         self.d_sum = histogram_summary("d", self.D)
@@ -162,7 +162,7 @@ class ImageGAN(object):
 
             h3 = linear(h2, 1, 'd_h3_lin')
 
-            return tf.nn.sigmoid(h3), h3
+            return tf.nn.sigmoid(h3), h3, h2
 
     def build_generator(self, z, y=None):
         with tf.variable_scope("generator") as scope:

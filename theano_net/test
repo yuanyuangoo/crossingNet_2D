@@ -44,3 +44,8 @@ image_input_var
 dis_px_layer
 px_real_var
 
+
+build_discriminative()
+self.dis_hidden_layer
+z_est_layer
+z_est_var

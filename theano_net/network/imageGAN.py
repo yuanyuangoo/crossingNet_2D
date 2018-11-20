@@ -448,7 +448,7 @@ class ImageGAN(object):
                                                  nonlinearity=lrelu)
 
         metric_shape_2 = (2*hidden_dim, output_dim)
-        dw_metric_2 = CreateParam(InitW, metric_shape_2, 'dw_metric_2')
+        dw_metric_2 = CreateParam(InitW, metric_shape_2, 'dbuild_recognitionw_metric_2')
         db_metric_2 = CreateParam(
             InitBeta, (metric_shape_2[1],), 'db_metric_2')
 

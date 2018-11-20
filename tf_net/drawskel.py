@@ -91,3 +91,7 @@ s1 = np.array([0.08320184, 0.07264254, 0.0706107, 0.06962919, 0.09361494, 0.0954
 # drawskel(s1)
 drawskelCV(s1, axis=(1, 0, 0), theta=45)
 drawskelCV(s1, axis=(1, 0, 0), theta=0)
+
+
+
+z_est_var
