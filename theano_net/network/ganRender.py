@@ -191,12 +191,12 @@ class GanRender(ForwardRender):
 
         # estimating the latent variable part
         z_est_layer = self.image_gan.build_recognition(self.z_dim)
-        z_est_var = lasagne.layers.get_output(z_est_layer, 
-                                             self.image_gan.image_input_var,
-                                             deterministic=False)
-        z_est_tvar = lasagne.layers.get_output(z_est_layer,
+        z_est_var = lasagne.layers.get_output(z_est_layer,
                                               self.image_gan.image_input_var,
-                                              deterministic=True)
+                                              deterministic=False)
+        z_est_tvar = lasagne.layers.get_output(z_est_layer,
+                                               self.image_gan.image_input_var,
+                                               deterministic=True)
         loss_dis_est = (z_est_var - self.latent_var)**2
         # loss_dis_est = loss_dis_est.sum(axis=1)
         loss_dis_est = lasagne.objectives.aggregate(loss_dis_est,

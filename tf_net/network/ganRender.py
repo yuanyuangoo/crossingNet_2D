@@ -11,8 +11,8 @@ import tensorflow as tf
 from collections import namedtuple
 import sys
 sys.path.append('./')
-import globalConfig
 from data.dataset import *
+import globalConfig
 
 class GanRender(ForwardRender):
     # gan=Lgan, est=Lpos, metric=Lsmo, recons=Lrecons
@@ -26,13 +26,15 @@ class GanRender(ForwardRender):
         self.metricCombi = metricCombi
         gen_vars = self.alignment_vars+self.image_gan.g_vars
 
+        # Lrecons
         self.fake_render = self.render
         self.real_render = self.real_image
         recons_loss = (self.real_render-self.fake_render)**2
         recons_loss = tf.clip_by_value(recons_loss, 0, self.golden_max)
+
         self.recons_loss = tf.reduce_mean(recons_loss)
 
-        # gan part
+        # gan part, Lgan
         real_feamat = self.image_gan.D_logits
         real_feamat = tf.reduce_mean(real_feamat, axis=0)
         fake_feamat = self.feamat_layer
@@ -59,7 +61,7 @@ class GanRender(ForwardRender):
 
         self.gan_loss_gen = tf.reduce_mean(abs(real_feamat-fake_feamat))
 
-        # metric part(smooth task)
+        # metric part(smooth task), (Lsmo)
         if not self.metricCombi:
             fake_metric = self.image_gan.build_metric(
                 self.fake_image,  self.image_gan.y, output_dim=self.z_dim, reuse=False)
@@ -90,6 +92,7 @@ class GanRender(ForwardRender):
 
         metric_loss = (latent_diff - metric_diff)**2 + self_diff**2
         self.metric_loss = tf.reduce_mean(metric_loss)
+
         self.gen_loss = self.gan_loss_gen + self.recons_loss + self.metric_loss
         self.gen_optim = tf.train.AdamOptimizer(
             learning_rate=self.lr, beta1=self.b1).minimize(self.gen_loss, var_list=gen_vars)
@@ -100,7 +103,7 @@ class GanRender(ForwardRender):
             learning_rate=self.lr*10, beta1=self.b1).minimize(self.recons_loss, var_list=self.alignment_vars)
         print('alignment_train_fn compiled')
 
-        # estimating the latent variable part
+        # estimating the latent variable part, Lpos
         self.z_est = self.image_gan.build_recognition(
             self.image_gan.inputs, self.image_gan.y, output_dim=self.z_dim, keep_prob=0.9, reuse=False)
         self.z_est_t = self.image_gan.build_recognition(
@@ -108,8 +111,8 @@ class GanRender(ForwardRender):
 
         # disciminator loss on same image input consistent
         self.loss_dis_est = tf.losses.mean_squared_error(
-            self.z_est_t, self.z_est)
-        
+            self.z_est_t, self.latent)
+
         self.dis_loss = self.loss_dis_gan + self.loss_dis_est + self.metric_loss
 
         t_vars = tf.trainable_variables()
@@ -126,8 +129,9 @@ class GanRender(ForwardRender):
         print('init_dis_fn compiled')
 
         self.est_pose_z = tf.placeholder(dtype=tf.float32, name="est_pose_z")
-        self.est_pose_t = self.pose_vae.y
-
+        self.est_pose_t = self.pose_vae.decoder(
+            self.est_pose_z, self.pose_vae.dim_x, self.pose_vae.n_hidden)
+        self.saver = tf.train.Saver()
     def train(self, nepoch=None, train_dataset=None, valid_dataset=None, desc='dummy'):
         cache_dir = os.path.join(
             globalConfig.model_dir, 'gan_render/%s_%s' % (globalConfig.dataset, desc))
@@ -194,8 +198,8 @@ class GanRender(ForwardRender):
                 for i in range(total_batch):
                     offset = (i * self.batch_size) % (n_samples)
                     combi_noises = np_rng.normal(0, 0.05,
-                                               (self.batch_size, self.pose_z_dim)
-                                               ).astype(np.float32)
+                                                 (self.batch_size, self.pose_z_dim)
+                                                 ).astype(np.float32)
                     gan_noises = GanRender.rndCvxCombination(np_rng,
                                                              src_num=self.batch_size,
                                                              tar_num=self.batch_size,
@@ -303,14 +307,14 @@ class GanRender(ForwardRender):
                             # noise = np.zeros((1, self.pose_z_dim), np.float32)
                             offset = (i * self.batch_size) % (n_samples_test)
                             reco_image = self.render.eval({
-                                self.pose_input: test_skel[offset:(offset + self.batch_size),:],
+                                self.pose_input: test_skel[offset:(offset + self.batch_size), :],
                                 # self.pose_vae.y: test_labels[offset+i, :],
                                 # self.origin_input: None,
                                 self.image_gan.y: test_labels[offset:(offset + self.batch_size), :],
                                 # self.pose_vae.keep_prob: 1
                             })
                             reco_pose = self.pose_vae.y.eval({
-                                self.pose_input: test_skel[offset:(offset + self.batch_size),:],
+                                self.pose_input: test_skel[offset:(offset + self.batch_size), :],
                                 # self.origin_input: None,
                                 # self.pose_vae.label: test_labels[offset+i, :],
                                 # self.pose_vae.keep_prob: 1
@@ -333,29 +337,28 @@ class GanRender(ForwardRender):
                                     self.image_gan.y: test_labels[offset:(
                                         offset + self.batch_size), :]
                                 })
-                            est_z.shape = (17,)
-                            est_z, est_orig = est_z[:20], est_z[20:]
-                            est_z, est_orig = est_z[:20], est_z[20:]
-                            est_z.shape = (1, 20)
-                            est_orig.shape = (1, 3)
-                            est_pose = self.est_pose_t.evel(
+                            est_z.shape = (self.batch_size,self.dim_z)
+                            # est_z, est_orig = est_z[:20], est_z[20:]
+                            # est_z.shape = (1, 20)
+                            # est_orig.shape = (1, 3)
+                            # est_orig=None
+                            est_pose = self.est_pose_t.eval(
                                 {self.est_pose_z: est_z})
-                            est_image = self.render({
+                            est_image = self.render.eval({
                                 self.pose_input: est_pose,
-                                self.pose_vae.y: test_labels[offset:(offset + self.batch_size), :],
+                                # self.pose_vae.y: test_labels[offset:(offset + self.batch_size), :],
                                 # self.origin_input: None,
                                 self.image_gan.y: test_labels[offset:(offset + self.batch_size), :],
                                 # self.pose_vae.keep_prob: 1
                             })
-                            pose = self.resumePose(est_pose[0],
-                                                   est_orig[0])
+                            pose = self.resumePose(est_pose[0], self.origin_input)
                             est_img = self.visPair(est_image[0],
                                                    pose,
                                                    self.origin_input,
                                                    50.0)
                             recons_image = np.hstack(
                                 (real_img, fake_img, est_img))
-                            cv2.imwrite(os.path.join(img_dir, '%d_%d.jpg' % (epoch, idx)),
+                            cv2.imwrite(os.path.join(img_dir, '%d_%d.jpg' % (epoch, i)),
                                         recons_image.astype('uint8'))
 
                     if epoch % 10 == 0:

@@ -192,7 +192,7 @@ class ImageGAN(object):
             return tf.nn.sigmoid(
                 deconv2d(h2, [self.batch_size, s_h, s_w, 1], name='g_h3'))
 
-    def build_recognition(self, image, y, output_dim=1, reuse=False, keep_prob=1):
+    def build_recognition(self, image, y, output_dim=23, reuse=False, keep_prob=1):
         yb = tf.reshape(y, [self.batch_size, 1, 1, self.y_dim])
         x = conv_cond_concat(image, yb)
         with tf.variable_scope("discriminator") as scope:

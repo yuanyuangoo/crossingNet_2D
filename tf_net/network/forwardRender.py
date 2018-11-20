@@ -20,9 +20,10 @@ class ForwardRender(object):
         self.dim_x = dim_x
         self.pose_vae = PoseVAE(dim_x=dim_x, ADD_NOISE=True)
         self.origin_input = tf.placeholder(tf.float32, shape=(None, 3),name="origin")
-        self.dim_z = 100
 
         self.image_gan = ImageGAN()
+        self.dim_z = self.image_gan.dim_z
+
         self.render = self.build_latent_alignment_layer(self.pose_vae)
         _, self.dis_px_layer, self.feamat_layer,  = self.image_gan.build_discriminator(
             self.render, self.image_gan.y, reuse=True)
