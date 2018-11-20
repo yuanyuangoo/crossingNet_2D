@@ -298,6 +298,7 @@ class GanRender(ForwardRender):
                     gen_errs /= nupdates
                     dis_errs = self.DisErr(*tuple(dis_errs))
                     gen_errs = self.GenErr(*tuple(gen_errs))
+                    print('epoch: {}, batch: {}'.format(epoch, i))
                     print('disErr: {}'.format(dis_errs))
                     print('genErr: {}'.format(gen_errs))
                     flog = open(log_path, 'a')
@@ -409,7 +410,7 @@ if __name__ == '__main__':
         import data.h36m as h36m
         ds = Dataset()
         for i in range(0, 20000, 20000):
-            ds.loadH36M(i, mode='train', tApp=True, replace=True)
+            ds.loadH36M(i, mode='train', tApp=True, replace=False)
 
         val_ds = Dataset()
         val_ds.loadH36M(i, mode='valid', tApp=True, replace=False)
