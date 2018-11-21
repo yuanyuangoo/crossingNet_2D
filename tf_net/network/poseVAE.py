@@ -1,13 +1,13 @@
+import data.ref as ref
+from data.dataset import *
+from data.util import *
+import data.plot_utils as plot_utils
+import globalConfig
 import tensorflow as tf
 import numpy as np
 import os
 import sys
 sys.path.append('./')
-import globalConfig
-import data.plot_utils as plot_utils
-from data.util import *
-from data.dataset import *
-import data.ref as ref
 
 IMAGE_SIZE_H36M = 128
 Num_of_Joints = ref.nJoints
@@ -20,9 +20,7 @@ class PoseVAE(object):
             self, dim_x=Num_of_Joints*3, batch_size=64, lr=1e-3, num_epochs=110,
             b1=0.5, dim_z=23, n_hidden=20, ADD_NOISE=False, PRR=True, PRR_n_img_x=10, PRR_n_img_y=10, PRR_resize_factor=1.0,
             PMLR=True, PMLR_n_img_x=20, PMLR_n_img_y=20, PMLR_resize_factor=1.0, PMLR_z_range=2.0, PMLR_n_samples=5000, reuse=False):
-        # with tf.variable_scope("pose_vae") as scope:
-        #     if reuse:
-        #         scope.reuse_variables()
+
         checkpoint_dir = './checkpoint'
         self.checkpoint_dir = os.path.join(
             globalConfig.gan_pretrain_path, checkpoint_dir)
@@ -72,20 +70,20 @@ class PoseVAE(object):
             self.loss)
         self.saver = tf.train.Saver()
 
-    def decoder(self, z, dim_img, n_hidden):
-        y = self.bernoulli_MLP_decoder(z, n_hidden, dim_img, 1.0, reuse=True)
+    def sampler(self, z, dim_img, n_hidden):
+        y = self.decoder(z, n_hidden, dim_img, 1.0, reuse=True)
         return y
 
     def autoencoder(self, x_hat, x, dim_img, dim_z, n_hidden, keep_prob, reuse=False):
 
-        mu, sigma = self.gaussian_MLP_encoder(
+        mu, sigma = self.encoder(
             x_hat, n_hidden, dim_z, keep_prob, reuse=reuse)
 
         # sampling by re-parameterization technique
         z = mu + sigma * tf.random_normal(tf.shape(mu), 0, 1, dtype=tf.float32)
 
         # decoding
-        y = self.bernoulli_MLP_decoder(z, n_hidden, dim_img, keep_prob)
+        y = self.decoder(z, n_hidden, dim_img, keep_prob)
         # y = tf.clip_by_value(y, 1e-8, 1 - 1e-8)
 
         # loss
@@ -104,8 +102,8 @@ class PoseVAE(object):
 
         return y, z, loss, -marginal_likelihood, KL_divergence
 
-    def gaussian_MLP_encoder(self, x, n_hidden, n_output, keep_prob, reuse=True):
-        with tf.variable_scope("gaussian_MLP_encoder") as scope:
+    def encoder(self, x, n_hidden, n_output, keep_prob, reuse=True):
+        with tf.variable_scope("encoder") as scope:
             if reuse:
                 scope.reuse_variables()
             # initializers
@@ -142,8 +140,8 @@ class PoseVAE(object):
             stddev = 1e-6 + tf.nn.softplus(gaussian_params[:, n_output:])
             return mean, stddev
 
-    def bernoulli_MLP_decoder(self, z, n_hidden, n_output, keep_prob, reuse=False):
-        with tf.variable_scope("bernoulli_MLP_decoder", reuse=reuse):
+    def decoder(self, z, n_hidden, n_output, keep_prob, reuse=False):
+        with tf.variable_scope("decoder", reuse=reuse):
             # initializers
             w_init = tf.contrib.layers.variance_scaling_initializer()
             b_init = tf.constant_initializer(0.)
@@ -245,7 +243,7 @@ class PoseVAE(object):
                 x_PMLR = x_PMLR * np.random.randint(2, size=x_PMLR.shape)
                 x_PMLR += np.random.randint(2, size=x_PMLR.shape)
 
-            decoded = vae.decoder(self.z_in, self.dim_x, self.n_hidden)
+            decoded = vae.sampler(self.z_in, self.dim_x, self.n_hidden)
         with tf.Session() as self.sess:
             could_load, checkpoint_counter = self.load(self.checkpoint_dir)
             if could_load:
