@@ -16,11 +16,7 @@ import globalConfig
 b1 = 0.5
 noise_dim = 23
 K = 1
-image_summary = tf.summary.image
-scalar_summary = tf.summary.scalar
-histogram_summary = tf.summary.histogram
-merge_summary = tf.summary.merge
-SummaryWriter = tf.summary.FileWriter
+
 
 
 class ImageGAN(object):

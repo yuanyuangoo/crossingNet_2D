@@ -1,14 +1,14 @@
-import data.ref as ref
-from data.dataset import *
-from data.util import *
-import data.plot_utils as plot_utils
-import globalConfig
 import tensorflow as tf
 import numpy as np
 import os
 import sys
 sys.path.append('./')
-
+import data.ref as ref
+from data.dataset import *
+from data.util import *
+import data.plot_utils as plot_utils
+import globalConfig
+from data.layers import *
 IMAGE_SIZE_H36M = 128
 Num_of_Joints = ref.nJoints
 VALIDATION_SIZE = 5000  # Size of the validation set.
@@ -23,7 +23,10 @@ class PoseVAE(object):
 
         checkpoint_dir = './checkpoint'
         self.checkpoint_dir = os.path.join(
-            globalConfig.gan_pretrain_path, checkpoint_dir)
+            globalConfig.vae_pretrain_path, checkpoint_dir)
+        RESULTS_DIR = './results'
+        self.RESULTS_DIR = os.path.join(
+            globalConfig.vae_pretrain_path, RESULTS_DIR)
         #dim_z=dim of latent space
         self.dim_z = dim_z
         #dim_x: dim of input pose dimension
@@ -35,7 +38,6 @@ class PoseVAE(object):
         self.lr = lr
         self.b1 = b1
         self.num_epochs = num_epochs
-        self.RESULTS_DIR = './results'
         self.n_hidden = n_hidden
         self.PRR = PRR
         self.PRR_n_img_x = PRR_n_img_x
@@ -53,6 +55,9 @@ class PoseVAE(object):
         #target_pose
         self.x = tf.placeholder(
             tf.float32, shape=[None, dim_x], name='target_pose')
+        self.x_hat_sum = histogram_summary("x_hat", self.x_hat)
+        self.x_sum = histogram_summary("x", self.x)
+
 
         self.keep_prob = 0.9
         #latent_variable
@@ -306,7 +311,7 @@ class PoseVAE(object):
                             y_PMLR_img, name="/PMLR_epoch_%02d" % (epoch) + ".jpg")
 
                         # plot distribution of labeled images
-                        z_PMLR = self.sess.run(
+                        z_PMLR = self.sess.run(model_name
                             self.z, feed_dict={self.x_hat: x_PMLR})
                         PMLR.save_scattered_image(
                             z_PMLR, id_PMLR, name="/PMLR_map_epoch_%02d" % (epoch) + ".jpg")

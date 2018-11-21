@@ -1,6 +1,11 @@
 import tensorflow as tf
 import math
 
+image_summary = tf.summary.image
+scalar_summary = tf.summary.scalar
+histogram_summary = tf.summary.histogram
+merge_summary = tf.summary.merge
+SummaryWriter = tf.summary.FileWriter
 
 class batch_norm(object):
   def __init__(self, epsilon=1e-5, momentum=0.9, name="batch_norm"):
