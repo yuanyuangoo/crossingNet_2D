@@ -1,14 +1,13 @@
 import tensorflow as tf
 import numpy as np
 import os
+import sys
+sys.path.append('./')
 import globalConfig
 import data.plot_utils as plot_utils
 from data.util import *
 from data.dataset import *
 import data.ref as ref
-import sys
-sys.path.append('./')
-
 
 IMAGE_SIZE_H36M = 128
 Num_of_Joints = ref.nJoints
@@ -20,11 +19,13 @@ class PoseVAE(object):
     def __init__(
             self, dim_x=Num_of_Joints*3, batch_size=64, lr=1e-3, num_epochs=110,
             b1=0.5, dim_z=23, n_hidden=20, ADD_NOISE=False, PRR=True, PRR_n_img_x=10, PRR_n_img_y=10, PRR_resize_factor=1.0,
-            PMLR=True, PMLR_n_img_x=20, PMLR_n_img_y=20, PMLR_resize_factor=1.0, PMLR_z_range=2.0, PMLR_n_samples=5000,reuse=False):
+            PMLR=True, PMLR_n_img_x=20, PMLR_n_img_y=20, PMLR_resize_factor=1.0, PMLR_z_range=2.0, PMLR_n_samples=5000, reuse=False):
         # with tf.variable_scope("pose_vae") as scope:
         #     if reuse:
         #         scope.reuse_variables()
-        self.checkpoint_dir = './checkpoint'
+        checkpoint_dir = './checkpoint'
+        self.checkpoint_dir = os.path.join(
+            globalConfig.gan_pretrain_path, checkpoint_dir)
         #dim_z=dim of latent space
         self.dim_z = dim_z
         #dim_x: dim of input pose dimension
@@ -167,7 +168,7 @@ class PoseVAE(object):
             wo = tf.get_variable(
                 'wo', [h1.get_shape()[1], n_output], initializer=w_init)
             bo = tf.get_variable('bo', [n_output], initializer=b_init)
-            y=tf.matmul(h1, wo) + bo
+            y = tf.matmul(h1, wo) + bo
             # y = tf.sigmoid(tf.matmul(h1, wo) + bo)
 
         return y
@@ -245,15 +246,14 @@ class PoseVAE(object):
                 x_PMLR += np.random.randint(2, size=x_PMLR.shape)
 
             decoded = vae.decoder(self.z_in, self.dim_x, self.n_hidden)
-        with tf.Session() as sess:
+        with tf.Session() as self.sess:
             could_load, checkpoint_counter = self.load(self.checkpoint_dir)
             if could_load:
                 counter = checkpoint_counter
                 print(" [*] Load SUCCESS")
             else:
                 print(" [!] Load failed...")
-            sess.run(tf.global_variables_initializer(),
-                     feed_dict={self.keep_prob: 0.9})
+            self.sess.run(tf.global_variables_initializer())
 
             for epoch in range(self.num_epochs):
 
@@ -277,10 +277,10 @@ class PoseVAE(object):
                         batch_xs_input += np.random.randint(
                             2, size=batch_xs_input.shape)
 
-                    _, tot_loss, loss_likelihood, loss_divergence = sess.run(
+                    _, tot_loss, loss_likelihood, loss_divergence = self.sess.run(
                         (self.train_op, self.loss,
                          self.neg_marginal_likelihood, self.KL_divergence),
-                        feed_dict={self.x_hat: batch_xs_input, self.x: batch_xs_target, self.keep_prob: 0.9})
+                        feed_dict={self.x_hat: batch_xs_input, self.x: batch_xs_target})
 
                 # print cost every epoch
                 print("epoch %d: L_tot %03.2f L_likelihood %03.2f L_divergence %03.2f" % (
@@ -291,8 +291,8 @@ class PoseVAE(object):
                     min_tot_loss = tot_loss
                     # Plot for reproduce performance
                     if self.PRR:
-                        y_PRR = sess.run(
-                            self.y, feed_dict={self.x_hat: x_PRR, self.keep_prob: 1})
+                        y_PRR = self.sess.run(
+                            self.y, feed_dict={self.x_hat: x_PRR})
                         y_PRR_img = y_PRR.reshape(
                             PRR.n_tot_imgs, -1)
                         PRR.save_images(
@@ -300,7 +300,7 @@ class PoseVAE(object):
 
                     # Plot for manifold learning result
                     if self.PMLR and self.dim_z == 2:
-                        y_PMLR = sess.run(decoded, feed_dict={
+                        y_PMLR = self.sess.run(decoded, feed_dict={
                             self.z_in: PMLR.z, self.keep_prob: 1})
                         y_PMLR_img = y_PMLR.reshape(
                             PMLR.n_tot_imgs, -1)
@@ -308,8 +308,8 @@ class PoseVAE(object):
                             y_PMLR_img, name="/PMLR_epoch_%02d" % (epoch) + ".jpg")
 
                         # plot distribution of labeled images
-                        z_PMLR = sess.run(
-                            self.z, feed_dict={self.x_hat: x_PMLR, self.keep_prob: 1})
+                        z_PMLR = self.sess.run(
+                            self.z, feed_dict={self.x_hat: x_PMLR})
                         PMLR.save_scattered_image(
                             z_PMLR, id_PMLR, name="/PMLR_map_epoch_%02d" % (epoch) + ".jpg")
 

@@ -155,8 +155,8 @@ class GanRender(ForwardRender):
         if not os.path.exists(param_dir):
             os.mkdir(param_dir)
 
-        self.pose_vae.load(globalConfig.vae_pretrain_path)
-        self.image_gan.load(globalConfig.gan_pretrain_path)
+        self.pose_vae.load(self.pose_vae.checkpoint_dir)
+        self.image_gan.load(self.image_gan.checkpoint_dir)
 
         #load train dataset
         train_skel = []
