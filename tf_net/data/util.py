@@ -1,3 +1,4 @@
+import tensorflow.contrib.slim as slim
 from collections import namedtuple
 from numpy.matlib import repmat
 import numpy as np
@@ -12,8 +13,8 @@ import scipy.misc
 from six.moves import xrange
 import data.ref as ref
 import tensorflow as tf
-CameraOption = namedtuple('CameraOption', [
-                          'focal_x', 'focal_y', 'center_x', 'center_y', 'width', 'height', 'far_point'])
+# CameraOption = namedtuple('CameraOption', [
+#                           'focal_x', 'focal_y', 'center_x', 'center_y', 'width', 'height', 'far_point'])
 # Frame = namedtuple('Frame', ['dm', 'skel', 'crop_dm', 'crop_skel', 'file_name'])
 # Frame.__new__.__defaults__ = (None,)*len(Frame._fields)
 
@@ -32,11 +33,12 @@ nyuFigColorIdx = [1]*6 + [2]*6 + [3]*6 + [4]*6 + [5]*6
 iclColorIdx = [0] + [1]*3 + [2]*3 + [3]*3 + [4]*3 + [5]*3
 msraColorIdx = [0] + [1]*4 + [2]*4 + [3]*4 + [4]*4 + [5]*4
 
-import tensorflow.contrib.slim as slim
+
 def show_all_variables():
   model_vars = tf.trainable_variables()
   slim.model_analyzer.analyze_vars(model_vars, print_info=True)
-  
+
+
 def initFigBone(startIdx, jntNum, color): return \
     [(sIdx, eIdx, color) for sIdx, eIdx in
      zip(range(startIdx, startIdx+jntNum-1), range(startIdx+1, startIdx+jntNum))]
@@ -198,12 +200,13 @@ def drawImageCV(skel, axis=(0, 1, 0), theta=0):
 
 
 def inverse_transform(images):
-    return (images+1.)/2.
+    return (images+1)*127.5
 
 
 def imsave(images, size, path):
     image = np.squeeze(merge(images, size))
-    return scipy.misc.imsave(path, image)
+    # return scipy.misc.imsave(path, image)
+    return cv2.imwrite(path, image)
 
 
 def save_images(images, size, image_path):
@@ -278,4 +281,4 @@ def merge(images, size):
         return img
     else:
         raise ValueError('in merge(images,size) images parameter '
-                        'must have dimensions: HxW or HxWx3 or HxWx4')
+                         'must have dimensions: HxW or HxWx3 or HxWx4')

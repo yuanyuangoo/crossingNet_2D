@@ -46,10 +46,13 @@ class H36M:
         bbox = dict()
         for line in bbfile:
             filename = line[line.find('S'):line.find(',')]
-            lx = int(line[line.find('lx')+3:line.find(',', line.find('lx'))])
-            ly = int(line[line.find('ly')+3:line.find(',', line.find('ly'))])
-            rx = int(line[line.find('rx')+3:line.find(',', line.find('rx'))])
-            ry = int(line[line.find('ry')+3:-1])
+            lx = int(
+                float(line[line.find('lx')+3:line.find(',', line.find('lx'))]))
+            ly = int(
+                float(line[line.find('ly')+3:line.find(',', line.find('ly'))]))
+            rx = int(
+                float(line[line.find('rx')+3:line.find(',', line.find('rx'))]))
+            ry = int(float(line[line.find('ry')+3:-1]))
             bbox[filename] = [lx, ly, rx, ry]
 
         self.bbox = bbox

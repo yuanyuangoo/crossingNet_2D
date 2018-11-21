@@ -68,6 +68,10 @@ class ImageGAN(object):
         self.m_bn1 = batch_norm(name='m_bn1')
         self.m_bn2 = batch_norm(name='m_bn2')
 
+        self.r_bn0 = batch_norm(name='r_bn0')
+        self.r_bn1 = batch_norm(name='r_bn1')
+        self.r_bn2 = batch_norm(name='r_bn2')
+
         if not self.y_dim:
             self.g_bn3 = batch_norm(name='g_bn3')
 
@@ -116,7 +120,7 @@ class ImageGAN(object):
 
         def sigmoid_cross_entropy_with_logits(x, y):
             return tf.nn.sigmoid_cross_entropy_with_logits(logits=x, labels=y)
-
+            
         self.d_loss_real = tf.reduce_mean(
             sigmoid_cross_entropy_with_logits(self.D_logits, tf.ones_like(self.D)))  # for real image Discriminator
         self.d_loss_fake = tf.reduce_mean(
@@ -163,7 +167,7 @@ class ImageGAN(object):
 
             h3 = linear(h2, 1, 'd_h3_lin')
 
-            return tf.nn.sigmoid(h3), h3, h2
+            return tf.nn.tanh(h3), h3, h2
 
     def build_generator(self, z, y=None):
         with tf.variable_scope("generator") as scope:
@@ -190,7 +194,7 @@ class ImageGAN(object):
                                                 [self.batch_size, s_h2, s_w2, self.gf_dim * 2], name='g_h2')))
             h2 = conv_cond_concat(h2, yb)
 
-            return tf.nn.sigmoid(
+            return tf.nn.tanh(
                 deconv2d(h2, [self.batch_size, s_h, s_w, 1], name='g_h3'))
 
     def build_recognition(self, image, y, output_dim=23, reuse=False, keep_prob=1):
@@ -206,15 +210,15 @@ class ImageGAN(object):
             if reuse:
                 scope.reuse_variables()
 
-            h0 = self.m_bn0(conv2d(self.discriminator_h0, self.df_dim +
+            h0 = self.r_bn0(conv2d(self.discriminator_h0, self.df_dim +
                                    self.y_dim, name='r_h0_conv'))
             h0 = conv_cond_concat(h0, yb)
 
-            h1 = self.m_bn1(
+            h1 = self.r_bn1(
                 conv2d(h0, self.df_dim + self.y_dim, name='r_h1_conv'))
             h1 = conv_cond_concat(h1, yb)
 
-            h2 = self.m_bn2(
+            h2 = self.r_bn2(
                 conv2d(h1, self.df_dim + self.y_dim, name='r_h2_conv'))
 
             h2 = tf.reshape(h2, [self.batch_size, -1])
@@ -222,7 +226,7 @@ class ImageGAN(object):
 
             h3 = linear(h2, output_dim, 'r_h3_lin')
 
-            return tf.nn.sigmoid(h3)
+            return tf.nn.tanh(h3)
 
     def build_metric(self, image, y, output_dim=1, reuse=False):
         yb = tf.reshape(y, [self.batch_size, 1, 1, self.y_dim])
@@ -252,7 +256,7 @@ class ImageGAN(object):
 
             h3 = linear(h2, output_dim, 'm_h3_lin')
 
-            return tf.nn.sigmoid(h3)
+            return tf.nn.tanh(h3)
         
     def build_metric_combi(self, image, y, output_dim, hidden=None, reuse=False):
         yb = tf.reshape(y, [self.batch_size, 1, 1, self.y_dim])
@@ -284,7 +288,7 @@ class ImageGAN(object):
             self.combi_input_layer = tf.placeholder(
                 dtype=tf.float32, shape=(None, 2 * 1024), name="combi_input_layer")
             combi_metric = linear(self.combi_input_layer, output_dim)
-            return tf.nn.sigmoid(h3), combi_metric
+            return tf.nn.tanh(h3), combi_metric
 
     def build_sampler(self, z, y=None,keep_prob=0.9):
         with tf.variable_scope("generator") as scope:
@@ -310,7 +314,7 @@ class ImageGAN(object):
                 deconv2d(h1, [self.batch_size, s_h2, s_w2, self.gf_dim * 2], name='g_h2'), train=False))
             h2 = conv_cond_concat(h2, yb)
 
-            return tf.nn.sigmoid(deconv2d(h2, [self.batch_size, s_h, s_w, self.c_dim], name='g_h3'))
+            return tf.nn.tanh(deconv2d(h2, [self.batch_size, s_h, s_w, self.c_dim], name='g_h3'))
 
     def train(self, train_dataset, valid_dataset):
         if not os.path.exists(self.checkpoint_dir):
@@ -440,7 +444,7 @@ class ImageGAN(object):
                              time.time() - start_time, errD_fake+errD_real, errG))
 
                     if np.mod(counter, 100) == 1:
-                        show_all_variables()
+                        # show_all_variables()
                         samples, d_loss, g_loss = self.sess.run(
                             [self.sampler, self.d_loss, self.g_loss],
                             feed_dict={

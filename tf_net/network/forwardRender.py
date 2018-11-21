@@ -162,7 +162,7 @@ class ForwardRender(object):
 
     def visPair(self, image, pose=None, trans=None, com=None, ratio=None):
         img = image.copy()
-        img = (img)*255.0
+        img = (img+1)*127.5
         img = cv2.cvtColor(img.astype('uint8'), cv2.COLOR_GRAY2BGR)
         if pose is None:
             return img

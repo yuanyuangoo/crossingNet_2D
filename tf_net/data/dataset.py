@@ -20,7 +20,7 @@ sys.path.append('./')
 class Dataset(object):
     def __init__(self):
         self.dataset = globalConfig.dataset
-        print('initialized')
+        # print('initialized')
 
         if self.dataset == 'H36M':
             self.refPtIdx = [0]
@@ -43,7 +43,7 @@ class Dataset(object):
         if not tApp:
             self.frmList = []
         fileIdx = int(frmStartNum / self.h36m_frm_perfile)
-        pickleCachePath = '{}/h36m_{}_{}.pkl'.format(self.cache_base_path,
+        pickleCachePath = '{}h36m_{}_{}.pkl'.format(self.cache_base_path,
                                                      mode, fileIdx)
 
         if os.path.isfile(pickleCachePath) and not replace:
