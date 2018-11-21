@@ -32,7 +32,7 @@ class ImageGAN(object):
         # with tf.variable_scope("image_gan") as scope:
         #     if reuse:
         #         scope.reuse_variables()
-        self.sample_dir = sample_dir
+        self.sample_dir = os.path.join(globalConfig.gan_pretrain_path,sample_dir)
         self.epoch = epoch
         self.crop = crop
         self.learning_rate = learning_rate
@@ -72,7 +72,8 @@ class ImageGAN(object):
             self.g_bn3 = batch_norm(name='g_bn3')
 
         self.dataset_name = dataset_name
-        self.checkpoint_dir = checkpoint_dir
+        self.checkpoint_dir = os.path.join(
+            globalConfig.gan_pretrain_path, checkpoint_dir)
         # self.data_X, self.data_y = self.load_h36m()
         # self.c_dim = self.data_X[0].shape[-1]
         self.grayscale = True
@@ -312,6 +313,10 @@ class ImageGAN(object):
             return tf.nn.sigmoid(deconv2d(h2, [self.batch_size, s_h, s_w, self.c_dim], name='g_h3'))
 
     def train(self, train_dataset, valid_dataset):
+        if not os.path.exists(self.checkpoint_dir):
+            os.makedirs(self.checkpoint_dir)
+        if not os.path.exists(self.sample_dir):
+            os.makedirs(self.sample_dir)
         show_all_variables()
         train_data = []
         train_labels = []
@@ -364,7 +369,7 @@ class ImageGAN(object):
             self.d_sum = merge_summary(
                 [self.z_sum, self.d_sum, self.d_loss_real_sum, self.d_loss_sum])
             self.writer = SummaryWriter(
-                "./logs", graph=self.sess.graph, filename_suffix='.imageGAN')
+                os.path.join(globalConfig.gan_pretrain_path, "logs"), graph=self.sess.graph, filename_suffix='.imageGAN')
 
             sample_z = np.random.uniform(-1, 1,
                                          size=(self.sample_num, self.dim_z))
@@ -445,7 +450,7 @@ class ImageGAN(object):
                             }
                         )
                         save_images(samples, image_manifold_size(samples.shape[0]),
-                                    './{}/train_{:02d}_{:04d}.png'.format(self.sample_dir, epoch, idx))
+                                    '{}/train_{:02d}_{:04d}.png'.format(self.sample_dir, epoch, idx))
                         print("[Sample] d_loss: %.8f, g_loss: %.8f" %
                               (d_loss, g_loss))
                     if np.mod(counter, 500) == 2:

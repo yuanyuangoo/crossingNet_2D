@@ -150,7 +150,7 @@ class ForwardRender(object):
 
     def resumePose(self, norm_pose, tran, quad=None):
         orig_pose = norm_pose.copy()
-        orig_pose.shape = (-1, 3)
+        orig_pose.shape = (3, -1)
         if quad is not None:
             R = np.matrix(quad)
             orig_pose = np.dot(R.transpose(), orig_pose.transpose())
@@ -162,13 +162,13 @@ class ForwardRender(object):
 
     def visPair(self, image, pose=None, trans=None, com=None, ratio=None):
         img = image.copy()
-        img = (img+1)*127.0
+        img = (img)*255.0
         img = cv2.cvtColor(img.astype('uint8'), cv2.COLOR_GRAY2BGR)
         if pose is None:
             return img
 
         skel = pose.copy()
-        skel.shape = (-1, 3)
+        skel.shape = (3, -1)
         if ratio is not None:
             skel = skel*ratio
         # skel2 = []
@@ -188,8 +188,8 @@ class ForwardRender(object):
                  [0, 0.5, 0], [0, 0, 0.5], [0.5, 0.5, 0], [0.5, 0, 0.5],
                  [0, 0.5, 0.5], [0.5, 1, 0], [0.5, 0, 1], [0.5, 1, 1], [1, 0, 0.5]]
         for i, edge in enumerate(edges):
-            pt1 = skel[edge[0]]
-            pt2 = skel[edge[1]]
+            pt1 = skel[0:2, edge[0]]
+            pt2 = skel[0:2, edge[1]]
             cv2.line(img, (int(pt1[0]), int(pt1[1])),
                      (int(pt2[0]), int(pt2[1])), (np.asarray(color[i])*255).tolist(), 4)
         # for b in bones:

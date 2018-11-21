@@ -208,7 +208,7 @@ class GanRender(ForwardRender):
                                                              src_num=self.batch_size,
                                                              tar_num=self.batch_size,
                                                              sel_num=5)
-                    if epoch < 23:
+                    if epoch < 0:
                         gen_err, _ = self.sess.run([self.recons_loss, self.align_optim], feed_dict={
                             self.image_gan.inputs: train_img[offset:(offset + self.batch_size), :, :, :],
                             self.pose_vae.x_hat: train_skel[offset:(offset + self.batch_size), :],
@@ -298,9 +298,9 @@ class GanRender(ForwardRender):
                     gen_errs /= nupdates
                     dis_errs = self.DisErr(*tuple(dis_errs))
                     gen_errs = self.GenErr(*tuple(gen_errs))
-                    print('epoch: {}, batch: {}'.format(epoch, i))
-                    print('disErr: {}'.format(dis_errs))
-                    print('genErr: {}'.format(gen_errs))
+                    # print('epoch: {}, batch: {}'.format(epoch, i))
+                    # print('disErr: {}'.format(dis_errs))
+                    # print('genErr: {}'.format(gen_errs))
                     flog = open(log_path, 'a')
                     flog.write('epoch {}s\n'.format(epoch))
                     flog.write(json.dumps((dis_errs, gen_errs))+'\n')
@@ -308,6 +308,9 @@ class GanRender(ForwardRender):
                     n_samples_test = test_img.shape[0]
                     total_batch_test = int(n_samples_test/self.batch_size)
                     if epoch % 10 == 0 and valid_dataset is not None:
+                        print('epoch: {}, batch: {}'.format(epoch, i))
+                        print('disErr: {}'.format(dis_errs))
+                        print('genErr: {}'.format(gen_errs))
                         for i in range(total_batch_test):
                             # noise = np.zeros((1, self.pose_z_dim), np.float32)
                             offset = (i * self.batch_size) % (n_samples_test)
@@ -324,17 +327,19 @@ class GanRender(ForwardRender):
                                 # self.pose_vae.label: test_labels[offset+i, :],
                                 # self.pose_vae.keep_prob: 1
                             })
-                            pose = self.resumePose(
-                                reco_pose[0], self.origin_input)
 
-                            fake_img = self.visPair(
-                                reco_image[0], pose, self.origin_input, 50.0)
-
-                            pose = self.resumePose(
+                            real_pose = self.resumePose(
                                 test_skel[offset], self.origin_input)
 
                             real_img = self.visPair(
-                                test_img[offset], pose, self.origin_input, 50.0)
+                                test_img[offset], real_pose, self.origin_input, 50.0)
+
+                            reco_pose = self.resumePose(
+                                reco_pose[0], self.origin_input)
+
+                            fake_img = self.visPair(
+                                reco_image[0], reco_pose, self.origin_input, 50.0)
+
 
                             est_z = self.z_est_t.eval(
                                 {
@@ -356,10 +361,10 @@ class GanRender(ForwardRender):
                                 self.image_gan.y: test_labels[offset:(offset + self.batch_size), :],
                                 # self.pose_vae.keep_prob: 1
                             })
-                            pose = self.resumePose(
+                            est_pose = self.resumePose(
                                 est_pose[0], self.origin_input)
                             est_img = self.visPair(est_image[0],
-                                                   pose,
+                                                   est_pose,
                                                    self.origin_input,
                                                    50.0)
                             recons_image = np.hstack(

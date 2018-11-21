@@ -85,7 +85,7 @@ class PoseVAE(object):
 
         # decoding
         y = self.bernoulli_MLP_decoder(z, n_hidden, dim_img, keep_prob)
-        y = tf.clip_by_value(y, 1e-8, 1 - 1e-8)
+        # y = tf.clip_by_value(y, 1e-8, 1 - 1e-8)
 
         # loss
         marginal_likelihood = tf.reduce_sum(
@@ -167,7 +167,8 @@ class PoseVAE(object):
             wo = tf.get_variable(
                 'wo', [h1.get_shape()[1], n_output], initializer=w_init)
             bo = tf.get_variable('bo', [n_output], initializer=b_init)
-            y = tf.sigmoid(tf.matmul(h1, wo) + bo)
+            y=tf.matmul(h1, wo) + bo
+            # y = tf.sigmoid(tf.matmul(h1, wo) + bo)
 
         return y
 
