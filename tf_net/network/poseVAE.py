@@ -311,7 +311,7 @@ class PoseVAE(object):
                             y_PMLR_img, name="/PMLR_epoch_%02d" % (epoch) + ".jpg")
 
                         # plot distribution of labeled images
-                        z_PMLR = self.sess.run(model_name
+                        z_PMLR = self.sess.run(
                             self.z, feed_dict={self.x_hat: x_PMLR})
                         PMLR.save_scattered_image(
                             z_PMLR, id_PMLR, name="/PMLR_map_epoch_%02d" % (epoch) + ".jpg")

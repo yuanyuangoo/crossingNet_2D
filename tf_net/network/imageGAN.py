@@ -25,7 +25,7 @@ class ImageGAN(object):
                  y_dim=15, dim_z=23, gf_dim=64, df_dim=64,
                  gfc_dim=1024, dfc_dim=1024, c_dim=1, dataset_name='h36m',
                  checkpoint_dir="./checkpoint", sample_dir="samples",
-                 learning_rate=0.0002, beta1=0.5, epoch=25, train_size=np.inf, reuse=False):
+                 learning_rate=0.0002, beta1=0.5, epoch=100, train_size=np.inf, reuse=False):
         self.sample_dir = os.path.join(globalConfig.gan_pretrain_path,sample_dir)
         self.epoch = epoch
         self.crop = crop
