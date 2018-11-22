@@ -196,8 +196,8 @@ class PoseVAE(object):
         test_data = np.asarray(test_data)
         test_labels = np.asarray(test_labels)
 
-        train_data = train_data/max(-1*train_data.min(), train_data.max())
-        test_data = test_data/max(-1*test_data.min(), test_data.max())
+        train_data = train_data/np.concatenate((128*np.ones(17*2),60*np.ones(17)))
+        test_data = test_data/np.concatenate((128*np.ones(17*2),60*np.ones(17)))
 
         # Generate a validation set.
         validation_data = train_data[:VALIDATION_SIZE, :]

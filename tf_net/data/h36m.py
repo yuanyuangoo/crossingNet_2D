@@ -110,6 +110,8 @@ class H36M:
         P2d = self.getPart2D(index)
         imgname = self.getImgName_Label(index)[0]
         imgname = imgname[len(ref.h36mImgDir):]
+        if imgname not in self.bbox:
+            return 1
         P2d_croped = self.Crop(P2d, self.bbox[imgname])
         P2d_centered = (P2d_croped.T-P2d_croped.T[self.root]).T
         P3d = self.getPart3D(index)
@@ -121,6 +123,8 @@ class H36M:
         P3d_roted_centered_resized = P3d_roted_centered *\
             norm_P2d_centered/norm_P3d_roted_centered
         skel = np.vstack((P2d_croped, P3d_roted_centered_resized[2, :]))
+        if skel.max()>=128:
+            return 1
         return skel
 
     def getSkel_Label(self, index):
@@ -187,6 +191,8 @@ class H36M:
 
 
 # a = H36M('valid')
+# for i in range(a.nSamples):
+#     a.getSkel(i)
 #print(a.getRotation(1))
 #print(a.getPart3D(1))
 # print(a.getSkel(1412))

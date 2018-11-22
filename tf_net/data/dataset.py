@@ -72,6 +72,8 @@ class Dataset(object):
             [frmPath, label] = data.getImgName_onehotLabel(frmIdx)
 
             skel = np.asarray(data.getSkel(frmIdx))
+            if skel.shape == ():
+                continue
             skel.shape = (-1)
 
             img = Image('H36M', frmPath)
@@ -95,5 +97,9 @@ if __name__ == '__main__':
 
     if dataset == 'H36M':
         ds = Dataset()
-        for i in range(0, 20000, 10000):
-            ds.loadH36M(i, tApp=True, replace=True, mode='valid')
+        for i in range(0, 150000, 10000):
+            print(i)
+            ds.loadH36M(i, tApp=True, replace=False, mode='valid')
+        for i in range(0, 3000000, 10000):
+            print(i)
+            ds.loadH36M(i, tApp=True, replace=False, mode='Train')
