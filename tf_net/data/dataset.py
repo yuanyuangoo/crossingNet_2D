@@ -47,7 +47,6 @@ class Dataset(object):
                                                      mode, fileIdx)
 
         if os.path.isfile(pickleCachePath) and not replace:
-            return
             print('direct load from the cache')
             t1 = time.time()
             f = open(pickleCachePath, 'rb')
