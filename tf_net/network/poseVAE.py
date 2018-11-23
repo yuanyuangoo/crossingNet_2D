@@ -63,9 +63,18 @@ class PoseVAE(object):
         #latent_variable
         self.z_in = tf.placeholder(
             tf.float32, shape=[None, dim_z], name='latent_variable')
+        self.z_in_sum = histogram_summary("z_in", self.z_in)
 
         self.y, self.z, self.loss, self.neg_marginal_likelihood, self.KL_divergence = self.autoencoder(
             self.x_hat, self.x, self.dim_x, self.dim_z, self.n_hidden, self.keep_prob)
+        self.y_sum = histogram_summary("y", self.y)
+        self.z_sum = histogram_summary("z", self.z)
+        self.loss_sum = scalar_summary("loss", self.loss)
+        self.neg_marginal_likelihood_sum = scalar_summary(
+            "neg_marginal_likelihood", self.neg_marginal_likelihood)
+        self.KL_divergence_sum = scalar_summary(
+            "KL_divergence", self.KL_divergence)
+
 
         t_vars = tf.trainable_variables()
         self.encoder_vars = [var for var in t_vars if 'encoder' in var.name]
@@ -89,7 +98,7 @@ class PoseVAE(object):
 
         # decoding
         y = self.decoder(z, n_hidden, dim_img, keep_prob)
-        # y = tf.clip_by_value(y, 1e-8, 1 - 1e-8)
+        y = tf.clip_by_value(y, 1e-8, 1 - 1e-8)
 
         # loss
         marginal_likelihood = tf.reduce_sum(
@@ -256,7 +265,12 @@ class PoseVAE(object):
                 print(" [*] Load SUCCESS")
             else:
                 print(" [!] Load failed...")
-            self.sess.run(tf.global_variables_initializer())
+            tf.global_variables_initializer().run()
+            self.sum = merge_summary([self.x_sum, self.x_hat_sum, self.z_sum, self.z_in_sum, self.y_sum,
+                                      self.neg_marginal_likelihood_sum, self.KL_divergence_sum, self.loss_sum])
+            self.writer = SummaryWriter(
+                os.path.join(globalConfig.vae_pretrain_path, "logs"), graph=self.sess.graph, filename_suffix='.poseVAE')
+
 
             for epoch in range(self.num_epochs):
 

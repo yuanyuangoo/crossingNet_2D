@@ -47,6 +47,7 @@ class Dataset(object):
                                                      mode, fileIdx)
 
         if os.path.isfile(pickleCachePath) and not replace:
+            return
             print('direct load from the cache')
             t1 = time.time()
             f = open(pickleCachePath, 'rb')
@@ -58,6 +59,7 @@ class Dataset(object):
 
         data = H36M(mode)
         if frmStartNum >= data.nSamples:
+            return
             raise ValueError(
                 'invalid start frame, shoud be lower than {}'.format(data.nSamples))
 
@@ -97,9 +99,6 @@ if __name__ == '__main__':
 
     if dataset == 'H36M':
         ds = Dataset()
-        for i in range(0, 150000, 10000):
-            print(i)
-            ds.loadH36M(i, tApp=True, replace=False, mode='valid')
         for i in range(0, 3000000, 10000):
             print(i)
-            ds.loadH36M(i, tApp=True, replace=False, mode='Train')
+            ds.loadH36M(i, tApp=True, replace=False, mode='train')
