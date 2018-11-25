@@ -16,6 +16,7 @@ sys.path.append('./')
 sys.path.append('./data/')
 import globalConfig
 from dataset import *
+from data.layers import *
 
 class GanRender(ForwardRender):
     # gan=Lgan, est=Lpos, metric=Lsmo, recons=Lrecons
@@ -23,10 +24,16 @@ class GanRender(ForwardRender):
     GenErr = namedtuple('genErr', ['gan', 'recons', 'metric'])
     golden_max = 1.0
 
-    def __init__(self, x_dim, rndGanInput=False, metricCombi=False,):
+    def __init__(self, x_dim, rndGanInput=False, metricCombi=False, checkpoint_dir="./checkpoint", sample_dir="samples"):
         super(GanRender, self).__init__(x_dim)
         self.rndGanInput = rndGanInput
         self.metricCombi = metricCombi
+
+        self.checkpoint_dir = os.path.join(
+            globalConfig.gan_Render_pretrain_path, checkpoint_dir)
+        self.sample_dir = os.path.join(
+            globalConfig.gan_Render_pretrain_path, sample_dir)
+
         gen_vars = self.alignment_vars+self.image_gan.g_vars
 
         # Lrecons
@@ -97,6 +104,12 @@ class GanRender(ForwardRender):
         self.metric_loss = tf.reduce_mean(metric_loss)
 
         self.gen_loss = self.gan_loss_gen + self.recons_loss + self.metric_loss
+        self.gan_loss_gen_sum = scalar_summary(
+            "gan_loss_gen", self.gan_loss_gen)
+        self.recons_loss_sum = scalar_summary("recons_loss", self.recons_loss)
+        self.metric_loss_sum = scalar_summary("metric_loss", self.metric_loss)
+        self.gen_loss_sum = scalar_summary("gen_loss", self.gen_loss)
+
         self.gen_optim = tf.train.AdamOptimizer(
             learning_rate=self.lr, beta1=self.b1).minimize(self.gen_loss, var_list=gen_vars)
         print('gen_train_fn compiled')
@@ -132,31 +145,17 @@ class GanRender(ForwardRender):
         print('init_dis_fn compiled')
 
         self.est_pose_z = tf.placeholder(dtype=tf.float32, name="est_pose_z")
-        self.est_pose_t = self.pose_vae.decoder(
+        self.est_pose_t = self.pose_vae.sampler(
             self.est_pose_z, self.pose_vae.dim_x, self.pose_vae.n_hidden)
-        self.saver = tf.train.Saver()
+        # self.saver = tf.train.Saver()
+
+
 
     def train(self, nepoch=None, train_dataset=None, valid_dataset=None, desc='dummy'):
-        cache_dir = os.path.join(
-            globalConfig.model_dir, 'gan_render/%s_%s' % (globalConfig.dataset, desc))
-        model_dir = os.path.join(cache_dir, 'pretrained_model')
-        cache_dir = os.path.join(cache_dir, desc)
-        if not os.path.exists(cache_dir):
-            os.makedirs(cache_dir)
-        log_path = os.path.join(cache_dir, 'log.txt')
-        flog = open(log_path, 'w')
-        flog.close()
-
-        img_dir = os.path.join(cache_dir, 'img')
-        if os.path.exists(img_dir):
-            shutil.rmtree(img_dir)
-        os.mkdir(img_dir)
-        param_dir = os.path.join(cache_dir, 'vars')
-        if not os.path.exists(param_dir):
-            os.mkdir(param_dir)
-
-        self.pose_vae.load(self.pose_vae.checkpoint_dir)
-        self.image_gan.load(self.image_gan.checkpoint_dir)
+        if not os.path.exists(self.checkpoint_dir):
+            os.makedirs(self.checkpoint_dir)
+        if not os.path.exists(self.sample_dir):
+            os.makedirs(self.sample_dir)
 
         #load train dataset
         train_skel = []
@@ -174,10 +173,11 @@ class GanRender(ForwardRender):
             test_skel.append(frm.skel)
             test_labels.append(frm.label)
             test_img.append(frm.norm_img)
-        train_skel = np.asarray(train_skel)
+        train_skel = np.asarray(train_skel)/np.concatenate((128*np.ones(17*2),60*np.ones(17)))
         train_labels = np.asarray(train_labels)
         train_img = np.asarray(train_img)
-        test_skel = np.asarray(test_skel)
+        test_skel = np.asarray(test_skel)/np.concatenate((128*np.ones(17*2),60*np.ones(17)))
+
         test_labels = np.asarray(test_labels)
         test_img = np.asarray(test_img)
         #normalize skel data
@@ -196,6 +196,28 @@ class GanRender(ForwardRender):
             except:
                 tf.initialize_all_variables().run()
 
+            pose_vae_var = [val for val in tf.trainable_variables(
+            ) if 'encoder' in val.name or 'decoder' in val.name]
+            self.saver = tf.train.Saver(pose_vae_var)
+            could_load, checkpoint_counter = self.load(
+                self.pose_vae.checkpoint_dir)
+
+            image_gan_var = [val for val in tf.trainable_variables(
+            ) if 'generator' in val.name or 'discriminator' in val.name]
+            self.saver = tf.train.Saver(image_gan_var)
+            could_load, checkpoint_counter = self.load(
+                self.image_gan.checkpoint_dir)
+                
+            self.saver = tf.train.Saver()
+
+            # could_load = False
+            if could_load:
+                counter = checkpoint_counter
+                print(" [*] Load SUCCESS")
+            else:
+                print(" [!] Load failed...")
+            self.writer = SummaryWriter(
+                            os.path.join(globalConfig.gan_Render_pretrain_path, "logs"), graph=self.sess.graph, filename_suffix='.imageGAN')
             for epoch in tqdm(range(nepoch)):
                 gen_errs, dis_errs = np.zeros((3,)), np.zeros((3,))
                 gen_err, dis_err, nupdates = 0, 0, 0
@@ -212,6 +234,7 @@ class GanRender(ForwardRender):
                         gen_err, _ = self.sess.run([self.recons_loss, self.align_optim], feed_dict={
                             self.image_gan.inputs: train_img[offset:(offset + self.batch_size), :, :, :],
                             self.pose_vae.x_hat: train_skel[offset:(offset + self.batch_size), :],
+                            self.pose_vae.label_hat:train_labels[offset:(offset + self.batch_size), :],
                             # self.origin_input: None,
                             self.image_gan.y: train_labels[offset:(offset + self.batch_size), :],
                             self.combi_weights_input: combi_noises
@@ -223,6 +246,8 @@ class GanRender(ForwardRender):
                         est_err, metr_err, _ = self.sess.run([self.loss_dis_est, self.metric_loss, self.init_dis_optim], feed_dict={
                             self.image_gan.inputs: train_img[offset:(offset + self.batch_size), :],
                             self.pose_vae.x_hat: train_skel[offset:(offset + self.batch_size), :],
+                            self.pose_vae.label_hat:train_labels[offset:(offset + self.batch_size), :],
+
                             # self.origin_input: None,
                             self.image_gan.y: train_labels[offset:(offset + self.batch_size), :],
                             self.combi_weights_input: combi_noises
@@ -240,6 +265,8 @@ class GanRender(ForwardRender):
                             [self.dis_loss, self.loss_dis_est, self.metric_loss, self.dis_optim], feed_dict={
                                 self.image_gan.inputs: train_img[offset:(offset + self.batch_size), :],
                                 self.pose_vae.x_hat: train_skel[offset:(offset + self.batch_size), :],
+                                self.pose_vae.label_hat:train_labels[offset:(offset + self.batch_size), :],
+
                                 # self.origin_input: None,
                                 self.image_gan.y: train_labels[offset:(offset + self.batch_size), :],
                                 self.combi_weights_input: combi_noises
@@ -254,6 +281,7 @@ class GanRender(ForwardRender):
                             [self.gan_loss_gen, self.recons_loss, self.metric_loss, self.gen_optim], feed_dict={
                                 self.image_gan.inputs: train_img[offset:(offset + self.batch_size), :],
                                 self.pose_vae.x_hat: train_skel[offset:(offset + self.batch_size), :],
+                                self.pose_vae.label_hat:train_labels[offset:(offset + self.batch_size), :],
                                 # self.origin_input: None,
                                 self.image_gan.y: train_labels[offset:(offset + self.batch_size), :],
                                 self.combi_weights_input: combi_noises
@@ -268,6 +296,8 @@ class GanRender(ForwardRender):
                             [self.dis_loss, self.loss_dis_est, self.metric_loss, self.dis_optim], feed_dict={
                                 self.image_gan.inputs: train_img[offset:(offset + self.batch_size), :],
                                 self.pose_vae.x_hat: train_skel[offset:(offset + self.batch_size), :],
+                                self.pose_vae.label_hat:train_labels[offset:(offset + self.batch_size), :],
+
                                 # self.origin_input: None,
                                 self.image_gan.y: train_labels[offset:(offset + self.batch_size), :],
                                 self.combi_weights_input: combi_noises
@@ -282,6 +312,8 @@ class GanRender(ForwardRender):
                             [self.gan_loss_gen, self.recons_loss, self.metric_loss, self.gen_optim], feed_dict={
                                 self.image_gan.inputs: train_img[offset:(offset + self.batch_size), :],
                                 self.pose_vae.x_hat: train_skel[offset:(offset + self.batch_size), :],
+                                self.pose_vae.label_hat:train_labels[offset:(offset + self.batch_size), :],
+
                                 # self.origin_input: None,
                                 self.image_gan.y: train_labels[offset:(offset + self.batch_size), :],
                                 self.combi_weights_input: combi_noises
@@ -301,10 +333,7 @@ class GanRender(ForwardRender):
                     # print('epoch: {}, batch: {}'.format(epoch, i))
                     # print('disErr: {}'.format(dis_errs))
                     # print('genErr: {}'.format(gen_errs))
-                    flog = open(log_path, 'a')
-                    flog.write('epoch {}s\n'.format(epoch))
-                    flog.write(json.dumps((dis_errs, gen_errs))+'\n')
-                    flog.close()
+
                     n_samples_test = test_img.shape[0]
                     total_batch_test = int(n_samples_test/self.batch_size)
                     if epoch % 10 == 0 and valid_dataset is not None:
@@ -316,6 +345,8 @@ class GanRender(ForwardRender):
                             offset = (i * self.batch_size) % (n_samples_test)
                             reco_image = self.render.eval({
                                 self.pose_input: test_skel[offset:(offset + self.batch_size), :],
+                                self.pose_vae.label_hat:train_labels[offset:(offset + self.batch_size), :],
+
                                 # self.pose_vae.y: test_labels[offset+i, :],
                                 # self.origin_input: None,
                                 self.image_gan.y: test_labels[offset:(offset + self.batch_size), :],
@@ -323,6 +354,8 @@ class GanRender(ForwardRender):
                             })
                             reco_pose = self.pose_vae.y.eval({
                                 self.pose_input: test_skel[offset:(offset + self.batch_size), :],
+                                self.pose_vae.label_hat:train_labels[offset:(offset + self.batch_size), :],
+
                                 # self.origin_input: None,
                                 # self.pose_vae.label: test_labels[offset+i, :],
                                 # self.pose_vae.keep_prob: 1
@@ -356,6 +389,8 @@ class GanRender(ForwardRender):
                                 {self.est_pose_z: est_z})
                             est_image = self.render.eval({
                                 self.pose_input: est_pose,
+                                self.pose_vae.label_hat: train_labels[offset:(offset + self.batch_size), :],
+
                                 # self.pose_vae.y: test_labels[offset:(offset + self.batch_size), :],
                                 # self.origin_input: None,
                                 self.image_gan.y: test_labels[offset:(offset + self.batch_size), :],
@@ -369,14 +404,11 @@ class GanRender(ForwardRender):
                                                    50.0)
                             recons_image = np.hstack(
                                 (real_img, fake_img, est_img))
-                            cv2.imwrite(os.path.join(img_dir, '%d_%d.jpg' % (epoch, i)),
+                            cv2.imwrite(os.path.join(self.sample_dir, '%d_%d.jpg' % (epoch, i)),
                                         recons_image.astype('uint8'))
 
-                    if epoch % 10 == 0:
-                        self.save(os.path.join(param_dir, '-1'), epoch)
-
                     if epoch % 100 == 0:
-                        self.save(os.path.join(param_dir, '%d' % epoch), epoch)
+                        self.save(self.checkpoint_dir, epoch)
 
     @classmethod
     def rndCvxCombination(cls, rng, src_num, tar_num, sel_num):
@@ -397,6 +429,24 @@ class GanRender(ForwardRender):
         return "{}_{}".format(
             globalConfig.dataset, self.batch_size,
         )
+
+    def load(self, checkpoint_dir):
+        import re
+        print(" [*] Reading checkpoints...")
+        checkpoint_dir = os.path.join(checkpoint_dir, self.model_dir)
+
+        ckpt = tf.train.get_checkpoint_state(checkpoint_dir)
+        if ckpt and ckpt.model_checkpoint_path:
+            ckpt_name = os.path.basename(ckpt.model_checkpoint_path)
+            self.saver.restore(
+                self.sess, os.path.join(checkpoint_dir, ckpt_name))
+            counter = int(
+                next(re.finditer("(\d+)(?!.*\d)", ckpt_name)).group(0))
+            print(" [*] Success to read {}".format(ckpt_name))
+            return True, counter
+        else:
+            print(" [*] Failed to find a checkpoint")
+            return False, 0
 
     def save(self, checkpoint_dir, step):
         model_name = "GanRender.model"

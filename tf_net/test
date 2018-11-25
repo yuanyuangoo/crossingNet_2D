@@ -1,0 +1,26 @@
+00:<tf.Variable 'generator/g_h0_lin/Matrix:0' shape=(38, 1024) dtype=float32_ref>
+01:<tf.Variable 'generator/g_h0_lin/bias:0' shape=(1024,) dtype=float32_ref>
+02:<tf.Variable 'generator/g_bn0/beta:0' shape=(1024,) dtype=float32_ref>
+03:<tf.Variable 'generator/g_bn0/gamma:0' shape=(1024,) dtype=float32_ref>
+04:<tf.Variable 'generator/g_h1_lin/Matrix:0' shape=(1039, 131072) dtype=float32_ref>
+05:<tf.Variable 'generator/g_h1_lin/bias:0' shape=(131072,) dtype=float32_ref>
+06:<tf.Variable 'generator/g_bn1/beta:0' shape=(131072,) dtype=float32_ref>
+07:<tf.Variable 'generator/g_bn1/gamma:0' shape=(131072,) dtype=float32_ref>
+08:<tf.Variable 'generator/g_h2/w:0' shape=(5, 5, 128, 143) dtype=float32_ref>
+09:<tf.Variable 'generator/g_h2/biases:0' shape=(128,) dtype=float32_ref>
+10:<tf.Variable 'generator/g_bn2/beta:0' shape=(128,) dtype=float32_ref>
+11:<tf.Variable 'generator/g_bn2/gamma:0' shape=(128,) dtype=float32_ref>
+12:<tf.Variable 'generator/g_h3/w:0' shape=(5, 5, 1, 143) dtype=float32_ref>
+13:<tf.Variable 'generator/g_h3/biases:0' shape=(1,) dtype=float32_ref>
+14:<tf.Variable 'discriminator/d_h0_conv/w:0' shape=(5, 5, 16, 16) dtype=float32_ref>
+15:<tf.Variable 'discriminator/d_h0_conv/biases:0' shape=(16,) dtype=float32_ref>
+16:<tf.Variable 'discriminator/d_h1_conv/w:0' shape=(5, 5, 31, 79) dtype=float32_ref>
+17:<tf.Variable 'discriminator/d_h1_conv/biases:0' shape=(79,) dtype=float32_ref>
+18:<tf.Variable 'discriminator/d_bn1/beta:0' shape=(79,) dtype=float32_ref>
+19:<tf.Variable 'discriminator/d_bn1/gamma:0' shape=(79,) dtype=float32_ref>
+20:<tf.Variable 'discriminator/d_h2_lin/Matrix:0' shape=(80911, 1024) dtype=float32_ref>
+21:<tf.Variable 'discriminator/d_h2_lin/bias:0' shape=(1024,) dtype=float32_ref>
+22:<tf.Variable 'discriminator/d_bn2/beta:0' shape=(1024,) dtype=float32_ref>
+23:<tf.Variable 'discriminator/d_bn2/gamma:0' shape=(1024,) dtype=float32_ref>
+24:<tf.Variable 'discriminator/d_h3_lin/Matrix:0' shape=(1039, 1) dtype=float32_ref>
+25:<tf.Variable 'discriminator/d_h3_lin/bias:0' shape=(1,) dtype=float32_ref>

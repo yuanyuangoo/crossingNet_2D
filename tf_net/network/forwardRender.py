@@ -13,13 +13,15 @@ import cv2
 sys.path.append('./')
 import globalConfig
 from data.util import show_all_variables
+from data.layers import *
 
 class ForwardRender(object):
     def __init__(self, dim_x):
         self.keep_prob = 1.0
         self.dim_x = dim_x
-        self.pose_vae = PoseVAE(dim_x=dim_x, ADD_NOISE=True)
+        self.pose_vae = PoseVAE(dim_x=dim_x)
         self.origin_input = tf.placeholder(tf.float32, shape=(None, 3),name="origin")
+        self.origin_input_sum = histogram_summary("origin_input", self.origin_input)
 
         self.image_gan = ImageGAN()
         self.dim_z = self.image_gan.dim_z
@@ -27,11 +29,12 @@ class ForwardRender(object):
         self.render = self.build_latent_alignment_layer(self.pose_vae)
         _, self.dis_px_layer, self.feamat_layer,  = self.image_gan.build_discriminator(
             self.render, self.image_gan.y, reuse=True)
+        self.render_sum = image_summary("render", self.render)
 
         self.lr, self.b1 = 0.001, 0.5
         self.batch_size = self.pose_vae.batch_size
         print('vae and gan initialized')
-        show_all_variables()
+        # show_all_variables()
         # print('all parameters: {}'.format(self.params))
 
         self.pose_input = self.pose_vae.x_hat

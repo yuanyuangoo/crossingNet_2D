@@ -17,7 +17,7 @@ NUM_LABELS = 15
 
 class PoseVAE(object):
     def __init__(
-            self, dim_x=Num_of_Joints*3, batch_size=64, lr=1e-3, num_epochs=300000000,
+            self, dim_x=Num_of_Joints*3, batch_size=64, lr=1e-3, num_epochs=300,
             dim_z=23, label_dim=15, n_hidden=40, PRR=True, PRR_n_img_x=10, PRR_n_img_y=10, PRR_resize_factor=1.0,
             PMLR=True, PMLR_n_img_x=20, PMLR_n_img_y=20, PMLR_resize_factor=1.0, PMLR_z_range=2.0, PMLR_n_samples=5000, reuse=False):
 
@@ -84,8 +84,7 @@ class PoseVAE(object):
         self.encoder_vars = [var for var in t_vars if 'encoder' in var.name]
         self.decoder_vars = [var for var in t_vars if 'decoder' in var.name]
 
-        self.train_op = tf.train.AdamOptimizer(lr).minimize(
-            self.loss)
+
         self.saver = tf.train.Saver()
 
     def sampler(self, z, dim_img, n_hidden):
@@ -269,6 +268,8 @@ class PoseVAE(object):
             # x_PMLR += np.random.randint(2, size=x_PMLR.shape)
 
             decoded = vae.sampler(self.z_in, self.dim_x, self.n_hidden)
+        self.train_op = tf.train.AdamOptimizer(self.lr).minimize(
+            self.loss)
         with tf.Session() as self.sess:
             counter = 1
             could_load, checkpoint_counter = self.load(self.checkpoint_dir)
@@ -354,9 +355,8 @@ class PoseVAE(object):
 
     @property
     def model_dir(self):
-        return "{}_{}_{}".format(
-            globalConfig.dataset, self.batch_size,
-            self.dim_z)
+        return "{}_{}".format(
+            globalConfig.dataset, self.batch_size)
 
     def load(self, checkpoint_dir):
         import re
@@ -392,11 +392,11 @@ if __name__ == '__main__':
     if globalConfig.dataset == 'H36M':
         import data.h36m as h36m
         ds = Dataset()
-        for i in range(0, 100000, 20000):
+        for i in range(0, 20000, 20000):
             ds.loadH36M(i, mode='train', tApp=True, replace=False)
 
         val_ds = Dataset()
-        for i in range(0, 100000, 20000):
+        for i in range(0, 20000, 20000):
             val_ds.loadH36M(i, mode='valid', tApp=True, replace=False)
     else:
         raise ValueError('unknown dataset %s' % globalConfig.dataset)

@@ -17,15 +17,13 @@ b1 = 0.5
 noise_dim = 23
 K = 1
 
-
-
 class ImageGAN(object):
     def __init__(self, input_height=128, input_width=128, crop=True,
                  batch_size=64, sample_num=64, output_height=128, output_width=128,
                  y_dim=15, dim_z=23, gf_dim=64, df_dim=64,
-                 gfc_dim=1024, dfc_dim=1024, c_dim=1, dataset_name='h36m',
+                 gfc_dim=1024, dfc_dim=1024, c_dim=1, dataset_name='H36M',
                  checkpoint_dir="./checkpoint", sample_dir="samples",
-                 learning_rate=0.0002, beta1=0.5, epoch=100, train_size=np.inf, reuse=False):
+                 learning_rate=0.0002, beta1=0.5, epoch=10, train_size=np.inf, reuse=False):
         self.sample_dir = os.path.join(globalConfig.gan_pretrain_path,sample_dir)
         self.epoch = epoch
         self.crop = crop
@@ -134,8 +132,8 @@ class ImageGAN(object):
 
         t_vars = tf.trainable_variables()
 
-        self.d_vars = [var for var in t_vars if 'd_' in var.name]
-        self.g_vars = [var for var in t_vars if 'g_' in var.name]
+        self.d_vars = [var for var in t_vars if 'discriminator' in var.name]
+        self.g_vars = [var for var in t_vars if 'generator' in var.name]
 
         self.saver = tf.train.Saver()
 
@@ -456,9 +454,8 @@ class ImageGAN(object):
 
     @property
     def model_dir(self):
-        return "{}_{}_{}_{}".format(
-            self.dataset_name, self.batch_size,
-            self.output_height, self.output_width)
+        return "{}_{}".format(
+            self.dataset_name, self.batch_size)
 
     def save(self, checkpoint_dir, step):
         model_name = "DCGAN.model"
