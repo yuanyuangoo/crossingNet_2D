@@ -64,7 +64,7 @@ class GanRender(ForwardRender):
             return tf.nn.sigmoid_cross_entropy_with_logits(logits=x, labels=y)
 
         loss_dis_real = tf.reduce_mean(
-            sigmoid_cross_entropy_with_logits(px_real, tf.ones_like(px_real)))  # for real image Discriminator
+            sigmoid_cross_entropy_with_logits(px_real, tf.ones_like(px_real)) * (1 - self.image_gan.smooth))  # for real image Discriminator
         loss_dis_fake = tf.reduce_mean(
             sigmoid_cross_entropy_with_logits(px_fake, tf.zeros_like(px_fake)))  # for fake image Discriminator
         self.loss_dis_gan = loss_dis_real+loss_dis_fake

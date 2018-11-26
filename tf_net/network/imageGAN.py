@@ -112,13 +112,14 @@ class ImageGAN(object):
 
         def sigmoid_cross_entropy_with_logits(x, y):
             return tf.nn.sigmoid_cross_entropy_with_logits(logits=x, labels=y)
-            
+
+        self.smooth = 0.05
         self.d_loss_real = tf.reduce_mean(
-            sigmoid_cross_entropy_with_logits(self.D_logits, tf.ones_like(self.D)))  # for real image Discriminator
+            sigmoid_cross_entropy_with_logits(self.D_logits, tf.ones_like(self.D_logits)) * (1 - self.smooth))  # for real image Discriminator
         self.d_loss_fake = tf.reduce_mean(
-            sigmoid_cross_entropy_with_logits(self.D_logits_, tf.zeros_like(self.D_)))  # for fake image Discriminator
+            sigmoid_cross_entropy_with_logits(self.D_logits_, tf.zeros_like(self.D_logits_)))  # for fake image Discriminator
         self.g_loss = tf.reduce_mean(
-            sigmoid_cross_entropy_with_logits(self.D_logits_, tf.ones_like(self.D_)))  # for fake image Generator
+            sigmoid_cross_entropy_with_logits(self.D_logits_, tf.ones_like(self.D_logits_)*(1-self.smooth)))  # for fake image Generator
 
         self.d_loss_real_sum = scalar_summary(
             "d_loss_real", self.d_loss_real)
@@ -157,6 +158,7 @@ class ImageGAN(object):
             h2 = lrelu(self.d_bn2(linear(h1, self.dfc_dim, 'd_h2_lin')))
             h2 = concat([h2, y], 1)
 
+            # logits
             h3 = linear(h2, 1, 'd_h3_lin')
 
             return tf.nn.tanh(h3), h3, h2
@@ -313,7 +315,7 @@ class ImageGAN(object):
             os.makedirs(self.checkpoint_dir)
         if not os.path.exists(self.sample_dir):
             os.makedirs(self.sample_dir)
-        show_all_variables()
+        # show_all_variables()
         train_data = []
         train_labels = []
 
@@ -493,11 +495,11 @@ if __name__ == '__main__':
     if globalConfig.dataset == 'H36M':
         import data.h36m as h36m
         ds = Dataset()
-        for i in range(0, 80000, 20000):
+        for i in range(0, 20000, 20000):
             ds.loadH36M(i, mode='train', tApp=True, replace=False)
 
         val_ds = Dataset()
-        for i in range(0, 40000, 20000):
+        for i in range(0, 20000, 20000):
             val_ds.loadH36M(i, mode='valid', tApp=True, replace=False)
     else:
         raise ValueError('unknown dataset %s' % globalConfig.dataset)
