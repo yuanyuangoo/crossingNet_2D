@@ -172,6 +172,11 @@ class ForwardRender(object):
 
         skel = pose.copy()
         skel.shape = (3, -1)
+        skel = skel[0:2,:]
+        min_s = skel.min()
+        max_s = skel.max()
+        mid_s = (min_s+max_s)/2
+        skel = (((skel-mid_s)/(max_s-min_s))+0.52)*125
         if ratio is not None:
             skel = skel*ratio
         # skel2 = []

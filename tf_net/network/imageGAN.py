@@ -23,7 +23,7 @@ class ImageGAN(object):
                  y_dim=15, dim_z=23, gf_dim=64, df_dim=64,
                  gfc_dim=1024, dfc_dim=1024, c_dim=1, dataset_name='H36M',
                  checkpoint_dir="./checkpoint", sample_dir="samples",
-                 learning_rate=0.0002, beta1=0.5, epoch=10, train_size=np.inf, reuse=False):
+                 learning_rate=0.0002, beta1=0.5, epoch=200, train_size=np.inf, reuse=False):
         self.sample_dir = os.path.join(globalConfig.gan_pretrain_path,sample_dir)
         self.epoch = epoch
         self.crop = crop
@@ -493,11 +493,12 @@ if __name__ == '__main__':
     if globalConfig.dataset == 'H36M':
         import data.h36m as h36m
         ds = Dataset()
-        for i in range(0, 20000, 20000):
+        for i in range(0, 80000, 20000):
             ds.loadH36M(i, mode='train', tApp=True, replace=False)
 
         val_ds = Dataset()
-        val_ds.loadH36M(i, mode='valid', tApp=True, replace=False)
+        for i in range(0, 40000, 20000):
+            val_ds.loadH36M(i, mode='valid', tApp=True, replace=False)
     else:
         raise ValueError('unknown dataset %s' % globalConfig.dataset)
 
