@@ -210,7 +210,7 @@ class P2PGAN(object):
             return layers[-1]
 
     def build_generator(self, input, out_channels):
-        with tf.variable_scope("discriminator") as scope:
+        with tf.variable_scope("generator") as scope:
             layers = []
             with tf.variable_scope("encoder_1"):
                 output = gen_conv(input, self.ngf)

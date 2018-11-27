@@ -1,21 +1,17 @@
+import sys
+sys.path.append('./')
+import globalConfig
+from data.layers import *
+from data.dataset import *
+from data.util import *
 import tensorflow as tf
 from six.moves import xrange
 import shutil
 from numpy.random import RandomState
 import time
 import cv2
-import sys
 import os
-sys.path.append('./')
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-from data.util import *
-from data.dataset import *
-from data.layers import *
-import globalConfig
-
-b1 = 0.5
-noise_dim = 23
-K = 1
 
 class ImageGAN(object):
     def __init__(self, input_height=128, input_width=128, crop=True,
@@ -24,7 +20,8 @@ class ImageGAN(object):
                  gfc_dim=1024, dfc_dim=1024, c_dim=1, dataset_name='H36M',
                  checkpoint_dir="./checkpoint", sample_dir="samples",
                  learning_rate=0.0002, beta1=0.5, epoch=200, train_size=np.inf, reuse=False):
-        self.sample_dir = os.path.join(globalConfig.gan_pretrain_path,sample_dir)
+        self.sample_dir = os.path.join(
+            globalConfig.gan_pretrain_path, sample_dir)
         self.epoch = epoch
         self.crop = crop
         self.learning_rate = learning_rate
@@ -86,7 +83,7 @@ class ImageGAN(object):
             image_dims = [self.input_height, self.input_width, 1]
 
         self.inputs = tf.placeholder(
-            tf.float32, [self.batch_size] + image_generator_outputs_channelsdims, name='real_images')
+            tf.float32, [self.batch_size] + image_dims, name='real_images')
         #real image input
         inputs = self.inputs
 
@@ -165,13 +162,20 @@ class ImageGAN(object):
 
     def build_generator(self, z, y=None):
         with tf.variable_scope("generator") as scope:
+            yb = tf.reshape(y, [self.batch_size, 1, 1, self.y_dim])
+            z = concat([z, y], 1)
+
+
+
+
+
+
             s_h, s_w = self.output_height, self.output_width
             s_h2, s_h4 = int(s_h/2), int(s_h/4)
             s_w2, s_w4 = int(s_w/2), int(s_w/4)
 
             # yb = tf.expand_dims(tf.expand_dims(y, 1),2)
-            yb = tf.reshape(y, [self.batch_size, 1, 1, self.y_dim])
-            z = concat([z, y], 1)
+
 
             h0 = tf.nn.relu(
                 self.g_bn0(linear(z, self.gfc_dim, 'g_h0_lin')))
@@ -251,7 +255,7 @@ class ImageGAN(object):
             h3 = linear(h2, output_dim, 'm_h3_lin')
 
             return tf.nn.tanh(h3)
-        
+
     def build_metric_combi(self, image, y, output_dim, hidden=None, reuse=False):
         yb = tf.reshape(y, [self.batch_size, 1, 1, self.y_dim])
         with tf.variable_scope("discriminator") as scope:
@@ -284,7 +288,7 @@ class ImageGAN(object):
             combi_metric = linear(self.combi_input_layer, output_dim)
             return tf.nn.tanh(h3), combi_metric
 
-    def build_sampler(self, z, y=None,keep_prob=0.9):
+    def build_sampler(self, z, y=None, keep_prob=0.9):
         with tf.variable_scope("generator") as scope:
             scope.reuse_variables()
 
@@ -487,8 +491,6 @@ class ImageGAN(object):
         else:
             print(" [*] Failed to find a checkpoint")
             return False, 0
-
-
 
 
 if __name__ == '__main__':
