@@ -385,6 +385,8 @@ if __name__ == '__main__':
             train_input.append(background)
             train_target.append(real)
 
+    train_input = np.asarray(train_input)
+    train_target = np.asarray(train_target)
 
     p2p = P2PGAN()
-    # p2p.train(ds, val_ds)
+    p2p.train(train_input, train_target)
