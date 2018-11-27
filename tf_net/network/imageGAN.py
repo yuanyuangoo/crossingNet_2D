@@ -86,7 +86,7 @@ class ImageGAN(object):
             image_dims = [self.input_height, self.input_width, 1]
 
         self.inputs = tf.placeholder(
-            tf.float32, [self.batch_size] + image_dims, name='real_images')
+            tf.float32, [self.batch_size] + image_generator_outputs_channelsdims, name='real_images')
         #real image input
         inputs = self.inputs
 
