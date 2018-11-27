@@ -377,12 +377,12 @@ class ImageGAN(object):
 
             counter = 1
             start_time = time.time()
-            could_load, checkpoint_counter = self.load(self.checkpoint_dir)
-            if could_load:
-                counter = checkpoint_counter
-                print(" [*] Load SUCCESS")
-            else:
-                print(" [!] Load failed...")
+            # could_load, checkpoint_counter = self.load(self.checkpoint_dir)
+            # if could_load:
+            #     counter = checkpoint_counter
+            #     print(" [*] Load SUCCESS")
+            # else:
+            #     print(" [!] Load failed...")
 
             for epoch in xrange(self.epoch):
                 batch_idxs = min(
@@ -460,7 +460,7 @@ class ImageGAN(object):
             self.dataset_name, self.batch_size)
 
     def save(self, checkpoint_dir, step):
-        model_name = "DCGAN.model"
+        model_name = "IMAGEGAN.model"
         checkpoint_dir = os.path.join(checkpoint_dir, self.model_dir)
 
         if not os.path.exists(checkpoint_dir):
