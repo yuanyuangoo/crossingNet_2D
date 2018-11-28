@@ -9,7 +9,7 @@ class Image(object):
             self.loadSKATE(path)
         elif dataset.upper() == 'H36M':
             self.loadH36M(path)
-        self.data = []
+        # self.data = []
     '''
     loading module
     '''

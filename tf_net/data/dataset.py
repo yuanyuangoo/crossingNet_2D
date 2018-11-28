@@ -32,7 +32,7 @@ class Dataset(object):
         self.h36m_frm_perfile = 10000  # the maximum number of frame to store in each file
         self.cache_base_path = globalConfig.cache_base_path
 
-    def loadH36M(self, frmStartNum, mode='train', replace=False, tApp=False):
+    def loadH36M(self, Fsize, frmStartNum=0, mode='train', replace=False, tApp=False):
         '''
            mode: if train, only save the cropped image
            replace: replace the previous cache file if exists
@@ -42,9 +42,9 @@ class Dataset(object):
             self.frmList = []
         if not tApp:
             self.frmList = []
-        fileIdx = int(frmStartNum / self.h36m_frm_perfile)
-        pickleCachePath = '{}h36m_{}_{}.pkl'.format(self.cache_base_path,
-                                                     mode, fileIdx)
+        # fileIdx = int(frmStartNum / self.h36m_frm_perfile)
+        pickleCachePath = '{}h36m_{}_{}.pkl'.format(
+            self.cache_base_path, mode, Fsize)
 
         if os.path.isfile(pickleCachePath) and not replace:
             print('direct load from the cache')
@@ -55,21 +55,21 @@ class Dataset(object):
             t1 = time.time() - t1
             print('loaded with {}s'.format(t1))
             return self.frmList
-
+        
         data = H36M(mode)
-        if frmStartNum >= data.nSamples:
-            return
-            raise ValueError(
-                'invalid start frame, shoud be lower than {}'.format(data.nSamples))
+        # if frmStartNum >= data.nSamples:
+        #     return
+        #     raise ValueError(
+        #         'invalid start frame, shoud be lower than {}'.format(data.nSamples))
+        frmEndNum = data.nSamples
+        # frmStartNum = fileIdx*self.h36m_frm_perfile
+        # frmEndNum = min(frmStartNum+self.h36m_frm_perfile, data.nSamples)
 
-        frmStartNum = fileIdx*self.h36m_frm_perfile
-        frmEndNum = min(frmStartNum+self.h36m_frm_perfile, data.nSamples)
+        # print('frmStartNum={}, frmEndNum={}, fileIdx={}'.format(frmStartNum,
+        #                                                         frmEndNum,
+        #                                                         fileIdx))
 
-        print('frmStartNum={}, frmEndNum={}, fileIdx={}'.format(frmStartNum,
-                                                                frmEndNum,
-                                                                fileIdx))
-
-        for frmIdx in tqdm(range(frmStartNum, frmEndNum)):
+        for frmIdx in tqdm(range(frmStartNum, int(frmEndNum/Fsize)*Fsize,int(frmEndNum/Fsize))):
             [frmPath, label] = data.getImgName_onehotLabel(frmIdx)
 
             skel = np.asarray(data.getSkel(frmIdx))
@@ -78,7 +78,7 @@ class Dataset(object):
             skel.shape = (-1)
 
             img = Image('H36M', frmPath)
-            self.frmList.append(Frame(img, skel, label))
+            self.frmList.append(Frame(img, skel, label,frmPath))
             # self.frmList[-1].saveOnlyForTrain()
 
         if not os.path.exists(self.cache_base_path):

@@ -61,7 +61,7 @@ msraBones = flattenBones(
 class Frame(object):
     skel_norm_ratio = 50.0
 
-    def __init__(self, img=None, skel=None, label=None):
+    def __init__(self, img=None, skel=None, label=None, path=None):
         # if not isinstance(com2D, np.ndarray):
         #     (self.crop_dm, self.trans, self.com3D) = dm.Detector()
         # else:
@@ -74,6 +74,7 @@ class Frame(object):
             self.label = label
             self.with_skel = True
             self.skel = skel.astype(np.float32)
+            self.path=path
             # self.norm_skel = skel.astype(np.float32)
             #crop_skel is the training label for neurual network, normalize wrt com3D
             # self.crop_skel = (self.skel - repmat(self.com3D, 1, jntNum))[0]

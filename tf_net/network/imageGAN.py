@@ -16,12 +16,12 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 class ImageGAN(object):
     def __init__(self, input_height=128, input_width=128, crop=True,
                  batch_size=64, sample_num=64, output_height=128, output_width=128,
-                 y_dim=15, dim_z=23, gf_dim=64, df_dim=64,
+                 y_dim=15, dim_z=46, gf_dim=64, df_dim=64,
                  gfc_dim=1024, dfc_dim=1024, c_dim=1, dataset_name='H36M',
                  checkpoint_dir="./checkpoint", sample_dir="samples",
                  learning_rate=0.0002, beta1=0.5, epoch=200, train_size=np.inf, reuse=False):
         self.sample_dir = os.path.join(
-            globalConfig.gan_pretrain_path, sample_dir)
+            globalConfig.gan_pretrain_path, sample_dir, str(dim_z)+"_AC")
         self.epoch = epoch
         self.crop = crop
         self.learning_rate = learning_rate
@@ -72,15 +72,16 @@ class ImageGAN(object):
 
         #Generator for fake image
         self.G = self.build_generator(self.z, self.y, reuse=False)
-        #Discriminator for real image
-        self.D_logits = self.build_discriminator(
-            inputs, self.y, reuse=False)
-        self.build_metric(self.y)
         #image
         self.sampler = self.build_generator(self.z, self.y, reuse=True)
+
+        #Discriminator for real image
+        self.D_logits, y_real = self.build_discriminator(
+            inputs,  reuse=False)
         #Discriminator for fake image
-        self.D_logits_ = self.build_discriminator(
-            self.G, self.y, reuse=True)
+        self.D_logits_, y_fake = self.build_discriminator(
+            self.G, reuse=True)
+        
         self.d_sum = histogram_summary("d", self.D_logits)
         self.d__sum = histogram_summary("d_", self.D_logits_)
         self.G_sum = image_summary("G", self.G)
@@ -96,12 +97,19 @@ class ImageGAN(object):
         self.g_loss = tf.reduce_mean(
             sigmoid_cross_entropy_with_logits(self.D_logits_, tf.ones_like(self.D_logits_)*(1-self.smooth)))  # for fake image Generator
 
-        self.d_loss_real_sum = scalar_summary(
-            "d_loss_real", self.d_loss_real)
-        self.d_loss_fake_sum = scalar_summary(
-            "d_loss_fake", self.d_loss_fake)
+        self.loss_cls_real = tf.losses.mean_squared_error(self.y, y_real)
+        self.loss_cls_fake = tf.losses.mean_squared_error(self.y, y_fake)
 
-        self.d_loss = self.d_loss_real + self.d_loss_fake
+        self.loss_cls_fake_sum = scalar_summary(
+            "loss_cls_fake", self.loss_cls_fake)
+        self.loss_cls_real_sum = scalar_summary(
+            "loss_cls_real", self.loss_cls_real)
+        self.d_loss_real_sum = scalar_summary("d_loss_real", self.d_loss_real)
+        self.d_loss_fake_sum = scalar_summary("d_loss_fake", self.d_loss_fake)
+
+        self.d_loss = self.d_loss_real + self.d_loss_fake + \
+            self.loss_cls_real+self.loss_cls_fake
+        self.g_loss = self.g_loss+self.loss_cls_fake
 
         self.g_loss_sum = scalar_summary("g_loss", self.g_loss)
         self.d_loss_sum = scalar_summary("d_loss", self.d_loss)
@@ -113,45 +121,41 @@ class ImageGAN(object):
 
         self.saver = tf.train.Saver()
 
-    def build_discriminator(self, image, y=None, keep_prob=0.9, reuse=False):
+    def build_discriminator(self, image, keep_prob=0.9, reuse=False):
         with tf.variable_scope("discriminator") as scope:
             if reuse:
                 scope.reuse_variables()
 
-            yb = tf.reshape(y, [self.batch_size, 1, 1, self.y_dim])
-            input = conv_cond_concat(image, yb)
+            input = image
 
             self.dis_render = image
 
             dis_conv1 = batchnorm(lrelu(conv2d(input)))
             dis_dropout1 = tf.nn.dropout(dis_conv1, keep_prob)
-            dis_1 = conv_cond_concat(dis_dropout1, yb)
 
-            dis_conv2 = batchnorm(lrelu(conv2d(dis_1)))
+            dis_conv2 = batchnorm(lrelu(conv2d(dis_dropout1)))
             dis_dropout2 = tf.nn.dropout(dis_conv2, keep_prob)
-            dis_2 = conv_cond_concat(dis_dropout2, yb)
 
             self.dis_hidden = dis_conv2
             self.dis_metric = dis_conv2
 
-            dis_conv3 = batchnorm(lrelu(conv2d(dis_2)))
+            dis_conv3 = batchnorm(lrelu(conv2d(dis_dropout2)))
             dis_dropout3 = tf.nn.dropout(dis_conv3, keep_prob)
-            dis_3 = conv_cond_concat(dis_dropout3, yb)
 
-            dis_conv4 = batchnorm(lrelu(conv2d(dis_3)))
+            dis_conv4 = batchnorm(lrelu(conv2d(dis_dropout3)))
             dis_dropout4 = tf.nn.dropout(dis_conv4, keep_prob)
-            dis_4 = conv_cond_concat(dis_dropout4, yb)
 
-            dis_conv5 = batchnorm(lrelu(conv2d(dis_4)))
+            dis_conv5 = batchnorm(lrelu(conv2d(dis_dropout4)))
             dis_dropout5 = tf.nn.dropout(dis_conv5, keep_prob)
-            dis_5 = conv_cond_concat(dis_dropout5, yb)
-            self.feamat=dis_conv5
+            self.feamat = dis_conv5
 
-            dis_full = tf.layers.dense(tf.reshape(
-                dis_5, (self.batch_size, -1)), 1)
+            Y_ = tf.layers.dense(tf.contrib.layers.flatten(
+                dis_dropout5), units=self.y_dim)
+            dis_full = tf.layers.dense(
+                tf.contrib.layers.flatten(dis_dropout5), units=1)
             self.dis_px = dis_full
 
-            return dis_full
+            return dis_full,Y_
 
     def build_generator(self, z, y=None, reuse=False):
         with tf.variable_scope("generator") as scope:
@@ -164,17 +168,17 @@ class ImageGAN(object):
             noise_input = tf.nn.tanh(input)
             dense_1 = batchnorm(
                 lrelu(tf.layers.dense(noise_input, 32*4*4)), axis=1)
-            deconv_0 = conv_cond_concat(tf.reshape(
-                dense_1, [self.batch_size, 4, 4, 32]), yb)
-            deconv_1 = conv_cond_concat(batchnorm(lrelu(deconv(deconv_0))), yb)
-            deconv_2 = conv_cond_concat(batchnorm(lrelu(deconv(deconv_1))), yb)
-            deconv_3 = conv_cond_concat(batchnorm(lrelu(deconv(deconv_2))), yb)
-            deconv_4 = conv_cond_concat(batchnorm(lrelu(deconv(deconv_3))), yb)
+            deconv_0 = tf.reshape(
+                dense_1, [self.batch_size, 4, 4, 32])
+            deconv_1 = batchnorm(lrelu(deconv(deconv_0)))
+            deconv_2 = batchnorm(lrelu(deconv(deconv_1)))
+            deconv_3 = batchnorm(lrelu(deconv(deconv_2)))
+            deconv_4 = batchnorm(lrelu(deconv(deconv_3)))
             deconv_5 = tf.nn.tanh(deconv(deconv_4, out_channels=1))
 
             return deconv_5
 
-    def build_recognition(self, y, output_dim=23, reuse=False, hidden_layer=None):
+    def build_recognition(self, y, output_dim, reuse=False, hidden_layer=None):
         yb = tf.reshape(y, [self.batch_size, 1, 1, self.y_dim])
 
         if hidden_layer is None:
@@ -266,24 +270,28 @@ class ImageGAN(object):
         test_data = np.asarray(test_data)
         test_labels = np.asarray(test_labels)
 
-        VALIDATION_SIZE = 5000  # Size of the validation set.
-        NUM_LABELS = 15
+        # X = np.concatenate(
+        #     (train_data, test_data), axis=0)
+        # y = np.concatenate((train_labels, test_labels), axis=0).astype(np.int)
 
-        # Generate a validation set.
-
-        train_data = train_data[VALIDATION_SIZE:, :]
-        train_labels = train_labels[VALIDATION_SIZE:, :]
-
-        X = np.concatenate(
-            (train_data, test_data), axis=0)
-        y = np.concatenate((train_labels, test_labels), axis=0).astype(np.int)
+        # np.random.shuffle(X)
+        # np.random.seed(seed)
+        # np.random.shuffle(y)
+        idx=list(range(train_data.shape[0]))
         seed = 547
         np.random.seed(seed)
-        np.random.shuffle(X)
-        np.random.seed(seed)
-        np.random.shuffle(y)
-        self.data_X = X
-        self.data_y = y
+        np.random.shuffle(idx)
+
+        self.data_X = train_data[idx]
+        self.data_y = train_labels[idx]
+
+        # idx=list(range(test_labels.shape[0]))
+        # seed = 547
+        # np.random.seed(seed)
+        # np.random.shuffle(idx)
+
+        self.sample_inputs=test_data
+        self.sample_labels=test_labels
 
         with tf.Session() as self.sess:
             d_optim = tf.train.AdamOptimizer(self.learning_rate, beta1=self.beta1) \
@@ -295,18 +303,19 @@ class ImageGAN(object):
             except:
                 tf.initialize_all_variables().run()
 
-            self.g_sum = merge_summary([self.z_sum, self.d__sum,
-                                        self.G_sum, self.d_loss_fake_sum, self.g_loss_sum])
+            self.g_sum = merge_summary(
+                [self.z_sum, self.d__sum, self.G_sum, self.d_loss_fake_sum, self.g_loss_sum, self.loss_cls_fake_sum])
             self.d_sum = merge_summary(
-                [self.z_sum, self.d_sum, self.d_loss_real_sum, self.d_loss_sum])
+                [self.z_sum, self.d_sum, self.d_loss_real_sum, self.d_loss_sum, self.loss_cls_real_sum])
+
             self.writer = SummaryWriter(
                 os.path.join(globalConfig.gan_pretrain_path, "logs"), graph=self.sess.graph, filename_suffix='.imageGAN')
 
             sample_z = np.random.uniform(-1, 1,
                                          size=(self.sample_num, self.dim_z))
 
-            sample_inputs = self.data_X[0:self.sample_num]
-            sample_labels = self.data_y[0:self.sample_num]
+            # sample_inputs = self.data_X[0:self.sample_num]
+            # sample_labels = self.data_y[0:self.sample_num]
 
             counter = 1
             start_time = time.time()
@@ -376,8 +385,8 @@ class ImageGAN(object):
                             [self.sampler, self.d_loss, self.g_loss],
                             feed_dict={
                                 self.z: sample_z,
-                                self.inputs: sample_inputs,
-                                self.y: sample_labels,
+                                self.inputs: self.sample_inputs,
+                                self.y: self.sample_labels,
                             }
                         )
                         save_images(samples, image_manifold_size(samples.shape[0]),
@@ -393,7 +402,7 @@ class ImageGAN(object):
             self.dataset_name, self.batch_size)
 
     def save(self, checkpoint_dir, step):
-        model_name = "IMAGEGAN.model"
+        model_name = "IMAGEGAN_AC.model_"+str(self.dim_z)
         checkpoint_dir = os.path.join(checkpoint_dir, self.model_dir)
 
         if not os.path.exists(checkpoint_dir):
@@ -426,12 +435,14 @@ if __name__ == '__main__':
     if globalConfig.dataset == 'H36M':
         import data.h36m as h36m
         ds = Dataset()
-        for i in range(0, 20000, 20000):
-            ds.loadH36M(i, mode='train', tApp=True, replace=False)
+        train_size = 4096
+        test_size = 64
+        # for i in range(0, tol_train_size):
+        ds.loadH36M(train_size, mode='train', tApp=True, replace=False)
 
         val_ds = Dataset()
-        for i in range(0, 20000, 20000):
-            val_ds.loadH36M(i, mode='valid', tApp=True, replace=False)
+        # for i in range(0, 20000, 20000):
+        val_ds.loadH36M(test_size, mode='valid', tApp=True, replace=False)
     else:
         raise ValueError('unknown dataset %s' % globalConfig.dataset)
 
