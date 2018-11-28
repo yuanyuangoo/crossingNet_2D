@@ -21,7 +21,7 @@ class ImageGAN(object):
                  checkpoint_dir="./checkpoint", sample_dir="samples",
                  learning_rate=0.0002, beta1=0.5, epoch=200, train_size=np.inf, reuse=False):
         self.sample_dir = os.path.join(
-            globalConfig.gan_pretrain_path, sample_dir, str(dim_z)+"_AC")
+            globalConfig.gan_pretrain_path, sample_dir, str(dim_z)+"")
         self.epoch = epoch
         self.crop = crop
         self.learning_rate = learning_rate
@@ -77,10 +77,10 @@ class ImageGAN(object):
 
         #Discriminator for real image
         self.D_logits, y_real = self.build_discriminator(
-            inputs,  reuse=False)
+            inputs, self.y,  reuse=False)
         #Discriminator for fake image
         self.D_logits_, y_fake = self.build_discriminator(
-            self.G, reuse=True)
+            self.G, self.y, reuse=True)
         
         self.d_sum = histogram_summary("d", self.D_logits)
         self.d__sum = histogram_summary("d_", self.D_logits_)
@@ -108,8 +108,8 @@ class ImageGAN(object):
         self.d_loss_fake_sum = scalar_summary("d_loss_fake", self.d_loss_fake)
 
         self.d_loss = self.d_loss_real + self.d_loss_fake + \
-            self.loss_cls_real+self.loss_cls_fake
-        self.g_loss = self.g_loss+self.loss_cls_fake
+            0*(self.loss_cls_real+self.loss_cls_fake)
+        self.g_loss = self.g_loss+0*self.loss_cls_fake
 
         self.g_loss_sum = scalar_summary("g_loss", self.g_loss)
         self.d_loss_sum = scalar_summary("d_loss", self.d_loss)
@@ -121,7 +121,9 @@ class ImageGAN(object):
 
         self.saver = tf.train.Saver()
 
-    def build_discriminator(self, image, keep_prob=0.9, reuse=False):
+    def build_discriminator(self, image,  y=None, keep_prob=0.9, reuse=False):
+        yb = tf.reshape(y, [self.batch_size, 1, 1, self.y_dim])
+
         with tf.variable_scope("discriminator") as scope:
             if reuse:
                 scope.reuse_variables()
@@ -131,28 +133,33 @@ class ImageGAN(object):
             self.dis_render = image
 
             dis_conv1 = batchnorm(lrelu(conv2d(input)))
-            dis_dropout1 = tf.nn.dropout(dis_conv1, keep_prob)
+            dis_dropout1 = conv_cond_concat(
+                tf.nn.dropout(dis_conv1, keep_prob), yb)
 
             dis_conv2 = batchnorm(lrelu(conv2d(dis_dropout1)))
-            dis_dropout2 = tf.nn.dropout(dis_conv2, keep_prob)
+            dis_dropout2 = conv_cond_concat(
+                tf.nn.dropout(dis_conv2, keep_prob), yb)
 
             self.dis_hidden = dis_conv2
             self.dis_metric = dis_conv2
 
             dis_conv3 = batchnorm(lrelu(conv2d(dis_dropout2)))
-            dis_dropout3 = tf.nn.dropout(dis_conv3, keep_prob)
+            dis_dropout3 = conv_cond_concat(
+                tf.nn.dropout(dis_conv3, keep_prob), yb)
 
             dis_conv4 = batchnorm(lrelu(conv2d(dis_dropout3)))
-            dis_dropout4 = tf.nn.dropout(dis_conv4, keep_prob)
+            dis_dropout4 = conv_cond_concat(
+                tf.nn.dropout(dis_conv4, keep_prob), yb)
 
             dis_conv5 = batchnorm(lrelu(conv2d(dis_dropout4)))
-            dis_dropout5 = tf.nn.dropout(dis_conv5, keep_prob)
+            dis_dropout5 = conv_cond_concat(
+                tf.nn.dropout(dis_conv5, keep_prob), yb)
             self.feamat = dis_conv5
 
-            Y_ = tf.layers.dense(tf.contrib.layers.flatten(
-                dis_dropout5), units=self.y_dim)
+            Y_ = tf.layers.dense(tf.reshape(
+                dis_dropout5, (self.batch_size, -1)), units=self.y_dim)
             dis_full = tf.layers.dense(
-                tf.contrib.layers.flatten(dis_dropout5), units=1)
+                tf.reshape(dis_dropout5, (self.batch_size, -1)))
             self.dis_px = dis_full
 
             return dis_full,Y_
@@ -170,10 +177,10 @@ class ImageGAN(object):
                 lrelu(tf.layers.dense(noise_input, 32*4*4)), axis=1)
             deconv_0 = tf.reshape(
                 dense_1, [self.batch_size, 4, 4, 32])
-            deconv_1 = batchnorm(lrelu(deconv(deconv_0)))
-            deconv_2 = batchnorm(lrelu(deconv(deconv_1)))
-            deconv_3 = batchnorm(lrelu(deconv(deconv_2)))
-            deconv_4 = batchnorm(lrelu(deconv(deconv_3)))
+            deconv_1 = conv_cond_concat(batchnorm(lrelu(deconv(deconv_0))), yb)
+            deconv_2 = conv_cond_concat(batchnorm(lrelu(deconv(deconv_1))), yb)
+            deconv_3 = conv_cond_concat(batchnorm(lrelu(deconv(deconv_2))), yb)
+            deconv_4 = conv_cond_concat(batchnorm(lrelu(deconv(deconv_3))), yb)
             deconv_5 = tf.nn.tanh(deconv(deconv_4, out_channels=1))
 
             return deconv_5
@@ -365,7 +372,15 @@ class ImageGAN(object):
                         self.z: batch_z,
                         self.y: batch_labels
                     })
+                    errD_fake_cls = self.loss_cls_fake.eval({
+                        self.z: batch_z,
+                        self.y: batch_labels
+                    })
                     errD_real = self.d_loss_real.eval({
+                        self.inputs: batch_images,
+                        self.y: batch_labels
+                    })
+                    errD_real_cls = self.loss_cls_real.eval({
                         self.inputs: batch_images,
                         self.y: batch_labels
                     })
@@ -378,7 +393,9 @@ class ImageGAN(object):
                     print("Epoch: [%2d/%2d] [%4d/%4d] time: %4.4f, d_loss: %.8f, g_loss: %.8f"
                           % (epoch, self.epoch, idx, batch_idxs,
                              time.time() - start_time, errD_fake+errD_real, errG))
-
+                    print("Epoch: [%2d/%2d] [%4d/%4d] time: %4.4f, errD_fake_cls: %.8f, errD_real_cls: %.8f"
+                          % (epoch, self.epoch, idx, batch_idxs,
+                             time.time() - start_time, errD_fake_cls, errD_real_cls))
                     if np.mod(counter, 100) == 1:
                         # show_all_variables()
                         samples, d_loss, g_loss = self.sess.run(
@@ -402,7 +419,7 @@ class ImageGAN(object):
             self.dataset_name, self.batch_size)
 
     def save(self, checkpoint_dir, step):
-        model_name = "IMAGEGAN_AC.model_"+str(self.dim_z)
+        model_name = "IMAGEGAN.model_"+str(self.dim_z)
         checkpoint_dir = os.path.join(checkpoint_dir, self.model_dir)
 
         if not os.path.exists(checkpoint_dir):
