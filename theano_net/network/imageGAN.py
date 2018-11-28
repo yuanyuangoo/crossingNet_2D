@@ -45,6 +45,9 @@ class ImageGAN(object):
             lasagne.layers.get_output_shape(self.gen_image_layer)
         print ('gen build with generated image shape={}'.format(self.image_shape))
         self.build_discriminative()
+        self.build_recognition(self.z_dim)
+        self.build_metric(output_dim = self.z_dim)
+        self.build_metric_combi(output_dim = self.z_dim)
 
     def build_generative(self, noise_input_layer):
         #firstly create the network shapes and weights

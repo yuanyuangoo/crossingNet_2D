@@ -1,4 +1,3 @@
-from imageGAN import batch_norm, conv2d, deconv2d
 import tensorflow as tf
 from tqdm import tqdm
 from poseVAE import PoseVAE

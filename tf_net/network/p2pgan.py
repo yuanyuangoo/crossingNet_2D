@@ -4,11 +4,11 @@ sys.path.append('./data/')
 import globalConfig
 from data.dataset import *
 from data.util import *
+from data.layers import *
 import tensorflow as tf
 import cv2
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-# from data.layers import *
 EPS = 1e-12
 CROP_SIZE = 128
 image_summary = tf.summary.image
@@ -50,13 +50,13 @@ class P2PGAN(object):
         with tf.variable_scope("p2p") as scope:
             #real image
             self.image_target = tf.placeholder(
-                tf.float32, [self.batch_size, self.input_width, self.input_height, None], name='real_image')
-            #edge image
+                tf.float32, [self.batch_size, self.input_width, self.input_height, 3], name='real_image')
+
             self.image_input = tf.placeholder(
-                tf.float32, [self.batch_size, self.input_width, self.input_height, None], name='background_image')
+                tf.float32, [self.batch_size, self.input_width, self.input_height, 3], name='background_image')
             #label
             self.label = tf.placeholder(
-                tf.float32, [self.batch_size.self.label_dim], name='label')
+                tf.float32, [self.batch_size, self.label_dim], name='label')
             self.image_target_sum = histogram_summary(
                 "image_target", self.image_target)
             self.image_input_sum = histogram_summary(
@@ -185,7 +185,7 @@ class P2PGAN(object):
             # layer_1: [batch, 256, 256, in_channels * 2] => [batch, 128, 128, ndf]
             with tf.variable_scope("layer_1"):
                 convolved = discrim_conv(input, self.ndf, stride=2)
-                rectified = lrelu(convolved, 0.2)
+                rectified = lrelu(convolved)
                 layers.append(rectified)
 
             # layer_2: [batch, 128, 128, ndf] => [batch, 64, 64, ndf * 2]
@@ -198,7 +198,7 @@ class P2PGAN(object):
                     convolved = discrim_conv(
                         layers[-1], out_channels, stride=stride)
                     normalized = batchnorm(convolved)
-                    rectified = lrelu(normalized, 0.2)
+                    rectified = lrelu(normalized)
                     layers.append(rectified)
 
             # layer_5: [batch, 31, 31, ndf * 8] => [batch, 30, 30, 1]
@@ -235,7 +235,7 @@ class P2PGAN(object):
 
             for out_channels in layer_specs:
                 with tf.variable_scope("encoder_%d" % (len(layers) + 1)):
-                    rectified = lrelu(layers[-1], 0.2)
+                    rectified = lrelu(layers[-1])
                     # [batch, in_height, in_width, in_channels] => [batch, in_height/2, in_width/2, out_channels]
                     convolved = gen_conv(rectified, out_channels)
                     output = batchnorm(convolved)
@@ -324,38 +324,7 @@ class P2PGAN(object):
                 return False, 0
 
 
-def gen_conv(batch_input, out_channels):
-    # [batch, in_height, in_width, in_channels] => [batch, out_height, out_width, out_channels]
-    initializer = tf.random_normal_initializer(0, 0.02)
-    return tf.layers.conv2d(batch_input, out_channels, kernel_size=4, strides=(2, 2), padding="same", kernel_initializer=initializer)
 
-
-def gen_deconv(batch_input, out_channels):
-    # [batch, in_height, in_width, in_channels] => [batch, out_height, out_width, out_channels]
-    initializer = tf.random_normal_initializer(0, 0.02)
-    return tf.layers.conv2d_transpose(batch_input, out_channels, kernel_size=4, strides=(2, 2), padding="same", kernel_initializer=initializer)
-
-
-def discrim_conv(batch_input, out_channels, stride):
-    padded_input = tf.pad(batch_input, [[0, 0], [1, 1], [
-                          1, 1], [0, 0]], mode="CONSTANT")
-    return tf.layers.conv2d(padded_input, out_channels, kernel_size=4, strides=(stride, stride), padding="valid", kernel_initializer=tf.random_normal_initializer(0, 0.02))
-
-
-def batchnorm(inputs):
-    return tf.layers.batch_normalization(inputs, axis=3, epsilon=1e-5, momentum=0.1, training=True, gamma_initializer=tf.random_normal_initializer(1.0, 0.02))
-
-
-def lrelu(x, a):
-    with tf.name_scope("lrelu"):
-        # adding these together creates the leak part and linear part
-        # then cancels them out by subtracting/adding an absolute value term
-        # leak: a*x/2 - a*abs(x)/2
-        # linear: x/2 + abs(x)/2
-
-        # this block looks like it has 2 inputs on the graph unless we do this
-        x = tf.identity(x)
-        return (0.5 * (1 + a)) * x + (0.5 * (1 - a)) * tf.abs(x)
 
 
 if __name__ == '__main__':
@@ -374,16 +343,16 @@ if __name__ == '__main__':
     real_dir = os.path.join(globalConfig.h36m_base_path, "images")
     train_input=[]
     train_target=[]
-    with open(os.path.join(globalConfig.h36m_base_path, "annot", "train_images.txt"), 'r') as f:
-        for line in f:
-            background = cv2.resize(cv2.imread(
-                os.path.join(background_dir, line[:-1]), 1), (128, 128))
-            real = cv2.resize(cv2.imread(
-                os.path.join(real_dir, line[:-1]), 1), (128, 128))
-            background = np.asarray(background-127.5, np.float32)/127.5
-            real = np.asarray(real-127.5, np.float32)/127.5
-            train_input.append(background)
-            train_target.append(real)
+    # with open(os.path.join(globalConfig.h36m_base_path, "annot", "train_images.txt"), 'r') as f:
+    #     for line in tqdmf:
+    #         background = cv2.resize(cv2.imread(
+    #             os.path.join(background_dir, line[:-1]), 1), (128, 128))
+    #         real = cv2.resize(cv2.imread(
+    #             os.path.join(real_dir, line[:-1]), 1), (128, 128))
+    #         background = np.asarray(background-127.5, np.float32)/127.5
+    #         real = np.asarray(real-127.5, np.float32)/127.5
+    #         train_input.append(background)
+    #         train_target.append(real)
 
     train_input = np.asarray(train_input)
     train_target = np.asarray(train_target)
