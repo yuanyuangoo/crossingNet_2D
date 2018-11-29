@@ -1,7 +1,7 @@
 import sys
 sys.path.append('./')
 import globalConfig
-from data.layers import *
+from data.ops import *
 from data.dataset import *
 from data.util import *
 import tensorflow as tf
@@ -12,6 +12,11 @@ import time
 import cv2
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+image_summary = tf.summary.image
+scalar_summary = tf.summary.scalar
+histogram_summary = tf.summary.histogram
+merge_summary = tf.summary.merge
+SummaryWriter = tf.summary.FileWriter
 
 class ImageGAN(object):
     def __init__(self, input_height=128, input_width=128, crop=True,
@@ -21,7 +26,7 @@ class ImageGAN(object):
                  checkpoint_dir="./checkpoint", sample_dir="samples",
                  learning_rate=0.0002, beta1=0.5, epoch=200, train_size=np.inf, reuse=False):
         self.sample_dir = os.path.join(
-            globalConfig.gan_pretrain_path, sample_dir, str(dim_z)+"")
+            globalConfig.gan_pretrain_path, sample_dir, str(dim_z)+"_AC")
         self.epoch = epoch
         self.crop = crop
         self.learning_rate = learning_rate
@@ -76,114 +81,119 @@ class ImageGAN(object):
         self.sampler = self.build_generator(self.z, self.y, reuse=True)
 
         #Discriminator for real image
-        self.D_logits, y_real = self.build_discriminator(
-            inputs, self.y,  reuse=False)
+        _, self.D_logits, input_for_classifier = self.build_discriminator(
+            inputs, reuse=False)
         #Discriminator for fake image
-        self.D_logits_, y_fake = self.build_discriminator(
-            self.G, self.y, reuse=True)
-        
-        self.d_sum = histogram_summary("d", self.D_logits)
-        self.d__sum = histogram_summary("d_", self.D_logits_)
-        self.G_sum = image_summary("G", self.G)
+        _, self.D_logits_, input_for_classifier_ = self.build_discriminator(
+            self.G, reuse=True)
+
+        _, self.cls_real = self.classifier(input_for_classifier, reuse=False)
+        _, self.cls_fake = self.classifier(input_for_classifier_, reuse=True)
 
         def sigmoid_cross_entropy_with_logits(x, y):
             return tf.nn.sigmoid_cross_entropy_with_logits(logits=x, labels=y)
 
-        self.smooth = 0.05
-        self.d_loss_real = tf.reduce_mean(
-            sigmoid_cross_entropy_with_logits(self.D_logits, tf.ones_like(self.D_logits)) * (1 - self.smooth))  # for real image Discriminator
-        self.d_loss_fake = tf.reduce_mean(
-            sigmoid_cross_entropy_with_logits(self.D_logits_, tf.zeros_like(self.D_logits_)))  # for fake image Discriminator
-        self.g_loss = tf.reduce_mean(
-            sigmoid_cross_entropy_with_logits(self.D_logits_, tf.ones_like(self.D_logits_)*(1-self.smooth)))  # for fake image Generator
+        self.d_loss_real = tf.reduce_mean(sigmoid_cross_entropy_with_logits(
+            self.D_logits, tf.ones_like(self.D_logits)))  # for real image Discriminator
+        self.d_loss_fake = tf.reduce_mean(sigmoid_cross_entropy_with_logits(
+            self.D_logits_, tf.zeros_like(self.D_logits_)))  # for fake image Discriminator
+        self.g_loss = tf.reduce_mean(sigmoid_cross_entropy_with_logits(
+            self.D_logits_, tf.ones_like(self.D_logits_)))  # for fake image Generator
 
-        self.loss_cls_real = tf.losses.mean_squared_error(self.y, y_real)
-        self.loss_cls_fake = tf.losses.mean_squared_error(self.y, y_fake)
+        self.cls_loss_real = tf.reduce_mean(
+            sigmoid_cross_entropy_with_logits(self.cls_real, self.y))
+        self.cls_loss_fake = tf.reduce_mean(
+            sigmoid_cross_entropy_with_logits(self.cls_fake, self.y))
 
-        self.loss_cls_fake_sum = scalar_summary(
-            "loss_cls_fake", self.loss_cls_fake)
-        self.loss_cls_real_sum = scalar_summary(
-            "loss_cls_real", self.loss_cls_real)
+        self.d_loss = self.d_loss_real + self.d_loss_fake
+        self.g_loss = self.g_loss
+        self.cls_loss = self.cls_loss_real + self.cls_loss_fake
+
         self.d_loss_real_sum = scalar_summary("d_loss_real", self.d_loss_real)
         self.d_loss_fake_sum = scalar_summary("d_loss_fake", self.d_loss_fake)
-
-        self.d_loss = self.d_loss_real + self.d_loss_fake + \
-            0*(self.loss_cls_real+self.loss_cls_fake)
-        self.g_loss = self.g_loss+0*self.loss_cls_fake
+        self.d_loss_sum = scalar_summary("d_loss", self.d_loss)
 
         self.g_loss_sum = scalar_summary("g_loss", self.g_loss)
-        self.d_loss_sum = scalar_summary("d_loss", self.d_loss)
+
+        self.cls_loss_real_sum = scalar_summary(
+            "cls_loss_real", self.cls_loss_real)
+        self.cls_loss_fake_sum = scalar_summary(
+            "cls_loss_fake", self.cls_loss_fake)
+        self.cls_loss_sum = scalar_summary("cls_loss", self.cls_loss)
+
+        self.g_sum = merge_summary(
+            [self.z_sum, self.d_loss_fake_sum,  self.g_loss_sum])
+        self.d_sum = merge_summary(
+            [self.z_sum, self.d_loss_real_sum, self.d_loss_sum])
+        self.cls_sum = merge_summary(
+            [self.cls_loss_real_sum, self.cls_loss_fake_sum, self.cls_loss_sum])
 
         t_vars = tf.trainable_variables()
 
         self.d_vars = [var for var in t_vars if 'discriminator' in var.name]
         self.g_vars = [var for var in t_vars if 'generator' in var.name]
+        self.cls_vars = [
+            var for var in t_vars if 'generator' in var.name]+self.g_vars+self.d_vars
 
+        self.d_optim = tf.train.AdamOptimizer(self.learning_rate, beta1=self.beta1) \
+            .minimize(self.d_loss, var_list=self.d_vars)
+        self.g_optim = tf.train.AdamOptimizer(self.learning_rate, beta1=self.beta1) \
+            .minimize(self.g_loss, var_list=self.g_vars)
+        self.cls_optim = tf.train.AdamOptimizer(self.learning_rate, beta1=self.beta1) \
+            .minimize(self.cls_loss, var_list=self.cls_vars)
         self.saver = tf.train.Saver()
 
-    def build_discriminator(self, image,  y=None, keep_prob=0.9, reuse=False):
-        yb = tf.reshape(y, [self.batch_size, 1, 1, self.y_dim])
+    def build_discriminator(self, x, is_training=True, reuse=False):
+        with tf.variable_scope("discriminator", reuse=reuse):
+            self.dis_render = x
 
-        with tf.variable_scope("discriminator") as scope:
-            if reuse:
-                scope.reuse_variables()
+            net1 = lrelu(conv2d(x, 64, 4, 4, 2, 2, name='d_conv1'))
+            net2 = lrelu(bn(conv2d(net1, 128, 4, 4, 2, 2, name='d_conv2'), is_training=is_training, scope='d_bn2'))
 
-            input = image
+            self.dis_hidden = net2
+            self.dis_metric = net2
 
-            self.dis_render = image
+            net3 = tf.reshape(net2, [self.batch_size, -1])
+            net4 = lrelu(bn(linear(net3, 1024, scope='d_fc3'), is_training=is_training, scope='d_bn3'))
+            out_logit = linear(net4, 1, scope='d_fc4')
+            out = tf.nn.sigmoid(out_logit)
 
-            dis_conv1 = batchnorm(lrelu(conv2d(input)))
-            dis_dropout1 = conv_cond_concat(
-                tf.nn.dropout(dis_conv1, keep_prob), yb)
+            self.feamat = net4
+            self.dis_px = out_logit
+            return out, out_logit, net4
 
-            dis_conv2 = batchnorm(lrelu(conv2d(dis_dropout1)))
-            dis_dropout2 = conv_cond_concat(
-                tf.nn.dropout(dis_conv2, keep_prob), yb)
+    def classifier(self, x, is_training=True, reuse=False):
+        with tf.variable_scope("classifier",reuse=reuse) as scope:
+            net = lrelu(bn(linear(x, 128, scope='c_fc1'), is_training=is_training, scope='c_bn1'))
+            out_logit = linear(net, self.y_dim, scope='c_fc2')
+            out = tf.nn.softmax(out_logit)
 
-            self.dis_hidden = dis_conv2
-            self.dis_metric = dis_conv2
+            return out, out_logit
 
-            dis_conv3 = batchnorm(lrelu(conv2d(dis_dropout2)))
-            dis_dropout3 = conv_cond_concat(
-                tf.nn.dropout(dis_conv3, keep_prob), yb)
+    def build_generator(self, z, y=None, is_training=True, reuse=False):
+        with tf.variable_scope("generator", reuse=reuse) as scope:
 
-            dis_conv4 = batchnorm(lrelu(conv2d(dis_dropout3)))
-            dis_dropout4 = conv_cond_concat(
-                tf.nn.dropout(dis_conv4, keep_prob), yb)
+            # merge noise and code
+            z = concat([z, y], 1)
 
-            dis_conv5 = batchnorm(lrelu(conv2d(dis_dropout4)))
-            dis_dropout5 = conv_cond_concat(
-                tf.nn.dropout(dis_conv5, keep_prob), yb)
-            self.feamat = dis_conv5
+            net = tf.nn.relu(bn(linear(z, 1024, scope='g_fc1'),
+                                is_training=is_training, scope='g_bn1'))
+            net = tf.nn.relu(bn(linear(
+                net, 128 * 8 * 8, scope='g_fc2'), is_training=is_training, scope='g_bn2'))
+            net = tf.nn.relu(bn(linear(
+                net, 128 * 32 * 32, scope='g_fc3'), is_training=is_training, scope='g_bn3'))
+            # net = tf.nn.relu(bn(linear(
+            #     net, 128 * 32 * 32, scope='g_fc4'), is_training=is_training, scope='g_bn4'))
 
-            Y_ = tf.layers.dense(tf.reshape(
-                dis_dropout5, (self.batch_size, -1)), units=self.y_dim)
-            dis_full = tf.layers.dense(
-                tf.reshape(dis_dropout5, (self.batch_size, -1)),1)
-            self.dis_px = dis_full
+            net = tf.reshape(net, [self.batch_size, 32, 32, 128])
+            net = tf.nn.relu(
+                bn(deconv2d(net, [self.batch_size, 64, 64, 64], 4, 4, 2, 2, name='g_dc5'), is_training=is_training,
+                   scope='g_bn5'))
 
-            return dis_full,Y_
+            out = tf.nn.sigmoid(
+                deconv2d(net, [self.batch_size, 128, 128, 1], 4, 4, 2, 2, name='g_dc6'))
 
-    def build_generator(self, z, y=None, reuse=False):
-        with tf.variable_scope("generator") as scope:
-            if reuse:
-                scope.reuse_variables()
-
-            yb = tf.reshape(y, [self.batch_size, 1, 1, self.y_dim])
-            input = concat([z, y], 1)
-
-            noise_input = tf.nn.tanh(input)
-            dense_1 = batchnorm(
-                lrelu(tf.layers.dense(noise_input, 32*4*4)), axis=1)
-            deconv_0 = tf.reshape(
-                dense_1, [self.batch_size, 4, 4, 32])
-            deconv_1 = conv_cond_concat(batchnorm(lrelu(deconv(deconv_0))), yb)
-            deconv_2 = conv_cond_concat(batchnorm(lrelu(deconv(deconv_1))), yb)
-            deconv_3 = conv_cond_concat(batchnorm(lrelu(deconv(deconv_2))), yb)
-            deconv_4 = conv_cond_concat(batchnorm(lrelu(deconv(deconv_3))), yb)
-            deconv_5 = tf.nn.tanh(deconv(deconv_4, out_channels=1))
-
-            return deconv_5
+            return out
 
     def build_recognition(self, y, output_dim, reuse=False, hidden_layer=None):
         yb = tf.reshape(y, [self.batch_size, 1, 1, self.y_dim])
@@ -301,28 +311,16 @@ class ImageGAN(object):
         self.sample_labels=test_labels
 
         with tf.Session() as self.sess:
-            d_optim = tf.train.AdamOptimizer(self.learning_rate, beta1=self.beta1) \
-                .minimize(self.d_loss, var_list=self.d_vars)
-            g_optim = tf.train.AdamOptimizer(self.learning_rate, beta1=self.beta1) \
-                .minimize(self.g_loss, var_list=self.g_vars)
             try:
                 tf.global_variables_initializer().run()
             except:
                 tf.initialize_all_variables().run()
-
-            self.g_sum = merge_summary(
-                [self.z_sum, self.d__sum, self.G_sum, self.d_loss_fake_sum, self.g_loss_sum, self.loss_cls_fake_sum])
-            self.d_sum = merge_summary(
-                [self.z_sum, self.d_sum, self.d_loss_real_sum, self.d_loss_sum, self.loss_cls_real_sum])
 
             self.writer = SummaryWriter(
                 os.path.join(globalConfig.gan_pretrain_path, "logs"), graph=self.sess.graph, filename_suffix='.imageGAN')
 
             sample_z = np.random.uniform(-1, 1,
                                          size=(self.sample_num, self.dim_z))
-
-            # sample_inputs = self.data_X[0:self.sample_num]
-            # sample_labels = self.data_y[0:self.sample_num]
 
             counter = 1
             start_time = time.time()
@@ -346,56 +344,24 @@ class ImageGAN(object):
                     batch_z = np.random.uniform(-1, 1, [self.batch_size, self.dim_z]) \
                         .astype(np.float32)
 
-                    # Update D network
-                    _, summary_str = self.sess.run([d_optim, self.d_sum],
-                                                   feed_dict={
-                        self.inputs: batch_images,
-                        self.z: batch_z,
-                        self.y: batch_labels,
-                    })
+                    # update D network
+                    _, summary_str, d_loss = self.sess.run([self.d_optim, self.d_sum, self.d_loss],
+                                                           feed_dict={self.inputs: batch_images, self.y: batch_labels,
+                                                                      self.z: batch_z})
                     self.writer.add_summary(summary_str, counter)
 
-                    # Update G network
-                    _, summary_str = self.sess.run([g_optim, self.g_sum],
-                                                   feed_dict={
-                        self.z: batch_z,
-                        self.y: batch_labels,
-                    })
-                    self.writer.add_summary(summary_str, counter)
-
-                    # Run g_optim twice to make sure that d_loss does not go to zero (different from paper)
-                    _, summary_str = self.sess.run([g_optim, self.g_sum],
-                                                   feed_dict={self.z: batch_z, self.y: batch_labels})
-                    self.writer.add_summary(summary_str, counter)
-
-                    errD_fake = self.d_loss_fake.eval({
-                        self.z: batch_z,
-                        self.y: batch_labels
-                    })
-                    errD_fake_cls = self.loss_cls_fake.eval({
-                        self.z: batch_z,
-                        self.y: batch_labels
-                    })
-                    errD_real = self.d_loss_real.eval({
-                        self.inputs: batch_images,
-                        self.y: batch_labels
-                    })
-                    errD_real_cls = self.loss_cls_real.eval({
-                        self.inputs: batch_images,
-                        self.y: batch_labels
-                    })
-                    errG = self.g_loss.eval({
-                        self.z: batch_z,
-                        self.y: batch_labels
-                    })
+                    # update G & Q network
+                    _, summary_str_g, g_loss, _, summary_str_cls, cls_loss = self.sess.run(
+                        [self.g_optim, self.g_sum, self.g_loss,
+                            self.cls_optim, self.cls_sum, self.cls_loss],
+                        feed_dict={self.z: batch_z, self.y: batch_labels, self.inputs: batch_images})
+                    self.writer.add_summary(summary_str_g, counter)
+                    self.writer.add_summary(summary_str_cls, counter)
 
                     counter += 1
-                    print("Epoch: [%2d/%2d] [%4d/%4d] time: %4.4f, d_loss: %.8f, g_loss: %.8f"
-                          % (epoch, self.epoch, idx, batch_idxs,
-                             time.time() - start_time, errD_fake+errD_real, errG))
-                    print("Epoch: [%2d/%2d] [%4d/%4d] time: %4.4f, errD_fake_cls: %.8f, errD_real_cls: %.8f"
-                          % (epoch, self.epoch, idx, batch_idxs,
-                             time.time() - start_time, errD_fake_cls, errD_real_cls))
+                    print("Epoch: [%2d] [%4d/%4d] time: %4.4f, d_loss: %.8f, g_loss: %.8f,cls: %.8f"
+                          % (epoch, idx, batch_idxs, time.time() - start_time, d_loss, g_loss, cls_loss))
+
                     if np.mod(counter, 100) == 1:
                         # show_all_variables()
                         samples, d_loss, g_loss = self.sess.run(
@@ -419,7 +385,7 @@ class ImageGAN(object):
             self.dataset_name, self.batch_size)
 
     def save(self, checkpoint_dir, step):
-        model_name = "IMAGEGAN.model_"+str(self.dim_z)
+        model_name = "IMAGEGAN.model_AC"+str(self.dim_z)
         checkpoint_dir = os.path.join(checkpoint_dir, self.model_dir)
 
         if not os.path.exists(checkpoint_dir):
