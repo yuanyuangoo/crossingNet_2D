@@ -159,7 +159,7 @@ class ImageGAN(object):
             Y_ = tf.layers.dense(tf.reshape(
                 dis_dropout5, (self.batch_size, -1)), units=self.y_dim)
             dis_full = tf.layers.dense(
-                tf.reshape(dis_dropout5, (self.batch_size, -1)))
+                tf.reshape(dis_dropout5, (self.batch_size, -1)),1)
             self.dis_px = dis_full
 
             return dis_full,Y_
@@ -452,7 +452,7 @@ if __name__ == '__main__':
     if globalConfig.dataset == 'H36M':
         import data.h36m as h36m
         ds = Dataset()
-        train_size = 4096
+        train_size = 9192
         test_size = 64
         # for i in range(0, tol_train_size):
         ds.loadH36M(train_size, mode='train', tApp=True, replace=False)
