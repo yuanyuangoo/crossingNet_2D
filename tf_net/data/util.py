@@ -201,7 +201,7 @@ def drawImageCV(skel, axis=(0, 1, 0), theta=0):
 
 
 def inverse_transform(images):
-    return (images+1)*127.5
+    return (images+1)*255.0/2
 
 
 def imsave(images, size, path):
