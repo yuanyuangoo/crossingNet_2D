@@ -2,7 +2,7 @@ import sys
 sys.path.append('./')
 import globalConfig
 from data.ops import *
-from data.layers import *
+# from data.layers import *
 from data.dataset import *
 from data.util import *
 import tensorflow as tf
@@ -13,7 +13,11 @@ import time
 import cv2
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-
+image_summary = tf.summary.image
+scalar_summary = tf.summary.scalar
+histogram_summary = tf.summary.histogram
+merge_summary = tf.summary.merge
+SummaryWriter = tf.summary.FileWriter
 class ImageGAN(object):
     def __init__(self, input_height=128, input_width=128, crop=True,
                  batch_size=64, sample_num=64, output_height=128, output_width=128,
@@ -68,7 +72,8 @@ class ImageGAN(object):
         self.dataset_name = dataset_name
         self.checkpoint_dir = os.path.join(
             globalConfig.gan_pretrain_path, checkpoint_dir)
-
+        # self.data_X, self.data_y = self.load_h36m()
+        # self.c_dim = self.data_X[0].shape[-1]
         self.grayscale = True
         self.build_model()
 
@@ -95,12 +100,12 @@ class ImageGAN(object):
         #Generator for fake image
         self.G = self.build_generator(self.z, self.y)
         #Discriminator for real image
-        self.D, self.D_logits= self.build_discriminator(
+        self.D, self.D_logits, _ = self.build_discriminator(
             inputs, self.y, reuse=False)
         #image
-        self.sampler = self.build_generator(self.z, self.y)
+        self.sampler = self.build_sampler(self.z, self.y)
         #Discriminator for fake image
-        self.D_, self.D_logits_= self.build_discriminator(
+        self.D_, self.D_logits_, _ = self.build_discriminator(
             self.G, self.y, reuse=True)
 
         self.d_sum = histogram_summary("d", self.D)
@@ -139,29 +144,26 @@ class ImageGAN(object):
         with tf.variable_scope("discriminator") as scope:
             if reuse:
                 scope.reuse_variables()
-            self.dis_render = image
+
             yb = tf.reshape(y, [self.batch_size, 1, 1, self.y_dim])
             x = conv_cond_concat(image, yb)
 
-            h0_1 = lrelu(
-                conv2d(x, self.c_dim + self.y_dim))
-            self.dis_hidden = h0_1
-            self.dis_metric = h0_1
-            h0 = conv_cond_concat(h0_1, yb)
+            h0 = lrelu(
+                conv2d(x, self.c_dim + self.y_dim, name='d_h0_conv'))
+            h0 = conv_cond_concat(h0, yb)
 
             h1 = lrelu(self.d_bn1(
-                conv2d(h0, self.df_dim + self.y_dim)))
+                conv2d(h0, self.df_dim + self.y_dim, name='d_h1_conv')))
             h1 = tf.reshape(h1, [self.batch_size, -1])
             h1 = concat([h1, y], 1)
 
-            h2_1 = lrelu(self.d_bn2(linear(h1, self.dfc_dim)))
-            self.feamat_layer = h2_1
-            h2 = concat([h2_1, y], 1)
-            # logits
-            h3 = linear(h2, 1)
-            self.dis_px_layer = h3
+            h2 = lrelu(self.d_bn2(linear(h1, self.dfc_dim, 'd_h2_lin')))
+            h2 = concat([h2, y], 1)
 
-            return tf.nn.tanh(h3), h3
+            # logits
+            h3 = linear(h2, 1, 'd_h3_lin')
+
+            return tf.nn.tanh(h3), h3, h2
 
     def build_generator(self, z, y=None):
         with tf.variable_scope("generator") as scope:
@@ -172,23 +174,26 @@ class ImageGAN(object):
             s_h2, s_h4 = int(s_h/2), int(s_h/4)
             s_w2, s_w4 = int(s_w/2), int(s_w/4)
 
+            # yb = tf.expand_dims(tf.expand_dims(y, 1),2)
+
+
             h0 = tf.nn.relu(
-                self.g_bn0(linear(z, self.gfc_dim)))
+                self.g_bn0(linear(z, self.gfc_dim, 'g_h0_lin')))
             h0 = concat([h0, y], 1)
 
             h1 = tf.nn.relu(self.g_bn1(
-                linear(h0, self.gf_dim*2*s_h4*s_w4)))
+                linear(h0, self.gf_dim*2*s_h4*s_w4, 'g_h1_lin')))
             h1 = tf.reshape(
                 h1, [self.batch_size, s_h4, s_w4, self.gf_dim * 2])
 
             h1 = conv_cond_concat(h1, yb)
 
             h2 = tf.nn.relu(self.g_bn2(deconv2d(h1,
-                                                [self.batch_size, s_h2, s_w2, self.gf_dim * 2])))
+                                                [self.batch_size, s_h2, s_w2, self.gf_dim * 2], name='g_h2')))
             h2 = conv_cond_concat(h2, yb)
 
             return tf.nn.tanh(
-                deconv2d(h2, [self.batch_size, s_h, s_w, 1]))
+                deconv2d(h2, [self.batch_size, s_h, s_w, 1], name='g_h3'))
 
     def build_recognition(self, image, y, output_dim=23, reuse=False, keep_prob=1):
         yb = tf.reshape(y, [self.batch_size, 1, 1, self.y_dim])
@@ -196,7 +201,7 @@ class ImageGAN(object):
         with tf.variable_scope("discriminator") as scope:
             scope.reuse_variables()
             discriminator_h0 = lrelu(
-                conv2d(x, self.c_dim + self.y_dim))
+                conv2d(x, self.c_dim + self.y_dim, name='d_h0_conv'))
             self.discriminator_h0 = conv_cond_concat(discriminator_h0, yb)
 
         with tf.variable_scope("recognition") as scope:
@@ -204,20 +209,20 @@ class ImageGAN(object):
                 scope.reuse_variables()
 
             h0 = self.r_bn0(conv2d(self.discriminator_h0, self.df_dim +
-                                   self.y_dim))
+                                   self.y_dim, name='r_h0_conv'))
             h0 = conv_cond_concat(h0, yb)
 
             h1 = self.r_bn1(
-                conv2d(h0, self.df_dim + self.y_dim))
+                conv2d(h0, self.df_dim + self.y_dim, name='r_h1_conv'))
             h1 = conv_cond_concat(h1, yb)
 
             h2 = self.r_bn2(
-                conv2d(h1, self.df_dim + self.y_dim))
+                conv2d(h1, self.df_dim + self.y_dim, name='r_h2_conv'))
 
             h2 = tf.reshape(h2, [self.batch_size, -1])
             h2 = concat([h2, y], 1)
 
-            h3 = linear(h2, output_dim)
+            h3 = linear(h2, output_dim, 'r_h3_lin')
 
             return tf.nn.tanh(h3)
 
@@ -228,26 +233,26 @@ class ImageGAN(object):
         with tf.variable_scope("discriminator") as scope:
             scope.reuse_variables()
             discriminator_h0 = lrelu(
-                conv2d(x, self.c_dim + self.y_dim))
+                conv2d(x, self.c_dim + self.y_dim, name='d_h0_conv'))
             self.discriminator_h0 = conv_cond_concat(discriminator_h0, yb)
 
         with tf.variable_scope("metric") as scope:
             if reuse:
                 scope.reuse_variables()
             h0 = self.m_bn0(conv2d(self.discriminator_h0, self.df_dim +
-                                   self.y_dim))
+                                   self.y_dim, name='m_h0_conv'))
             h0 = conv_cond_concat(h0, yb)
 
             h1 = self.m_bn1(
-                conv2d(h0, self.df_dim + self.y_dim))
+                conv2d(h0, self.df_dim + self.y_dim, name='m_h1_conv'))
             h1 = conv_cond_concat(h1, yb)
 
             h2 = self.m_bn2(
-                conv2d(h1, self.df_dim + self.y_dim))
+                conv2d(h1, self.df_dim + self.y_dim, name='m_h2_conv'))
             h2 = tf.reshape(h2, [self.batch_size, -1])
             h2 = concat([h2, y], 1)
 
-            h3 = linear(h2, output_dim)
+            h3 = linear(h2, output_dim, 'm_h3_lin')
 
             return tf.nn.tanh(h3)
 
@@ -257,31 +262,57 @@ class ImageGAN(object):
             scope.reuse_variables()
             x = conv_cond_concat(image, yb)
             discriminator_h0 = lrelu(
-                conv2d(x, self.c_dim + self.y_dim))
+                conv2d(x, self.c_dim + self.y_dim, name='d_h0_conv'))
             self.discriminator_h0 = conv_cond_concat(discriminator_h0, yb)
 
         with tf.variable_scope("metric") as scope:
             if reuse:
                 scope.reuse_variables()
             h0 = self.m_bn0(conv2d(self.discriminator_h0, self.c_dim +
-                                   self.y_dim))
+                                   self.y_dim, name='m_h0_conv'))
             h0 = conv_cond_concat(h0, yb)
 
             h1 = self.m_bn1(
-                conv2d(h0, self.df_dim + self.y_dim))
+                conv2d(h0, self.df_dim + self.y_dim, name='m_h1_conv'))
             h1 = tf.reshape(h1, [self.batch_size, -1])
             h1 = conv_cond_concat(h1, yb)
 
             h2 = self.m_bn2(
-                conv2d(h1, self.df_dim + self.y_dim))
+                conv2d(h1, self.df_dim + self.y_dim, name='m_h2_conv'))
             h2 = tf.reshape(h2, [self.batch_size, -1])
             h2 = concat([h2, y], 1)
 
             h3 = linear(h2, 1, 'm_h3_lin')
             self.combi_input_layer = tf.placeholder(
-                dtype=tf.float32, shape=(None, 2 * 1024))
+                dtype=tf.float32, shape=(None, 2 * 1024), name="combi_input_layer")
             combi_metric = linear(self.combi_input_layer, output_dim)
             return tf.nn.tanh(h3), combi_metric
+
+    def build_sampler(self, z, y=None, keep_prob=0.9):
+        with tf.variable_scope("generator") as scope:
+            scope.reuse_variables()
+
+            s_h, s_w = self.output_height, self.output_width
+            s_h2, s_h4 = int(s_h/2), int(s_h/4)
+            s_w2, s_w4 = int(s_w/2), int(s_w/4)
+            # yb = tf.reshape(y, [-1, 1, 1, self.y_dim])
+            yb = tf.reshape(y, [self.batch_size, 1, 1, self.y_dim])
+            z = concat([z, y], 1)
+
+            h0 = tf.nn.relu(self.g_bn0(
+                linear(z, self.gfc_dim, 'g_h0_lin'), train=False))
+            h0 = concat([h0, y], 1)
+
+            h1 = tf.nn.relu(self.g_bn1(
+                linear(h0, self.gf_dim*2*s_h4*s_w4, 'g_h1_lin'), train=False))
+            h1 = tf.reshape(h1, [self.batch_size, s_h4, s_w4, self.gf_dim * 2])
+            h1 = conv_cond_concat(h1, yb)
+
+            h2 = tf.nn.relu(self.g_bn2(
+                deconv2d(h1, [self.batch_size, s_h2, s_w2, self.gf_dim * 2], name='g_h2'), train=False))
+            h2 = conv_cond_concat(h2, yb)
+
+            return tf.nn.tanh(deconv2d(h2, [self.batch_size, s_h, s_w, self.c_dim], name='g_h3'))
 
     def train(self, train_dataset, valid_dataset):
         if not os.path.exists(self.checkpoint_dir):
@@ -466,12 +497,12 @@ if __name__ == '__main__':
     if globalConfig.dataset == 'H36M':
         import data.h36m as h36m
         ds = Dataset()
-        for i in range(0, 20000, 20000):
-            ds.loadH36M(i, mode='train', tApp=True, replace=False)
+        # for i in range(0, 20000, 20000):
+        ds.loadH36M(65536, mode='train', tApp=True, replace=False)
 
         val_ds = Dataset()
-        for i in range(0, 20000, 20000):
-            val_ds.loadH36M(i, mode='valid', tApp=True, replace=False)
+        # for i in range(0, 20000, 20000):
+        val_ds.loadH36M(64, mode='valid', tApp=True, replace=False)
     else:
         raise ValueError('unknown dataset %s' % globalConfig.dataset)
 
