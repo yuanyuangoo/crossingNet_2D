@@ -68,8 +68,7 @@ class ImageGAN(object):
         self.dataset_name = dataset_name
         self.checkpoint_dir = os.path.join(
             globalConfig.gan_pretrain_path, checkpoint_dir)
-        # self.data_X, self.data_y = self.load_h36m()
-        # self.c_dim = self.data_X[0].shape[-1]
+
         self.grayscale = True
         self.build_model()
 
@@ -96,12 +95,12 @@ class ImageGAN(object):
         #Generator for fake image
         self.G = self.build_generator(self.z, self.y)
         #Discriminator for real image
-        self.D, self.D_logits, _ = self.build_discriminator(
+        self.D, self.D_logits= self.build_discriminator(
             inputs, self.y, reuse=False)
         #image
-        self.sampler = self.build_sampler(self.z, self.y)
+        self.sampler = self.build_generator(self.z, self.y)
         #Discriminator for fake image
-        self.D_, self.D_logits_, _ = self.build_discriminator(
+        self.D_, self.D_logits_= self.build_discriminator(
             self.G, self.y, reuse=True)
 
         self.d_sum = histogram_summary("d", self.D)
@@ -140,26 +139,29 @@ class ImageGAN(object):
         with tf.variable_scope("discriminator") as scope:
             if reuse:
                 scope.reuse_variables()
-
+            self.dis_render = image
             yb = tf.reshape(y, [self.batch_size, 1, 1, self.y_dim])
             x = conv_cond_concat(image, yb)
 
-            h0 = lrelu(
+            h0_1 = lrelu(
                 conv2d(x, self.c_dim + self.y_dim))
-            h0 = conv_cond_concat(h0, yb)
+            self.dis_hidden = h0_1
+            self.dis_metric = h0_1
+            h0 = conv_cond_concat(h0_1, yb)
 
             h1 = lrelu(self.d_bn1(
                 conv2d(h0, self.df_dim + self.y_dim)))
             h1 = tf.reshape(h1, [self.batch_size, -1])
             h1 = concat([h1, y], 1)
 
-            h2 = lrelu(self.d_bn2(linear(h1, self.dfc_dim)))
-            h2 = concat([h2, y], 1)
-
+            h2_1 = lrelu(self.d_bn2(linear(h1, self.dfc_dim)))
+            self.feamat_layer = h2_1
+            h2 = concat([h2_1, y], 1)
             # logits
-            h3 = linear(h2, 1, 'd_h3_lin')
+            h3 = linear(h2, 1)
+            self.dis_px_layer = h3
 
-            return tf.nn.tanh(h3), h3, h2
+            return tf.nn.tanh(h3), h3
 
     def build_generator(self, z, y=None):
         with tf.variable_scope("generator") as scope:
