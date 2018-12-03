@@ -74,11 +74,11 @@ class GanRender(ForwardRender):
         # metric part(smooth task), (Lsmo)
         if not self.metricCombi:
             fake_metric = self.image_gan.build_metric(
-                self.fake_image,  self.image_gan.y, output_dim=self.z_dim, reuse=False)
+                output_dim=self.z_dim, reuse=False)
             real_metric = self.image_gan.build_metric(
-                self.image_gan.inputs,  self.image_gan.y, output_dim=self.z_dim, reuse=True)
+                output_dim=self.z_dim, reuse=True)
             self_metric = self.image_gan.build_metric(
-                self.render,  self.image_gan.y, output_dim=self.z_dim, reuse=True)
+                output_dim=self.z_dim, reuse=True)
 
             # latent_diff = self.latent-latent_noises
             latent_diff=self.latent
@@ -448,9 +448,113 @@ class GanRender(ForwardRender):
         m = np.zeros((tar_num, src_num))
         for s in m:
             sel = rng.choice(src_num, sel_num)
-            s[sel] = rng.uniform(0, 1, (sel_num,))
-            s /= s.sum()
-        return m.astype(np.float32)
+    @property
+    def model_dir(self):
+        return "{}_{}".format(
+            globalConfig.dataset, self.batch_size,
+        )
+
+    def load(self, checkpoint_dir):
+        import re
+        print(" [*] Reading checkpoints...")
+        checkpoint_dir = os.path.join(checkpoint_dir, self.model_dir)
+
+        ckpt = tf.train.get_checkpoint_state(checkpoint_dir)
+        if ckpt and ckpt.model_checkpoint_path:
+            ckpt_name = os.path.basename(ckpt.model_checkpoint_path)
+            self.saver.restore(
+                self.sess, os.path.join(checkpoint_dir, ckpt_name))
+            counter = int(
+                next(re.finditer("(\d+)(?!.*\d)", ckpt_name)).group(0))
+            print(" [*] Success to read {}".format(ckpt_name))
+            return True, counter
+        else:
+            print(" [*] Failed to find a checkpoint")
+            return False, 0
+
+    def save(self, checkpoint_dir, step):
+        model_name = "GanRender.model"
+        checkpoint_dir = os.path.join(checkpoint_dir, self.model_dir)
+
+        if not os.path.exists(checkpoint_dir):
+            os.makedirs(checkpoint_dir)
+
+        self.saver.save(self.sess,
+                        os.path.join(checkpoint_dir, model_name),
+                        global_step=step)
+    @property
+    def model_dir(self):
+        return "{}_{}".format(
+            globalConfig.dataset, self.batch_size,
+        )
+
+    def load(self, checkpoint_dir):
+        import re
+        print(" [*] Reading checkpoints...")
+        checkpoint_dir = os.path.join(checkpoint_dir, self.model_dir)
+
+        ckpt = tf.train.get_checkpoint_state(checkpoint_dir)
+        if ckpt and ckpt.model_checkpoint_path:
+            ckpt_name = os.path.basename(ckpt.model_checkpoint_path)
+            self.saver.restore(
+                self.sess, os.path.join(checkpoint_dir, ckpt_name))
+            counter = int(
+                next(re.finditer("(\d+)(?!.*\d)", ckpt_name)).group(0))
+            print(" [*] Success to read {}".format(ckpt_name))
+            return True, counter
+        else:
+            print(" [*] Failed to find a checkpoint")
+            return False, 0
+
+    def save(self, checkpoint_dir, step):
+        model_name = "GanRender.model"
+        checkpoint_dir = os.path.join(checkpoint_dir, self.model_dir)
+
+        if not os.path.exists(checkpoint_dir):
+            os.makedirs(checkpoint_dir)
+
+        self.saver.save(self.sess,
+                        os.path.join(checkpoint_dir, model_name),
+                        global_step=step)
+    @property
+    def model_dir(self):
+        return "{}_{}".format(
+            globalConfig.dataset, self.batch_size,
+        )
+
+    def load(self, checkpoint_dir):
+        import re
+        print(" [*] Reading checkpoints...")
+        checkpoint_dir = os.path.join(checkpoint_dir, self.model_dir)
+
+        ckpt = tf.train.get_checkpoint_state(checkpoint_dir)
+        if ckpt and ckpt.model_checkpoint_path:
+            ckpt_name = os.path.basename(ckpt.model_checkpoint_path)
+            self.saver.restore(
+                self.sess, os.path.join(checkpoint_dir, ckpt_name))
+            counter = int(
+                next(re.finditer("(\d+)(?!.*\d)", ckpt_name)).group(0))
+            print(" [*] Success to read {}".format(ckpt_name))
+            return True, counter
+        else:
+            print(" [*] Failed to find a checkpoint")
+            return False, 0
+
+    def save(self, checkpoint_dir, step):
+        model_name = "GanRender.model"
+        checkpoint_dir = os.path.join(checkpoint_dir, self.model_dir)
+
+        if not os.path.exists(checkpoint_dir):
+            os.makedirs(checkpoint_dir)
+
+        self.saver.save(self.sess,
+                        os.path.join(checkpoint_dir, model_name),
+                        global_step=step)
+    @property
+    def model_dir(self):
+        return "{}_{}".format(
+            globalConfig.dataset, self.batch_size,
+        )
 
     @property
     def model_dir(self):

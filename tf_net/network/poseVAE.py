@@ -272,8 +272,8 @@ class PoseVAE(object):
             self.loss)
         with tf.Session() as self.sess:
             counter = 1
-            could_load, checkpoint_counter = self.load(self.checkpoint_dir)
-            # could_load = False
+            # could_load, checkpoint_counter = self.load(self.checkpoint_dir)
+            could_load = False
             if could_load:
                 counter = checkpoint_counter
                 print(" [*] Load SUCCESS")

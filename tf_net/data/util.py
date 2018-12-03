@@ -179,7 +179,7 @@ def rotation_matrix(axis, theta):
                      [2 * (bd + ac), 2 * (cd - ab), aa + dd - bb - cc]])
 
 
-def drawImageCV(skel, axis=(0, 1, 0), theta=0):
+def drawImageCV(skel,img=None, axis=(0, 1, 0), theta=0):
         if not skel.shape == (3, 17):
             skel = np.reshape(skel, (3, 17))
         skel = skel.T
@@ -189,8 +189,8 @@ def drawImageCV(skel, axis=(0, 1, 0), theta=0):
         max_s = skel.max()
         mid_s = (min_s+max_s)/2
         skel = (((skel-mid_s)/(max_s-min_s))+0.52)*125
-
-        img = 255*np.ones((128, 128, 3))
+        if img is None:
+            img = 255*np.ones((128, 128, 3))
         for i, edge in enumerate(ref.edges):
             pt1 = skel[edge[0]]
             pt2 = skel[edge[1]]
@@ -204,14 +204,14 @@ def inverse_transform(images):
     return (images+1)*255.0/2
 
 
-def imsave(images, size, path):
-    image = np.squeeze(merge(images, size))
+def imsave(images, size, path, skel=None):
+    image = np.squeeze(merge(images, size, skel))
     # return scipy.misc.imsave(path, image)
     return cv2.imwrite(path, image)
 
 
-def save_images(images, size, image_path):
-    return imsave(inverse_transform(images), size, image_path)
+def save_images(images,  size, image_path, skel=None):
+    return imsave(inverse_transform(images), size, image_path,skel)
 
 
 def image_manifold_size(num_images):
@@ -263,7 +263,7 @@ def center_crop(x, crop_h, crop_w,
         x[j:j+crop_h, i:i+crop_w], [resize_h, resize_w])
 
 
-def merge(images, size):
+def merge(images, size, skel=None):
     h, w = images.shape[1], images.shape[2]
     if (images.shape[3] in (3, 4)):
         c = images.shape[3]
@@ -271,14 +271,20 @@ def merge(images, size):
         for idx, image in enumerate(images):
             i = idx % size[1]
             j = idx // size[1]
+            if skel is not None:
+                image=drawImageCV(skel[idx],image)
             img[j * h:j * h + h, i * w:i * w + w, :] = image
         return img
     elif images.shape[3] == 1:
-        img = np.zeros((h * size[0], w * size[1]))
+        c = 3
+        img = np.zeros((h * size[0], w * size[1], c))
         for idx, image in enumerate(images):
             i = idx % size[1]
             j = idx // size[1]
-            img[j * h:j * h + h, i * w:i * w + w] = image[:, :, 0]
+            if skel is not None:
+                image = cv2.cvtColor(image, cv2.COLOR_GRAY2RGB)
+                image = drawImageCV(skel[idx], image)
+            img[j * h:j * h + h, i * w:i * w + w, :] = image
         return img
     else:
         raise ValueError('in merge(images,size) images parameter '
