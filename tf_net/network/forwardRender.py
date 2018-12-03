@@ -15,6 +15,8 @@ import globalConfig
 from data.layers import *
 from data.dataset import *
 from data.util import *
+minloss = 1e-6
+
 
 class ForwardRender(object):
     def __init__(self, dim_x,sample_dir="samples",checkpoint_dir="./checkpoint"):
@@ -30,7 +32,10 @@ class ForwardRender(object):
         self.image_gan = ImageGAN()
         self.dim_z = self.image_gan.dim_z
 
-        self.render = self.build_latent_alignment_layer(self.pose_vae)
+        self.render = self.build_latent_alignment_layer(
+            self.pose_vae, reuse=False)
+        self.sample = self.build_latent_alignment_layer(
+            self.pose_vae, keep_prob=1,reuse=True)
         _, self.dis_px_layer, self.feamat_layer,  = self.image_gan.build_discriminator(
             self.render, self.image_gan.y, reuse=True)
         self.render_sum = image_summary("render", self.render)
@@ -44,12 +49,13 @@ class ForwardRender(object):
 
         #Train Ali
         self.real_image = self.image_gan.inputs
-        self.pixel_loss = tf.losses.mean_squared_error(self.real_image, self.render)
-        pixel_loss = (self.real_image-self.render)**2
-        pixel_loss = tf.clip_by_value(pixel_loss, 0, self.golden_max)
+        # self.pixel_loss = tf.losses.mean_squared_error(self.real_image, self.render)
+        pixel_loss = abs(self.real_image-self.render)
+        pixel_loss = tf.clip_by_value(pixel_loss, 0, 1.0)
 
-        self.pixel_loss = tf.reduce_mean(pixel_loss)
-
+        self.pixel_loss = tf.reduce_sum(pixel_loss)
+        self.pixel_loss_sum = scalar_summary("pixel_loss", self.pixel_loss)
+        
         t_vars = tf.trainable_variables()
         self.alignment_vars = [var for var in t_vars if 'ali' in var.name]
 
@@ -59,12 +65,10 @@ class ForwardRender(object):
         self.ali_train_op = tf.train.AdamOptimizer(
             self.lr, self.b1).minimize(self.pixel_loss, var_list=self.forwarRender_vars)
 
-
-
     def build_latent_alignment_layer(self, pose_vae,
                                      origin_layer=None,
-                                     quad_layer=None):
-        
+                                     quad_layer=None, keep_prob=0.8,reuse=False):
+
         self.pose_z_dim = int(pose_vae.z.shape[1])
         self.z_dim = self.pose_z_dim
         if origin_layer is not None:
@@ -77,15 +81,18 @@ class ForwardRender(object):
             latent = tf.concat([latent, origin_layer], axis=1)
         if quad_layer is not None:
             latent = tf.concat([latent, quad_layer], axis=1)
-        with tf.variable_scope("ali", reuse=False) as scope:
+        with tf.variable_scope("ali", reuse=reuse) as scope:
+            if reuse:
+                scope.reuse_variables()
             print('latent output shape = {}'
                   .format(latent.shape))
             self.latent = latent
 
             # use None input, to adapt z from both pose-vae and real-test
             self.bn = batch_norm(name="bn1")
-            self.alignment = self.bn(
-                tf.contrib.layers.fully_connected(self.latent, num_outputs=self.image_gan.dim_z, activation_fn=None))
+            self.alignment = lrelu(self.bn(
+                tf.layers.dense(self.latent, self.image_gan.dim_z)))
+            self.alignment = tf.nn.dropout(self.alignment, keep_prob)
         render = self.image_gan.build_sampler(self.alignment, self.image_gan.y)
         return render
 
@@ -131,6 +138,7 @@ class ForwardRender(object):
         
         print('[ForwardRender] enter training loop with %d epoches' % nepoch)
         with tf.Session() as self.sess:
+            self.ali_sum = merge_summary([self.pixel_loss_sum])
             tf.global_variables_initializer().run()
             pose_vae_var = [val for val in tf.trainable_variables(
             ) if 'encoder' in val.name or 'decoder' in val.name]
@@ -152,22 +160,25 @@ class ForwardRender(object):
                 print(" [!] Load failed...")
 
             self.writer = SummaryWriter(
-                os.path.join(globalConfig.Forward_Render_pretrain_path, "logs"), graph=self.sess.graph, filename_suffix='.imageGAN')
-
+                os.path.join(globalConfig.Forward_Render_pretrain_path, "logs"), graph=self.sess.graph, filename_suffix='.ForwardRender')
+            counter=1
             for epoch in tqdm(range(nepoch)):
-                for i in range(total_batch):
+                for i in tqdm(range(total_batch)):
                     # Compute the offset of the current minibatch in the data.
                     offset = (i * self.batch_size) % (total_batch)
-                    _, tot_loss = self.sess.run((self.ali_train_op, self.pixel_loss), feed_dict={
-                        self.image_gan.inputs: train_img[offset:(offset + self.batch_size), :, :, :],
-                        self.pose_vae.x_hat: train_skel[offset:(offset + self.batch_size), :],
-                        self.pose_vae.label_hat: train_labels[offset:(offset + self.batch_size), :],
-                        self.image_gan.y: train_labels[offset:(offset + self.batch_size), :]
-                    })
+                    _, tot_loss, summary_str = self.sess.run(
+                        (self.ali_train_op, self.pixel_loss, self.ali_sum), feed_dict={
+                            self.image_gan.inputs: train_img[offset:(offset + self.batch_size), :, :, :],
+                            self.pose_vae.x_hat: train_skel[offset:(offset + self.batch_size), :],
+                            self.pose_vae.label_hat: train_labels[offset:(offset + self.batch_size), :],
+                            self.image_gan.y: train_labels[offset:(
+                                offset + self.batch_size), :]
+                        })
+                    self.writer.add_summary(summary_str, counter)
                     print("epoch %d: L_tot %03.2f" % (epoch, tot_loss))
-
+                counter = counter+1
                 if epoch % 10 == 0:
-                    samples, real = self.sess.run((self.render, self.real_image), feed_dict={
+                    samples, real = self.sess.run((self.sample, self.real_image), feed_dict={
                         self.pose_input: test_skel,
                         self.pose_vae.label_hat: test_labels,
                         self.image_gan.y: test_labels,
@@ -177,7 +188,11 @@ class ForwardRender(object):
                                 '{}/train_{:02d}.png'.format(self.sample_dir, epoch), skel=test_skel)
                     save_images(real, image_manifold_size(real.shape[0]),
                                 '{}/train_{:02d}_real.png'.format(self.sample_dir, epoch), skel=test_skel)
-
+                if epoch % 50 == 0 or tot_loss < minloss:
+                        self.save(self.checkpoint_dir, counter)
+                        if tot_loss < minloss:
+                            break
+                
     def resumePose(self, norm_pose, tran, quad=None):
         orig_pose = norm_pose.copy()
         orig_pose.shape = (3, -1)
@@ -270,7 +285,7 @@ if __name__ == '__main__':
         import data.h36m as h36m
         ds = Dataset()
         # for i in range(0, 20000, 20000):
-        ds.loadH36M(1024, mode='train', tApp=True, replace=False)
+        ds.loadH36M(10240, mode='train', tApp=True, replace=False)
 
         val_ds = Dataset()
         # for i in range(0, 20000, 20000):
@@ -279,4 +294,4 @@ if __name__ == '__main__':
         raise ValueError('unknown dataset %s' % globalConfig.dataset)
 
     Fr = ForwardRender(dim_x=Num_of_Joints*3)
-    Fr.train(100,ds, val_ds)
+    Fr.train(2000, ds, val_ds)
