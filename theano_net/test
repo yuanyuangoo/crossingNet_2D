@@ -49,3 +49,12 @@ build_discriminative()
 self.dis_hidden_layer
 z_est_layer
 z_est_var
+
+
+
+kl_loss_layer=
+sum(kl_div_layer)=
+sum(kl_div_layer-0.5)=
+sum(0.5*meansq_layer+0.5*sd_layer-0.5*logsd_layer-0.5)=
+0.5*sum(meansq_layer+sd_layer-logsd_layer-1)=
+0.5*sum(mu_layer**2+exp(logsd_layer)-logsd_layer-1)

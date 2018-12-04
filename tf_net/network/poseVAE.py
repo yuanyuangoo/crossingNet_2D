@@ -17,16 +17,16 @@ NUM_LABELS = 15
 
 class PoseVAE(object):
     def __init__(
-            self, dim_x=Num_of_Joints*3, batch_size=64, lr=1e-3, num_epochs=300,
-            dim_z=46, label_dim=15, n_hidden=40, PRR=True, PRR_n_img_x=10, PRR_n_img_y=10, PRR_resize_factor=1.0,
+            self, dim_x=Num_of_Joints*3, batch_size=64, lr=1e-3, num_epochs=3000,
+            dim_z=46, label_dim=15, n_hidden=40, PRR=True, PRR_n_img_x=8, PRR_n_img_y=8, PRR_resize_factor=1.0,
             PMLR=True, PMLR_n_img_x=20, PMLR_n_img_y=20, PMLR_resize_factor=1.0, PMLR_z_range=2.0, PMLR_n_samples=5000, reuse=False):
 
         checkpoint_dir = 'checkpoint'
         self.checkpoint_dir = os.path.join(
             globalConfig.vae_pretrain_path, checkpoint_dir)
-        RESULTS_DIR = 'results'
-        self.RESULTS_DIR = os.path.join(
-            globalConfig.vae_pretrain_path, RESULTS_DIR)
+        sample_dir = 'samples'
+        self.sample_dir = os.path.join(
+            globalConfig.vae_pretrain_path, sample_dir)
         #dim_z=dim of latent space
         self.dim_z = dim_z
         #dim_x: dim of input pose dimension
@@ -104,8 +104,8 @@ class PoseVAE(object):
         y = tf.clip_by_value(y, 1e-8, 1 - 1e-8)
 
         # loss
-        # marginal_likelihood = tf.reduce_sum(
-        #     x * tf.log(y) + (1 - x) * tf.log(1 - y), 1)
+        marginal_likelihood = tf.reduce_sum(
+            x * tf.log(y) + (1 - x) * tf.log(1 - y), 1)
         marginal_likelihood = tf.square(y-x)
         marginal_likelihood = tf.reduce_sum(marginal_likelihood/2)
 
@@ -195,53 +195,24 @@ class PoseVAE(object):
         return y
 
     def train(self, train_dataset, valid_dataset):
-        if not os.path.exists(self.RESULTS_DIR):
-            os.mkdir(self.RESULTS_DIR)
+        if not os.path.exists(self.checkpoint_dir):
+            os.makedirs(self.checkpoint_dir)
+        if not os.path.exists(self.sample_dir):
+            os.makedirs(self.sample_dir)
+
         show_all_variables()
 
-        train_size = len(train_dataset.frmList)
-        train_data = []
-        train_labels = []
-        for frm in train_dataset.frmList:
-            train_data.append(frm.skel)
-            train_labels.append(frm.label)
+        train_labels, train_skel, _, test_labels, test_skel, _, n_samples, total_batch = prep_data(
+            train_dataset, valid_dataset, self.batch_size)
 
-        test_data = []
-        test_labels = []
-        for frm in valid_dataset.frmList:
-            test_data.append(frm.skel)
-            test_labels.append(frm.label)
-
-        train_data = np.asarray(train_data)
-        train_labels = np.asarray(train_labels)
-        test_data = np.asarray(test_data)
-        test_labels = np.asarray(test_labels)
-
-        train_data = train_data/np.concatenate((128*np.ones(17*2),60*np.ones(17)))
-        test_data = test_data/np.concatenate((128*np.ones(17*2),60*np.ones(17)))
-
-        # Generate a validation set.
-        validation_data = train_data[:VALIDATION_SIZE, :]
-        validation_labels = train_labels[:VALIDATION_SIZE, :]
-        train_data = train_data[VALIDATION_SIZE:, :]
-        train_labels = train_labels[VALIDATION_SIZE:, :]
-
-        train_total_data = np.concatenate(
-            (train_data, train_labels), axis=1)
-
-        train_size = train_total_data.shape[0]
-
-        n_samples = train_size
-        batch_size = self.batch_size
-        total_batch = int(n_samples / self.batch_size)
-        min_tot_loss = 1e99
+        min_tot_loss = 1e6
 
         if self.PRR:
             PRR = plot_utils.Plot_Reproduce_Performance(
-                self.RESULTS_DIR, self.PRR_n_img_x, self.PRR_n_img_y, IMAGE_SIZE_H36M, IMAGE_SIZE_H36M,
+                self.sample_dir, self.PRR_n_img_x, self.PRR_n_img_y, IMAGE_SIZE_H36M, IMAGE_SIZE_H36M,
                 self.PRR_resize_factor)
 
-            x_PRR = test_data[0:PRR.n_tot_imgs, :]
+            x_PRR = test_skel[0:PRR.n_tot_imgs, :]
             lable_PRR = test_labels[0:PRR.n_tot_imgs, :]
             x_PRR_img = x_PRR.reshape(
                 PRR.n_tot_imgs, -1)
@@ -259,9 +230,9 @@ class PoseVAE(object):
         if self.PMLR and self.dim_z == 2:
 
             PMLR = plot_utils.Plot_Manifold_Learning_Result(
-                self.RESULTS_DIR, self.PMLR_n_img_x, self.PMLR_n_img_y, IMAGE_SIZE_H36M, IMAGE_SIZE_H36M, self.PMLR_resize_factor, self.PMLR_z_range)
+                self.sample_dir, self.PMLR_n_img_x, self.PMLR_n_img_y, IMAGE_SIZE_H36M, IMAGE_SIZE_H36M, self.PMLR_resize_factor, self.PMLR_z_range)
 
-            x_PMLR = test_data[0:self.PMLR_n_samples, :]
+            x_PMLR = test_skel[0:self.PMLR_n_samples, :]
             id_PMLR = test_labels[0:self.PMLR_n_samples, :]
 
             # x_PMLR = x_PMLR * np.random.normal(0, 0.05, size=x_PMLR.shape)
@@ -288,21 +259,15 @@ class PoseVAE(object):
 
             for epoch in range(self.num_epochs):
 
-                # Random shuffling
-                np.random.shuffle(train_total_data)
-                train_pose_ = train_total_data[:, :-NUM_LABELS]
-                train_label_ = train_total_data[:, -NUM_LABELS:]
-
-
                 # Loop over all batches
                 for i in range(total_batch):
                     # Compute the offset of the current minibatch in the data.
-                    offset = (i * batch_size) % (n_samples)
-                    batch_xs_input = train_pose_[
-                        offset:(offset + batch_size), :]
+                    offset = (i * self.batch_size) % (n_samples)
+                    batch_xs_input = train_skel[
+                        offset:(offset + self.batch_size), :]
 
-                    batch_label_input = train_label_[
-                        offset:(offset + batch_size), :]
+                    batch_label_input = train_labels[
+                        offset:(offset + self.batch_size), :]
                     batch_xs_target = batch_xs_input
                     # add salt & pepper noise
                     # batch_xs_input = batch_xs_input * \
@@ -392,17 +357,14 @@ if __name__ == '__main__':
     if globalConfig.dataset == 'H36M':
         import data.h36m as h36m
         ds = Dataset()
-        for i in range(0, 20000, 20000):
-            ds.loadH36M(i, mode='train', tApp=True, replace=False)
+        # for i in range(0, 20000, 20000):
+        ds.loadH36M(10240, mode='train', tApp=True, replace=False)
 
         val_ds = Dataset()
-        for i in range(0, 20000, 20000):
-            val_ds.loadH36M(i, mode='valid', tApp=True, replace=False)
+        # for i in range(0, 20000, 20000):
+        val_ds.loadH36M(64, mode='valid', tApp=True, replace=False)
     else:
         raise ValueError('unknown dataset %s' % globalConfig.dataset)
 
     vae = PoseVAE()
     vae.train(ds, val_ds)
-
-    # train_total_data, train_size=ds
-    # , _, _, test_data, test_labels = ds

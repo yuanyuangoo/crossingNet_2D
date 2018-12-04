@@ -15,7 +15,7 @@ import globalConfig
 from data.layers import *
 from data.dataset import *
 from data.util import *
-minloss = 1e-6
+minloss = 1e-5
 
 
 class ForwardRender(object):
@@ -50,10 +50,9 @@ class ForwardRender(object):
         #Train Ali
         self.real_image = self.image_gan.inputs
         # self.pixel_loss = tf.losses.mean_squared_error(self.real_image, self.render)
-        pixel_loss = abs(self.real_image-self.render)
-        pixel_loss = tf.clip_by_value(pixel_loss, 0, 1.0)
+        self.pixel_loss = tf.nn.l2_loss(self.real_image-self.render)
+        # self.pixel_loss = tf.clip_by_value(pixel_loss, 0, 1.0)
 
-        self.pixel_loss = tf.reduce_sum(pixel_loss)
         self.pixel_loss_sum = scalar_summary("pixel_loss", self.pixel_loss)
         
         t_vars = tf.trainable_variables()
@@ -101,67 +100,41 @@ class ForwardRender(object):
             os.makedirs(self.checkpoint_dir)
         if not os.path.exists(self.sample_dir):
             os.makedirs(self.sample_dir)
-
-        #load train dataset
-        train_skel = []
-        train_labels = []
-        train_img = []
-        for frm in train_dataset.frmList:
-            train_skel.append(frm.skel)
-            train_labels.append(frm.label)
-            train_img.append(frm.norm_img)
-        #load valid dataset
-        test_skel = []
-        test_labels = []
-        test_img = []
-        for frm in valid_dataset.frmList:
-            test_skel.append(frm.skel)
-            test_labels.append(frm.label)
-            test_img.append(frm.norm_img)
-        train_skel = np.asarray(
-            train_skel)/np.concatenate((128*np.ones(17*2), 60*np.ones(17)))
-        train_labels = np.asarray(train_labels)
-        train_img = np.asarray(train_img)
-        test_skel = np.asarray(
-            test_skel)/np.concatenate((128*np.ones(17*2), 60*np.ones(17)))
-
-        test_labels = np.asarray(test_labels)
-        test_img = np.asarray(test_img)
-        #normalize skel data
-        # train_skel = train_skel/max(-1*train_skel.min(), train_skel.max())
-        # test_skel = test_skel/max(-1*test_skel.min(), test_skel.max())
-        n_samples = train_skel.shape[0]
-
-        seed = 42
-        np_rng = RandomState(seed)
-        total_batch = int(n_samples / self.batch_size)
+        
+        train_labels, train_skel, train_img, test_labels, test_skel, test_img, n_samples, total_batch = prep_data(
+            train_dataset, valid_dataset, self.batch_size)
         
         print('[ForwardRender] enter training loop with %d epoches' % nepoch)
         with tf.Session() as self.sess:
             self.ali_sum = merge_summary([self.pixel_loss_sum])
             tf.global_variables_initializer().run()
-            pose_vae_var = [val for val in tf.trainable_variables(
-            ) if 'encoder' in val.name or 'decoder' in val.name]
-            self.saver = tf.train.Saver(pose_vae_var)
-            could_load, checkpoint_counter = self.load(
-                self.pose_vae.checkpoint_dir)
 
-            image_gan_var = [val for val in tf.trainable_variables(
-            ) if 'generator' in val.name or 'discriminator' in val.name]
-            self.saver = tf.train.Saver(image_gan_var)
-            could_load, checkpoint_counter = self.load(
-                self.image_gan.checkpoint_dir)
+
+            # pose_vae_var = [val for val in tf.trainable_variables(
+            # ) if 'encoder' in val.name or 'decoder' in val.name]
+            # self.saver = tf.train.Saver(pose_vae_var)
+            # could_load, checkpoint_counter = self.load(
+            #     self.pose_vae.checkpoint_dir)
+
+            # image_gan_var = [val for val in tf.trainable_variables(
+            # ) if 'generator' in val.name or 'discriminator' in val.name]
+            # self.saver = tf.train.Saver(image_gan_var)
+            # could_load, checkpoint_counter = self.load(
+            #     self.image_gan.checkpoint_dir)
 
             self.saver = tf.train.Saver()
+            could_load, checkpoint_counter = self.load(
+                self.checkpoint_dir)
             if could_load:
-                # counter = checkpoint_counter
+                counter = checkpoint_counter
                 print(" [*] Load SUCCESS")
             else:
                 print(" [!] Load failed...")
+                counter=1
 
             self.writer = SummaryWriter(
                 os.path.join(globalConfig.Forward_Render_pretrain_path, "logs"), graph=self.sess.graph, filename_suffix='.ForwardRender')
-            counter=1
+            
             for epoch in tqdm(range(nepoch)):
                 for i in tqdm(range(total_batch)):
                     # Compute the offset of the current minibatch in the data.
@@ -174,9 +147,10 @@ class ForwardRender(object):
                             self.image_gan.y: train_labels[offset:(
                                 offset + self.batch_size), :]
                         })
+                    counter = counter+1
                     self.writer.add_summary(summary_str, counter)
                     print("epoch %d: L_tot %03.2f" % (epoch, tot_loss))
-                counter = counter+1
+                
                 if epoch % 10 == 0:
                     samples, real = self.sess.run((self.sample, self.real_image), feed_dict={
                         self.pose_input: test_skel,
@@ -264,7 +238,7 @@ class ForwardRender(object):
             return False, 0
 
     def save(self, checkpoint_dir, step):
-        model_name = "GanRender.model"
+        model_name = "Forward_Render.model"
         checkpoint_dir = os.path.join(checkpoint_dir, self.model_dir)
 
         if not os.path.exists(checkpoint_dir):

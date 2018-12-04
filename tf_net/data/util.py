@@ -289,3 +289,45 @@ def merge(images, size, skel=None):
     else:
         raise ValueError('in merge(images,size) images parameter '
                          'must have dimensions: HxW or HxWx3 or HxWx4')
+
+
+def prep_data(train_dataset, valid_dataset, batch_size):
+        train_skel = []
+        train_labels = []
+        train_img = []
+        for frm in train_dataset.frmList:
+            train_skel.append(frm.skel)
+            train_labels.append(frm.label)
+            train_img.append(frm.norm_img)
+
+        #load valid dataset
+        test_skel = []
+        test_labels = []
+        test_img = []
+        for frm in valid_dataset.frmList:
+            test_skel.append(frm.skel)
+            test_labels.append(frm.label)
+            test_img.append(frm.norm_img)
+
+        train_skel = np.asarray(
+            train_skel)/np.concatenate((128*np.ones(17*2), 60*np.ones(17)))
+        train_labels = np.asarray(train_labels)
+        train_img = np.asarray(train_img)
+
+        test_skel = np.asarray(
+            test_skel)/np.concatenate((128*np.ones(17*2), 60*np.ones(17)))
+        test_labels = np.asarray(test_labels)
+        test_img = np.asarray(test_img)
+
+        n_samples = train_skel.shape[0]
+        total_batch = int(n_samples / batch_size)
+
+        seed = 547
+        np.random.seed(seed)
+        idx = np.array(range(n_samples))
+        np.random.shuffle(idx)
+        train_labels = train_labels[idx]
+        train_skel = train_skel[idx]
+        train_img = train_img[idx]
+
+        return train_labels, train_skel, train_img, test_labels, test_skel, test_img, n_samples, total_batch

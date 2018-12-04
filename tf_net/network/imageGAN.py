@@ -305,42 +305,8 @@ class ImageGAN(object):
             os.makedirs(self.checkpoint_dir)
         if not os.path.exists(self.sample_dir):
             os.makedirs(self.sample_dir)
-        # show_all_variables()
-        train_data = []
-        train_labels = []
-
-        for frm in train_dataset.frmList:
-            train_data.append(frm.norm_img)
-            train_labels.append(frm.label)
-
-        test_data = []
-        test_labels = []
-        for frm in valid_dataset.frmList:
-            test_data.append(frm.norm_img)
-            test_labels.append(frm.label)
-        train_data = np.asarray(train_data)
-        train_labels = np.asarray(train_labels)
-        test_data = np.asarray(test_data)
-        test_labels = np.asarray(test_labels)
-
-        VALIDATION_SIZE = 5000  # Size of the validation set.
-        NUM_LABELS = 15
-
-        # Generate a validation set.
-
-        train_data = train_data[VALIDATION_SIZE:, :]
-        train_labels = train_labels[VALIDATION_SIZE:, :]
-
-        X = np.concatenate(
-            (train_data, test_data), axis=0)
-        y = np.concatenate((train_labels, test_labels), axis=0).astype(np.int)
-        seed = 547
-        np.random.seed(seed)
-        np.random.shuffle(X)
-        np.random.seed(seed)
-        np.random.shuffle(y)
-        self.data_X = X
-        self.data_y = y
+        train_labels, _, train_img, test_labels, _, test_img, n_samples, total_batch = prep_data(
+            train_dataset, valid_dataset, self.batch_size)
 
         with tf.Session() as self.sess:
             d_optim = tf.train.AdamOptimizer(self.learning_rate, beta1=self.beta1) \
@@ -362,8 +328,8 @@ class ImageGAN(object):
             sample_z = np.random.uniform(-1, 1,
                                          size=(self.sample_num, self.dim_z))
 
-            sample_inputs = self.data_X[0:self.sample_num]
-            sample_labels = self.data_y[0:self.sample_num]
+            sample_inputs = test_img
+            sample_labels = test_labels
 
             counter = 1
             start_time = time.time()
@@ -376,12 +342,12 @@ class ImageGAN(object):
 
             for epoch in xrange(self.epoch):
                 batch_idxs = min(
-                    len(self.data_X), self.train_size) // self.batch_size
+                    len(train_img), self.train_size) // self.batch_size
 
                 for idx in xrange(0, int(batch_idxs)):
-                    batch_images = self.data_X[idx *
+                    batch_images = train_img[idx *
                                                self.batch_size:(idx+1)*self.batch_size]
-                    batch_labels = self.data_y[idx *
+                    batch_labels = train_labels[idx *
                                                self.batch_size:(idx+1)*self.batch_size]
 
                     batch_z = np.random.uniform(-1, 1, [self.batch_size, self.dim_z]) \
