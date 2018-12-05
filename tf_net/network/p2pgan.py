@@ -108,48 +108,47 @@ class P2PGAN(object):
                 [self.image_input_sum, self.image_target_sum, self.d_sum,  self.d_loss_sum])
             self.writer = SummaryWriter(
                 os.path.join(globalConfig.p2p_pretrain_path, "logs"), graph=self.sess.graph, filename_suffix='.p2pGAN')
-
+            nsamples=train_dataset.shape[0]
             counter = 1
             start_time = time.time()
             batch_idxs = int(nsamples/self.batch_size)
             for epoch in xrange(self.epoch):
                 for idx in xrange(0, int(batch_idxs)):
-                    batch_images = self.data_X[idx *
+                    batch_images = train_target[idx *
                                                self.batch_size:(idx+1)*self.batch_size]
-                    batch_labels = self.data_y[idx *
+                    batch_labels = train_label[idx *
                                                self.batch_size:(idx+1)*self.batch_size]
 
-                    batch_z = np.random.uniform(-1, 1, [self.batch_size, self.dim_z]) \
-                        .astype(np.float32)
+                    batch_image = 1
 
                     # Update D network
                     _, summary_str = self.sess.run([d_optim, self.d_sum],
                                                    feed_dict={
-                        self.inputs: batch_images,
-                        self.z: batch_z,
-                        self.y: batch_labels,
+                        self.image_target: batch_images,
+                        self.image_input: batch_image,
+                        self.label: batch_labels,
                     })
                     self.writer.add_summary(summary_str, counter)
 
                     # Update G network
                     _, summary_str = self.sess.run([g_optim, self.g_sum],
                                                    feed_dict={
-                        self.z: batch_z,
-                        self.y: batch_labels,
+                        self.image_input: batch_image,
+                        self.label: batch_labels,
                     })
                     self.writer.add_summary(summary_str, counter)
                     # Run g_optim twice to make sure that d_loss does not go to zero (different from paper)
                     _, summary_str = self.sess.run([g_optim, self.g_sum],
-                                                   feed_dict={self.z: batch_z, self.y: batch_labels})
+                                                   feed_dict={self.image_input: batch_image, self.label: batch_labels})
                     self.writer.add_summary(summary_str, counter)
 
                     errD = self.d_loss.eval({
-                        self.z: batch_z,
-                        self.y: batch_labels
+                        self.image_input: batch_image,
+                        self.label: batch_labels
                     })
                     errG = self.g_loss.eval({
-                        self.z: batch_z,
-                        self.y: batch_labels
+                        self.image_input: batch_image,
+                        self.label: batch_labels
                     })
                     counter += 1
                     print("Epoch: [%2d/%2d] [%4d/%4d] time: %4.4f, d_loss: %.8f, g_loss: %.8f"
@@ -161,9 +160,9 @@ class P2PGAN(object):
                         samples, d_loss, g_loss = self.sess.run(
                             [self.sampler, self.d_loss, self.g_loss],
                             feed_dict={
-                                self.z: sample_z,
-                                self.inputs: sample_inputs,
-                                self.y: sample_labels,
+                                self.image_target: batch_images,
+                                self.image_input: batch_image,
+                                self.label: batch_labels
                             }
                         )
                         save_images(samples, image_manifold_size(samples.shape[0]),
@@ -266,8 +265,7 @@ class P2PGAN(object):
                         # since it is directly connected to the skip_layer
                         input = layers[-1]
                     else:
-                        input = tf.concat(
-                            [layers[-1], layers[skip_layer]], axis=3)
+                        input = tf.concat([layers[-1], layers[skip_layer]], axis=3)
 
                     rectified = tf.nn.relu(input)
                     # [batch, in_height, in_width, in_channels] => [batch, in_height*2, in_width*2, out_channels]
@@ -339,20 +337,20 @@ if __name__ == '__main__':
     #         val_ds.loadH36M(i, mode='valid', tApp=True, replace=False)
     # else:
     #     raise ValueError('unknown dataset %s' % globalConfig.dataset)
-    background_dir = os.path.join(globalConfig.h36m_base_path, "Background")
-    real_dir = os.path.join(globalConfig.h36m_base_path, "images")
     train_input=[]
     train_target=[]
-    # with open(os.path.join(globalConfig.h36m_base_path, "annot", "train_images.txt"), 'r') as f:
-    #     for line in tqdmf:
-    #         background = cv2.resize(cv2.imread(
-    #             os.path.join(background_dir, line[:-1]), 1), (128, 128))
-    #         real = cv2.resize(cv2.imread(
-    #             os.path.join(real_dir, line[:-1]), 1), (128, 128))
-    #         background = np.asarray(background-127.5, np.float32)/127.5
-    #         real = np.asarray(real-127.5, np.float32)/127.5
-    #         train_input.append(background)
-    #         train_target.append(real)
+    background_dir = os.path.join(globalConfig.h36m_base_path, "resized/")
+    real_dir = os.path.join(globalConfig.h36m_base_path, "images_resized/")
+    items = os.listdir(real_dir)
+    for counter in tqdm(range(0, len(items), 100000)):
+        filename = items[counter]
+        im_real = cv2.imread(real_dir+filename)
+        im_background = cv2.imread(background_dir+filename)
+
+        im_real = np.asarray(im_real-127.5, np.float32)/127.5
+        im_background = np.asarray(im_background-127.5, np.float32)/127.5
+        train_input.append(im_background)
+        train_target.append(im_real)
 
     train_input = np.asarray(train_input)
     train_target = np.asarray(train_target)

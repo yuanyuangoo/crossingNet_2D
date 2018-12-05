@@ -123,7 +123,7 @@ class GanRender(ForwardRender):
 
         # estimating the latent variable part, Lpos
         self.z_est = self.image_gan.build_recognition(
-            self.image_gan.inputs, self.image_gan.y, output_dim=self.z_dim, keep_prob=0.9, reuse=False)
+            self.image_gan.inputs, self.image_gan.y, output_dim=self.z_dim, keep_prob=0.5, reuse=False)
         self.z_est_t = self.image_gan.build_recognition(
             self.image_gan.inputs, self.image_gan.y, output_dim=self.z_dim, keep_prob=1, reuse=True)
 
@@ -255,7 +255,6 @@ class GanRender(ForwardRender):
                                 self.image_gan.y: train_labels[offset:(offset + self.batch_size), :],
                                 self.combi_weights_input: combi_noises
                                 # self.pose_vae.noise_input: vae_noises,
-                                # self.pose_vae.keep_prob: 0.9
                             })
 
                         self.writer.add_summary(summary_str, counter)
@@ -272,7 +271,6 @@ class GanRender(ForwardRender):
                                 self.combi_weights_input: combi_noises
                                 # self.pose_vae.noise_input_var: vae_noises,
                                 # self.image_gan.noise_input: gan_noises,
-                                # self.pose_vae.keep_prob: 0.9
                             })
                         self.writer.add_summary(summary_str, counter)
                         dis_errs += np.array([0., 1., 0.])*est_err +\
@@ -294,7 +292,7 @@ class GanRender(ForwardRender):
                                 self.combi_weights_input: combi_noises
                                 # self.pose_vae.noise_input_var: vae_noises,
                                 # self.image_gan.noise_input: gan_noises,
-                                # self.pose_vae.keep_prob: 0.9
+
                             })
                         self.writer.add_summary(summary_str, counter)
                         dis_errs += np.array([1., 0., 0.])*loss_dis_gan+np.array([0., 1., 0.])*loss_dis_est +\
@@ -311,7 +309,6 @@ class GanRender(ForwardRender):
                                 self.combi_weights_input: combi_noises
                                 # self.pose_vae.noise_input_var: vae_noises,
                                 # self.image_gan.noise_input: gan_noises,
-                                # self.pose_vae.keep_prob: 0.9
                             })
                         self.writer.add_summary(summary_str, counter)
                         gen_errs += np.array([1., 0., 0.])*gan_loss_gen+np.array([0., 1., 0.])*recons_loss +\
@@ -329,7 +326,6 @@ class GanRender(ForwardRender):
                                 self.combi_weights_input: combi_noises
                                 # self.pose_vae.noise_input_var: vae_noises,
                                 # self.image_gan.noise_input: None,
-                                # self.pose_vae.keep_prob: 0.9
                             })
                         self.writer.add_summary(summary_str, counter)
                         dis_errs += np.array([1., 0., 0.])*loss_dis_gan+np.array([0., 1., 0.])*loss_dis_est +\
@@ -347,7 +343,6 @@ class GanRender(ForwardRender):
                                 self.combi_weights_input: combi_noises
                                 # self.pose_vae.noise_input_var: vae_noises,
                                 # self.image_gan.noise_input: None,
-                                # self.pose_vae.keep_prob: 0.9
                             })
                         self.writer.add_summary(summary_str, counter)
                         gen_errs += np.array([1., 0., 0.])*gan_loss_gen+np.array([0., 1., 0.])*recons_loss +\
@@ -379,7 +374,6 @@ class GanRender(ForwardRender):
                             # self.pose_vae.y: test_labels[offset+i, :],
                             # self.origin_input: None,
                             self.image_gan.y: test_labels[offset:(offset + self.batch_size), :],
-                            # self.pose_vae.keep_prob: 1
                         })
                         reco_pose = self.pose_vae.y.eval({
                             self.pose_input: test_skel[offset:(offset + self.batch_size), :],
@@ -387,7 +381,6 @@ class GanRender(ForwardRender):
 
                             # self.origin_input: None,
                             # self.pose_vae.label: test_labels[offset+i, :],
-                            # self.pose_vae.keep_prob: 1
                         })
 
                         real_pose = self.resumePose(
@@ -422,7 +415,6 @@ class GanRender(ForwardRender):
                             # self.pose_vae.y: test_labels[offset:(offset + self.batch_size), :],
                             # self.origin_input: None,
                             self.image_gan.y: test_labels[offset:(offset + self.batch_size), :],
-                            # self.pose_vae.keep_prob: 1
                         })
                         est_pose = self.resumePose(
                             est_pose[0], self.origin_input)

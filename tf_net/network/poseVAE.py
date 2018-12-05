@@ -62,7 +62,7 @@ class PoseVAE(object):
         self.x_sum = histogram_summary("x", self.x)
         
 
-        self.keep_prob = 0.9
+        self.keep_prob = 0.5
         #latent_variable
         self.z_in = tf.placeholder(
             tf.float32, shape=[None, dim_z], name='latent_variable')
@@ -358,7 +358,7 @@ if __name__ == '__main__':
         import data.h36m as h36m
         ds = Dataset()
         # for i in range(0, 20000, 20000):
-        ds.loadH36M(10240, mode='train', tApp=True, replace=False)
+        ds.loadH36M(40960, mode='train', tApp=True, replace=False)
 
         val_ds = Dataset()
         # for i in range(0, 20000, 20000):

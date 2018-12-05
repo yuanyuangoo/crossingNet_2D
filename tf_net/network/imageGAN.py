@@ -274,7 +274,7 @@ class ImageGAN(object):
 
             return lrelu(h3), combi_metric
 
-    def build_sampler(self, z, y=None, keep_prob=0.9):
+    def build_sampler(self, z, y=None, keep_prob=0.5):
         with tf.variable_scope("generator") as scope:
             scope.reuse_variables()
 
@@ -450,7 +450,7 @@ if __name__ == '__main__':
         import data.h36m as h36m
         ds = Dataset()
         # for i in range(0, 20000, 20000):
-        ds.loadH36M(10240, mode='train', tApp=True, replace=False)
+        ds.loadH36M(40960, mode='train', tApp=True, replace=False)
 
         val_ds = Dataset()
         # for i in range(0, 20000, 20000):
