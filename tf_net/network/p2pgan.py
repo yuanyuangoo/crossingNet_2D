@@ -92,7 +92,7 @@ class P2PGAN(object):
             self.g_vars = [var for var in t_vars if 'generator' in var.name]
             self.saver = tf.train.Saver()
 
-    def train(self, train_dataset, valid_dataset):
+    def train(self, train_input, train_target, train_label):
         with tf.Session() as self.sess:
             d_optim = tf.train.AdamOptimizer(self.learning_rate, beta1=self.beta1) \
                 .minimize(self.d_loss, var_list=self.d_vars)
@@ -108,24 +108,25 @@ class P2PGAN(object):
                 [self.image_input_sum, self.image_target_sum, self.d_sum,  self.d_loss_sum])
             self.writer = SummaryWriter(
                 os.path.join(globalConfig.p2p_pretrain_path, "logs"), graph=self.sess.graph, filename_suffix='.p2pGAN')
-            nsamples=train_dataset.shape[0]
+            nsamples=train_input.shape[0]
             counter = 1
             start_time = time.time()
             batch_idxs = int(nsamples/self.batch_size)
             for epoch in xrange(self.epoch):
                 for idx in xrange(0, int(batch_idxs)):
-                    batch_images = train_target[idx *
+                    batch_target = train_target[idx *
                                                self.batch_size:(idx+1)*self.batch_size]
                     batch_labels = train_label[idx *
                                                self.batch_size:(idx+1)*self.batch_size]
 
-                    batch_image = 1
+                    batch_input = train_input[idx *
+                                               self.batch_size:(idx+1)*self.batch_size]
 
                     # Update D network
                     _, summary_str = self.sess.run([d_optim, self.d_sum],
                                                    feed_dict={
-                        self.image_target: batch_images,
-                        self.image_input: batch_image,
+                        self.image_target: batch_target,
+                        self.image_input: batch_input,
                         self.label: batch_labels,
                     })
                     self.writer.add_summary(summary_str, counter)
@@ -133,7 +134,7 @@ class P2PGAN(object):
                     # Update G network
                     _, summary_str = self.sess.run([g_optim, self.g_sum],
                                                    feed_dict={
-                        self.image_input: batch_image,
+                        self.image_input: batch_input,
                         self.label: batch_labels,
                     })
                     self.writer.add_summary(summary_str, counter)
@@ -143,11 +144,11 @@ class P2PGAN(object):
                     self.writer.add_summary(summary_str, counter)
 
                     errD = self.d_loss.eval({
-                        self.image_input: batch_image,
+                        self.image_input: batch_input,
                         self.label: batch_labels
                     })
                     errG = self.g_loss.eval({
-                        self.image_input: batch_image,
+                        self.image_input: batch_input,
                         self.label: batch_labels
                     })
                     counter += 1
@@ -160,8 +161,8 @@ class P2PGAN(object):
                         samples, d_loss, g_loss = self.sess.run(
                             [self.sampler, self.d_loss, self.g_loss],
                             feed_dict={
-                                self.image_target: batch_images,
-                                self.image_input: batch_image,
+                                self.image_target: batch_target,
+                                self.image_input: batch_input,
                                 self.label: batch_labels
                             }
                         )
@@ -208,7 +209,7 @@ class P2PGAN(object):
 
             return layers[-1]
 
-    def build_generator(self, input, out_channels):
+    def build_generator(self, input, generator_outputs_channels):
         with tf.variable_scope("generator") as scope:
             layers = []
             with tf.variable_scope("encoder_1"):
@@ -228,8 +229,8 @@ class P2PGAN(object):
                 self.ngf * 8,
                 # encoder_7: [batch, 4, 4, ngf * 8] => [batch, 2, 2, ngf * 8]
                 self.ngf * 8,
-                # encoder_8: [batch, 2, 2, ngf * 8] => [batch, 1, 1, ngf * 8]
-                self.ngf * 8,
+                # # encoder_8: [batch, 2, 2, ngf * 8] => [batch, 1, 1, ngf * 8]
+                # self.ngf * 8,
             ]
 
             for out_channels in layer_specs:
@@ -241,8 +242,8 @@ class P2PGAN(object):
                     layers.append(output)
 
             layer_specs = [
-                # decoder_8: [batch, 1, 1, ngf * 8] => [batch, 2, 2, ngf * 8 * 2]
-                (self.ngf * 8, 0.5),
+                # # decoder_8: [batch, 1, 1, ngf * 8] => [batch, 2, 2, ngf * 8 * 2]
+                # (self.ngf * 8, 0.5),
                 # decoder_7: [batch, 2, 2, ngf * 8 * 2] => [batch, 4, 4, ngf * 8 * 2]
                 (self.ngf * 8, 0.5),
                 # decoder_6: [batch, 4, 4, ngf * 8 * 2] => [batch, 8, 8, ngf * 8 * 2]
@@ -281,7 +282,7 @@ class P2PGAN(object):
             with tf.variable_scope("decoder_1"):
                 input = tf.concat([layers[-1], layers[0]], axis=3)
                 rectified = tf.nn.relu(input)
-                output = gen_deconv(rectified, out_channels)
+                output = gen_deconv(rectified, generator_outputs_channels)
                 output = tf.tanh(output)
                 layers.append(output)
 
@@ -322,38 +323,68 @@ class P2PGAN(object):
                 return False, 0
 
 
+def getOneHotedLabel(imgname):
+    index = None
+    for key, tag in ref.tags.items():
+        if tag in imgname:
+            index = ref.actions.index(key)
+    if index == None:
+        index = len(ref.actions)-1
+    return ref.oneHoted[index, :]
 
 
+def loadH36mForP2P(numofSample=1024, replace=False):
+    cache_base_path = globalConfig.cache_base_path
+    input = []
+    target = []
+    label = []
+    frmList = []
+    Fsize = numofSample
+    pickleCachePath = '{}h36m_{}_{}.pkl'.format(
+        cache_base_path, "forp2pgan", Fsize)
+    if os.path.isfile(pickleCachePath) and not replace:
+        print('direct load from the cache')
+        t1 = time.time()
+        f = open(pickleCachePath, 'rb')
+        # (self.frmList) += pickle.load(f)
+        (frmList) += pickle.load(f)
+        t1 = time.time() - t1
+        print('loaded with {}s'.format(t1))
+        return frmList[0], frmList[1], frmList[2]
 
-if __name__ == '__main__':
-    # if globalConfig.dataset == 'H36M':
-    #     import data.h36m as h36m
-    #     ds = Dataset()
-    #     for i in range(0, 20000, 20000):
-    #         ds.loadH36M(i, mode='train', tApp=True, replace=False)
-
-    #     val_ds = Dataset()
-    #     for i in range(0, 20000, 20000):
-    #         val_ds.loadH36M(i, mode='valid', tApp=True, replace=False)
-    # else:
-    #     raise ValueError('unknown dataset %s' % globalConfig.dataset)
-    train_input=[]
-    train_target=[]
     background_dir = os.path.join(globalConfig.h36m_base_path, "resized/")
     real_dir = os.path.join(globalConfig.h36m_base_path, "images_resized/")
     items = os.listdir(real_dir)
-    for counter in tqdm(range(0, len(items), 100000)):
+    frmEndNum = len(items)
+    frmStartNum = 0
+    for counter in tqdm(range(frmStartNum, int(frmEndNum/Fsize)*Fsize, int(frmEndNum/Fsize))):
         filename = items[counter]
+
         im_real = cv2.imread(real_dir+filename)
         im_background = cv2.imread(background_dir+filename)
-
+        # Normalise
         im_real = np.asarray(im_real-127.5, np.float32)/127.5
         im_background = np.asarray(im_background-127.5, np.float32)/127.5
-        train_input.append(im_background)
-        train_target.append(im_real)
 
-    train_input = np.asarray(train_input)
-    train_target = np.asarray(train_target)
+        input.append(im_background)
+        target.append(im_real)
+        label.append(getOneHotedLabel(filename))
 
+    print('loaded with {} frames'.format(len(train_input)))
+    input = np.asarray(input)
+    target = np.asarray(target)
+    label = np.asarray(label)
+
+    if not os.path.exists(cache_base_path):
+        os.makedirs(cache_base_path)
+    f = open(pickleCachePath, 'wb')
+    pickle.dump((input, target, label),
+                f, protocol=pickle.HIGHEST_PROTOCOL)
+    f.close()
+    return train_input, train_target, train_label
+
+
+if __name__ == '__main__':
+    train_input, train_target, train_label = loadH36mForP2P()
     p2p = P2PGAN()
-    p2p.train(train_input, train_target)
+    p2p.train(train_input, train_target, train_label)
