@@ -98,12 +98,12 @@ class ImageGAN(object):
         self.z_sum = histogram_summary("z", self.z)
 
         #Generator for fake image
-        self.G = self.build_generator(self.z, self.y)
+        self.G = self.build_generator(self.z, self.y, reuse=False)
         #Discriminator for real image
         self.D, self.D_logits, _ = self.build_discriminator(
             inputs, self.y, reuse=False)
         #image
-        self.sampler = self.build_sampler(self.z, self.y)
+        self.sampler = self.build_generator(self.z, self.y, reuse=True)
         #Discriminator for fake image
         self.D_, self.D_logits_, _ = self.build_discriminator(
             self.G, self.y, reuse=True)
@@ -168,8 +168,10 @@ class ImageGAN(object):
             self.dis_px_layer = h3
             return tf.nn.tanh(h3), h3, h2
 
-    def build_generator(self, z, y=None):
+    def build_generator(self, z, y=None,reuse=False):
         with tf.variable_scope("generator") as scope:
+            if reuse:
+                scope.reuse_variables()
             yb = tf.reshape(y, [self.batch_size, 1, 1, self.y_dim])
             z = concat([z, y], 1)
 
@@ -437,7 +439,7 @@ class ImageGAN(object):
             self.saver.restore(
                 self.sess, os.path.join(checkpoint_dir, ckpt_name))
             counter = int(
-                next(re.finditer("(\d+)(?!.*\d)", ckpt_name)).group(0))
+                next(re.finditer("(\dbuild_generator+)(?!.*\d)", ckpt_name)).group(0))
             print(" [*] Success to read {}".format(ckpt_name))
             return True, counter
         else:

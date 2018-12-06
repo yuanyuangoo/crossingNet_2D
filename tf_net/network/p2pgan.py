@@ -71,7 +71,7 @@ class P2PGAN(object):
             #fake D
             self.D_ = self.build_discriminator(
                 self.image_input, self.G, reuse=True)
-            self.sampler = self.build_generator(self.image_input, out_channels)
+            self.sampler = self.build_generator(self.image_input, out_channels,reuse=True)
 
             self.d_sum = histogram_summary("d", self.D)
             self.d__sum = histogram_summary("d_", self.D_)
@@ -93,6 +93,10 @@ class P2PGAN(object):
             self.saver = tf.train.Saver()
 
     def train(self, train_input, train_target, train_label):
+        if not os.path.exists(self.checkpoint_dir):
+            os.makedirs(self.checkpoint_dir)
+        if not os.path.exists(self.sample_dir):
+            os.makedirs(self.sample_dir)
         with tf.Session() as self.sess:
             d_optim = tf.train.AdamOptimizer(self.learning_rate, beta1=self.beta1) \
                 .minimize(self.d_loss, var_list=self.d_vars)
@@ -135,20 +139,27 @@ class P2PGAN(object):
                     _, summary_str = self.sess.run([g_optim, self.g_sum],
                                                    feed_dict={
                         self.image_input: batch_input,
+                        self.image_target: batch_target,
                         self.label: batch_labels,
                     })
                     self.writer.add_summary(summary_str, counter)
                     # Run g_optim twice to make sure that d_loss does not go to zero (different from paper)
                     _, summary_str = self.sess.run([g_optim, self.g_sum],
-                                                   feed_dict={self.image_input: batch_image, self.label: batch_labels})
+                                                   feed_dict={
+                                                       self.image_input: batch_input,
+                                                       self.image_target: batch_target,
+                                                       self.label: batch_labels
+                    })
                     self.writer.add_summary(summary_str, counter)
 
                     errD = self.d_loss.eval({
                         self.image_input: batch_input,
-                        self.label: batch_labels
+                        self.label: batch_labels,
+                        self.image_target: batch_target
                     })
                     errG = self.g_loss.eval({
                         self.image_input: batch_input,
+                        self.image_target: batch_target,
                         self.label: batch_labels
                     })
                     counter += 1
@@ -156,7 +167,7 @@ class P2PGAN(object):
                           % (epoch, self.epoch, idx, batch_idxs,
                              time.time() - start_time, errD, errG))
 
-                    if np.mod(counter, 100) == 1:
+                    if np.mod(counter, 10) == 1:
                         # show_all_variables()
                         samples, d_loss, g_loss = self.sess.run(
                             [self.sampler, self.d_loss, self.g_loss],
@@ -209,8 +220,10 @@ class P2PGAN(object):
 
             return layers[-1]
 
-    def build_generator(self, input, generator_outputs_channels):
+    def build_generator(self, input, generator_outputs_channels,reuse=False):
         with tf.variable_scope("generator") as scope:
+            if reuse:
+                scope.reuse_variables()
             layers = []
             with tf.variable_scope("encoder_1"):
                 output = gen_conv(input, self.ngf)
@@ -288,39 +301,39 @@ class P2PGAN(object):
 
             return layers[-1]
 
-        @property
-        def model_dir(self):
-            return "{}_{}".format(
-                self.dataset_name, self.batch_size)
+    @property
+    def model_dir(self):
+        return "{}_{}".format(
+            self.dataset_name, self.batch_size)
 
-        def save(self, checkpoint_dir, step):
-            model_name = "p2pGAN.model"
-            checkpoint_dir = os.path.join(checkpoint_dir, self.model_dir)
+    def save(self, checkpoint_dir, step):
+        model_name = "p2pGAN.model"
+        checkpoint_dir = os.path.join(checkpoint_dir, self.model_dir)
 
-            if not os.path.exists(checkpoint_dir):
-                os.makedirs(checkpoint_dir)
+        if not os.path.exists(checkpoint_dir):
+            os.makedirs(checkpoint_dir)
 
-            self.saver.save(self.sess,
-                            os.path.join(checkpoint_dir, model_name),
-                            global_step=step)
+        self.saver.save(self.sess,
+                        os.path.join(checkpoint_dir, model_name),
+                        global_step=step)
 
-        def load(self, checkpoint_dir):
-            import re
-            print(" [*] Reading checkpoints...")
-            checkpoint_dir = os.path.join(checkpoint_dir, self.model_dir)
+    def load(self, checkpoint_dir):
+        import re
+        print(" [*] Reading checkpoints...")
+        checkpoint_dir = os.path.join(checkpoint_dir, self.model_dir)
 
-            ckpt = tf.train.get_checkpoint_state(checkpoint_dir)
-            if ckpt and ckpt.model_checkpoint_path:
-                ckpt_name = os.path.basename(ckpt.model_checkpoint_path)
-                self.saver.restore(
-                    self.sess, os.path.join(checkpoint_dir, ckpt_name))
-                counter = int(
-                    next(re.finditer("(\d+)(?!.*\d)", ckpt_name)).group(0))
-                print(" [*] Success to read {}".format(ckpt_name))
-                return True, counter
-            else:
-                print(" [*] Failed to find a checkpoint")
-                return False, 0
+        ckpt = tf.train.get_checkpoint_state(checkpoint_dir)
+        if ckpt and ckpt.model_checkpoint_path:
+            ckpt_name = os.path.basename(ckpt.model_checkpoint_path)
+            self.saver.restore(
+                self.sess, os.path.join(checkpoint_dir, ckpt_name))
+            counter = int(
+                next(re.finditer("(\d+)(?!.*\d)", ckpt_name)).group(0))
+            print(" [*] Success to read {}".format(ckpt_name))
+            return True, counter
+        else:
+            print(" [*] Failed to find a checkpoint")
+            return False, 0
 
 
 def getOneHotedLabel(imgname):
@@ -370,7 +383,7 @@ def loadH36mForP2P(numofSample=1024, replace=False):
         target.append(im_real)
         label.append(getOneHotedLabel(filename))
 
-    print('loaded with {} frames'.format(len(train_input)))
+    print('loaded with {} frames'.format(len(input)))
     input = np.asarray(input)
     target = np.asarray(target)
     label = np.asarray(label)
@@ -385,6 +398,6 @@ def loadH36mForP2P(numofSample=1024, replace=False):
 
 
 if __name__ == '__main__':
-    train_input, train_target, train_label = loadH36mForP2P()
+    train_input, train_target, train_label = loadH36mForP2P(10240)
     p2p = P2PGAN()
     p2p.train(train_input, train_target, train_label)
