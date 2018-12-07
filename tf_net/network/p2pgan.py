@@ -167,7 +167,7 @@ class P2PGAN(object):
                           % (epoch, self.epoch, idx, batch_idxs,
                              time.time() - start_time, errD, errG))
 
-                    if np.mod(counter, 10) == 1:
+                    if np.mod(counter, 100) == 1:
                         # show_all_variables()
                         samples, d_loss, g_loss = self.sess.run(
                             [self.sampler, self.d_loss, self.g_loss],
@@ -394,7 +394,7 @@ def loadH36mForP2P(numofSample=1024, replace=False):
     pickle.dump((input, target, label),
                 f, protocol=pickle.HIGHEST_PROTOCOL)
     f.close()
-    return train_input, train_target, train_label
+    return input, target, label
 
 
 if __name__ == '__main__':

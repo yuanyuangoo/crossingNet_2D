@@ -1,14 +1,14 @@
+import sys
+sys.path.append('./')
+from data.layers import *
+import globalConfig
+import data.plot_utils as plot_utils
+from data.util import *
+from data.dataset import *
+import data.ref as ref
 import tensorflow as tf
 import numpy as np
 import os
-import sys
-sys.path.append('./')
-import data.ref as ref
-from data.dataset import *
-from data.util import *
-import data.plot_utils as plot_utils
-import globalConfig
-from data.layers import *
 IMAGE_SIZE_H36M = 128
 Num_of_Joints = ref.nJoints
 VALIDATION_SIZE = 5000  # Size of the validation set.
@@ -31,7 +31,7 @@ class PoseVAE(object):
         self.dim_z = dim_z
         #dim_x: dim of input pose dimension
         self.dim_x = dim_x
-        self.label_dim=label_dim
+        self.label_dim = label_dim
         # self.noise_input = tf.placeholder(
         #     dtype=tf.float32, shape=(None, self.dim_z),name='vaenoise')
         self.batch_size = batch_size
@@ -60,7 +60,6 @@ class PoseVAE(object):
         self.x_hat_sum = histogram_summary("x_hat", self.x_hat)
         self.label_hat_sum = histogram_summary("label_hat", self.label_hat)
         self.x_sum = histogram_summary("x", self.x)
-        
 
         self.keep_prob = 0.5
         #latent_variable
@@ -79,11 +78,9 @@ class PoseVAE(object):
         self.KL_divergence_sum = scalar_summary(
             "KL_divergence", self.KL_divergence)
 
-
         t_vars = tf.trainable_variables()
         self.encoder_vars = [var for var in t_vars if 'encoder' in var.name]
         self.decoder_vars = [var for var in t_vars if 'decoder' in var.name]
-
 
         self.saver = tf.train.Saver()
 
@@ -109,7 +106,6 @@ class PoseVAE(object):
         marginal_likelihood = tf.square(y-x)
         marginal_likelihood = tf.reduce_sum(marginal_likelihood/2)
 
-
         KL_divergence = 0.5 * \
             tf.reduce_sum(tf.square(mu) + tf.square(sigma) -
                           tf.log(1e-8 + tf.square(sigma)) - 1, 1)
@@ -122,7 +118,7 @@ class PoseVAE(object):
 
         return y, z, loss, marginal_likelihood, KL_divergence
 
-    def encoder(self, x,label, n_hidden, n_output, keep_prob, reuse=True):
+    def encoder(self, x, label, n_hidden, n_output, keep_prob, reuse=True):
         with tf.variable_scope("encoder") as scope:
             if reuse:
                 scope.reuse_variables()
@@ -138,7 +134,7 @@ class PoseVAE(object):
             h0 = tf.matmul(x, w0) + b0
             h0 = tf.nn.elu(h0)
             h0 = tf.nn.dropout(h0, keep_prob)
-            h0=concat([h0, label], 1)
+            h0 = concat([h0, label], 1)
 
             # 2nd hidden layer
             w1 = tf.get_variable(
@@ -147,7 +143,7 @@ class PoseVAE(object):
             h1 = tf.matmul(h0, w1) + b1
             # h1 = tf.nn.tanh(h1)
             h1 = tf.nn.dropout(h1, keep_prob)
-            h1=concat([h1, label], 1)
+            h1 = concat([h1, label], 1)
 
             # output layer
             # borrowed from https: // github.com / altosaar / vae / blob / master / vae.py
@@ -255,7 +251,6 @@ class PoseVAE(object):
                                       self.neg_marginal_likelihood_sum, self.KL_divergence_sum, self.loss_sum])
             self.writer = SummaryWriter(
                 os.path.join(globalConfig.vae_pretrain_path, "logs"), graph=self.sess.graph, filename_suffix='.poseVAE')
-
 
             for epoch in range(self.num_epochs):
 

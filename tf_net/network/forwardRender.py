@@ -2,7 +2,7 @@ import tensorflow as tf
 from tqdm import tqdm
 
 from poseVAE import PoseVAE
-from imageGAN import ImageGAN
+from wgan import ImageWGAN
 from numpy.matlib import repmat
 from numpy.random import RandomState
 import numpy as np
@@ -15,6 +15,8 @@ import globalConfig
 from data.layers import *
 from data.dataset import *
 from data.util import *
+from data.ops import *
+
 minloss = 1e-5
 
 
@@ -29,7 +31,7 @@ class ForwardRender(object):
         self.origin_input = tf.placeholder(tf.float32, shape=(None, 3),name="origin")
         self.origin_input_sum = histogram_summary("origin_input", self.origin_input)
 
-        self.image_gan = ImageGAN()
+        self.image_gan = ImageWGAN()
         self.dim_z = self.image_gan.dim_z
 
         self.render = self.build_latent_alignment_layer(
@@ -73,7 +75,7 @@ class ForwardRender(object):
 
     def build_latent_alignment_layer(self, pose_vae,
                                      origin_layer=None,
-                                     quad_layer=None, keep_prob=0.5,reuse=False):
+                                     quad_layer=None, keep_prob=0.5,reuse=False,is_training=True):
 
         self.pose_z_dim = int(pose_vae.z.shape[1])
         self.z_dim = self.pose_z_dim
@@ -95,11 +97,11 @@ class ForwardRender(object):
             self.latent = latent
 
             # use None input, to adapt z from both pose-vae and real-test
-            self.bn = batch_norm(name="bn1")
-            self.alignment = lrelu(self.bn(
-                tf.layers.dense(self.latent, self.image_gan.dim_z)))
+            self.alignment = lrelu(bn(
+                tf.layers.dense(self.latent, self.image_gan.dim_z), is_training=is_training, scope='ali_bn'))
             self.alignment = tf.nn.dropout(self.alignment, keep_prob)
-        render = self.image_gan.build_sampler(self.alignment, self.image_gan.y)
+        render = self.image_gan.build_generator(
+            self.alignment, self.image_gan.y, reuse=True, is_training=True)
         return render
 
     def train(self, nepoch,  train_dataset, valid_dataset, desc='dummy'):
