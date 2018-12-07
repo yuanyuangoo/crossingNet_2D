@@ -185,10 +185,11 @@ def drawImageCV(skel,img=None, axis=(0, 1, 0), theta=0):
         skel = skel.T
         skel = np.dot(skel, rotation_matrix(axis, theta))
         skel = skel[:, 0:2]
-        min_s = skel.min()
-        max_s = skel.max()
-        mid_s = (min_s+max_s)/2
-        skel = (((skel-mid_s)/(max_s-min_s))+0.52)*125
+        skel=skel*128
+        # min_s = skel.min()
+        # max_s = skel.max()
+        # mid_s = (min_s+max_s)/2
+        # skel = (((skel-mid_s)/(max_s-min_s))+0.52)*125
         if img is None:
             img = 255*np.ones((128, 128, 3))
         for i, edge in enumerate(ref.edges):
@@ -309,13 +310,11 @@ def prep_data(train_dataset, valid_dataset, batch_size):
             test_labels.append(frm.label)
             test_img.append(frm.norm_img)
 
-        train_skel = np.asarray(
-            train_skel)/np.concatenate((128*np.ones(17*2), 60*np.ones(17)))
+        train_skel = (np.asarray(train_skel)+128)/256
         train_labels = np.asarray(train_labels)
         train_img = np.asarray(train_img)
 
-        test_skel = np.asarray(
-            test_skel)/np.concatenate((128*np.ones(17*2), 60*np.ones(17)))
+        test_skel = (np.asarray(test_skel)+128)/256
         test_labels = np.asarray(test_labels)
         test_img = np.asarray(test_img)
 

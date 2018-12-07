@@ -181,18 +181,18 @@ class ImageWGAN(object):
 
             # yb = tf.expand_dims(tf.expand_dims(y, 1),2)
 
-            h0 = tf.nn.relu(
+            h0 = lrelu(
                 bn(linear(z, self.gfc_dim, 'g_h0_lin'), is_training=is_training, scope="g_h0_bn"))
             h0 = concat([h0, y], 1)
 
-            h1 = tf.nn.relu(bn(
+            h1 = lrelu(bn(
                 linear(h0, self.gf_dim*2*s_h4*s_w4, 'g_h1_lin'), is_training=is_training, scope="g_h1_bn"))
             h1 = tf.reshape(
                 h1, [self.batch_size, s_h4, s_w4, self.gf_dim * 2])
 
             h1 = conv_cond_concat(h1, yb)
 
-            h2 = tf.nn.relu(bn(deconv2d(
+            h2 = lrelu(bn(deconv2d(
                 h1, [self.batch_size, s_h2, s_w2, self.gf_dim * 2], name='g_h2'), is_training=is_training, scope="g_h2_bn"))
             h2 = conv_cond_concat(h2, yb)
 

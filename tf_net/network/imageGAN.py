@@ -276,32 +276,6 @@ class ImageGAN(object):
 
             return lrelu(h3), combi_metric
 
-    def build_sampler(self, z, y=None, keep_prob=0.5):
-        with tf.variable_scope("generator") as scope:
-            scope.reuse_variables()
-
-            s_h, s_w = self.output_height, self.output_width
-            s_h2, s_h4 = int(s_h/2), int(s_h/4)
-            s_w2, s_w4 = int(s_w/2), int(s_w/4)
-            # yb = tf.reshape(y, [-1, 1, 1, self.y_dim])
-            yb = tf.reshape(y, [self.batch_size, 1, 1, self.y_dim])
-            z = concat([z, y], 1)
-
-            h0 = tf.nn.relu(self.g_bn0(
-                linear(z, self.gfc_dim, 'g_h0_lin'), train=False))
-            h0 = concat([h0, y], 1)
-
-            h1 = tf.nn.relu(self.g_bn1(
-                linear(h0, self.gf_dim*2*s_h4*s_w4, 'g_h1_lin'), train=False))
-            h1 = tf.reshape(h1, [self.batch_size, s_h4, s_w4, self.gf_dim * 2])
-            h1 = conv_cond_concat(h1, yb)
-
-            h2 = tf.nn.relu(self.g_bn2(
-                deconv2d(h1, [self.batch_size, s_h2, s_w2, self.gf_dim * 2], name='g_h2'), train=False))
-            h2 = conv_cond_concat(h2, yb)
-
-            return tf.nn.tanh(deconv2d(h2, [self.batch_size, s_h, s_w, self.c_dim], name='g_h3'))
-
     def train(self, train_dataset, valid_dataset):
         if not os.path.exists(self.checkpoint_dir):
             os.makedirs(self.checkpoint_dir)

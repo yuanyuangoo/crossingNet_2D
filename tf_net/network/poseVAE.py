@@ -17,9 +17,10 @@ NUM_LABELS = 15
 
 class PoseVAE(object):
     def __init__(
-            self, dim_x=Num_of_Joints*3, batch_size=64, lr=1e-3, num_epochs=3000,
+            self, dim_x=Num_of_Joints*3, batch_size=64, lr=5e-3, num_epochs=3000,
             dim_z=46, label_dim=15, n_hidden=40, PRR=True, PRR_n_img_x=8, PRR_n_img_y=8, PRR_resize_factor=1.0,
-            PMLR=True, PMLR_n_img_x=20, PMLR_n_img_y=20, PMLR_resize_factor=1.0, PMLR_z_range=2.0, PMLR_n_samples=5000, reuse=False):
+            PMLR=True, PMLR_n_img_x=20, PMLR_n_img_y=20, PMLR_resize_factor=1.0,
+            PMLR_z_range=2.0, PMLR_n_samples=5000, reuse=False):
 
         checkpoint_dir = 'checkpoint'
         self.checkpoint_dir = os.path.join(
@@ -61,7 +62,7 @@ class PoseVAE(object):
         self.label_hat_sum = histogram_summary("label_hat", self.label_hat)
         self.x_sum = histogram_summary("x", self.x)
 
-        self.keep_prob = 0.5
+        self.keep_prob = 0.9
         #latent_variable
         self.z_in = tf.placeholder(
             tf.float32, shape=[None, dim_z], name='latent_variable')
@@ -101,20 +102,21 @@ class PoseVAE(object):
         y = tf.clip_by_value(y, 1e-8, 1 - 1e-8)
 
         # loss
-        marginal_likelihood = tf.reduce_sum(
-            x * tf.log(y) + (1 - x) * tf.log(1 - y), 1)
-        marginal_likelihood = tf.square(y-x)
-        marginal_likelihood = tf.reduce_sum(marginal_likelihood/2)
+        marginal_likelihood=tf.square(y-x)
+        marginal_likelihood=0.5*tf.reduce_sum(marginal_likelihood)
+        # marginal_likelihood = tf.reduce_sum(
+        #     x * tf.log(y) + (1 - x) * tf.log(1 - y), [1])
+        # marginal_likelihood = -tf.reduce_mean(marginal_likelihood)
 
         KL_divergence = 0.5 * \
             tf.reduce_sum(tf.square(mu) + tf.square(sigma) -
-                          tf.log(1e-8 + tf.square(sigma)) - 1, 1)
+                          tf.log(1e-8 + tf.square(sigma)) - 1, [1])
 
         KL_divergence = tf.reduce_mean(KL_divergence)
 
-        ELBO = marginal_likelihood + KL_divergence
+        ELBO = -marginal_likelihood - KL_divergence
 
-        loss = ELBO
+        loss = -ELBO
 
         return y, z, loss, marginal_likelihood, KL_divergence
 
@@ -235,8 +237,7 @@ class PoseVAE(object):
             # x_PMLR += np.random.randint(2, size=x_PMLR.shape)
 
             decoded = vae.sampler(self.z_in, self.dim_x, self.n_hidden)
-        self.train_op = tf.train.AdamOptimizer(self.lr).minimize(
-            self.loss)
+        self.train_op = tf.train.AdamOptimizer(self.lr).minimize(self.loss)
         with tf.Session() as self.sess:
             counter = 1
             # could_load, checkpoint_counter = self.load(self.checkpoint_dir)
@@ -353,7 +354,7 @@ if __name__ == '__main__':
         import data.h36m as h36m
         ds = Dataset()
         # for i in range(0, 20000, 20000):
-        ds.loadH36M(40960, mode='train', tApp=True, replace=False)
+        ds.loadH36M(1024, mode='train', tApp=True, replace=False)
 
         val_ds = Dataset()
         # for i in range(0, 20000, 20000):
