@@ -185,13 +185,15 @@ def drawImageCV(skel,img=None, axis=(0, 1, 0), theta=0):
         skel = skel.T
         skel = np.dot(skel, rotation_matrix(axis, theta))
         skel = skel[:, 0:2]
-        skel=skel*128
+        skel=(skel*256)-128
         # min_s = skel.min()
         # max_s = skel.max()
         # mid_s = (min_s+max_s)/2
         # skel = (((skel-mid_s)/(max_s-min_s))+0.52)*125
         if img is None:
             img = 255*np.ones((128, 128, 3))
+        elif img.shape[2]==1:
+            img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
         for i, edge in enumerate(ref.edges):
             pt1 = skel[edge[0]]
             pt2 = skel[edge[1]]

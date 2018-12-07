@@ -17,7 +17,7 @@ NUM_LABELS = 15
 
 class PoseVAE(object):
     def __init__(
-            self, dim_x=Num_of_Joints*3, batch_size=64, lr=5e-3, num_epochs=3000,
+            self, dim_x=Num_of_Joints*3, batch_size=64, lr=1e-3, num_epochs=30000,
             dim_z=46, label_dim=15, n_hidden=40, PRR=True, PRR_n_img_x=8, PRR_n_img_y=8, PRR_resize_factor=1.0,
             PMLR=True, PMLR_n_img_x=20, PMLR_n_img_y=20, PMLR_resize_factor=1.0,
             PMLR_z_range=2.0, PMLR_n_samples=5000, reuse=False):
@@ -103,7 +103,7 @@ class PoseVAE(object):
 
         # loss
         marginal_likelihood=tf.square(y-x)
-        marginal_likelihood=0.5*tf.reduce_sum(marginal_likelihood)
+        marginal_likelihood=0.5*tf.reduce_sum(marginal_likelihood)*100
         # marginal_likelihood = tf.reduce_sum(
         #     x * tf.log(y) + (1 - x) * tf.log(1 - y), [1])
         # marginal_likelihood = -tf.reduce_mean(marginal_likelihood)
@@ -228,7 +228,8 @@ class PoseVAE(object):
         if self.PMLR and self.dim_z == 2:
 
             PMLR = plot_utils.Plot_Manifold_Learning_Result(
-                self.sample_dir, self.PMLR_n_img_x, self.PMLR_n_img_y, IMAGE_SIZE_H36M, IMAGE_SIZE_H36M, self.PMLR_resize_factor, self.PMLR_z_range)
+                self.sample_dir, self.PMLR_n_img_x, self.PMLR_n_img_y,
+                IMAGE_SIZE_H36M, IMAGE_SIZE_H36M, self.PMLR_resize_factor, self.PMLR_z_range)
 
             x_PMLR = test_skel[0:self.PMLR_n_samples, :]
             id_PMLR = test_labels[0:self.PMLR_n_samples, :]
@@ -254,7 +255,6 @@ class PoseVAE(object):
                 os.path.join(globalConfig.vae_pretrain_path, "logs"), graph=self.sess.graph, filename_suffix='.poseVAE')
 
             for epoch in range(self.num_epochs):
-
                 # Loop over all batches
                 for i in range(total_batch):
                     # Compute the offset of the current minibatch in the data.
@@ -262,8 +262,8 @@ class PoseVAE(object):
                     batch_xs_input = train_skel[
                         offset:(offset + self.batch_size), :]
 
-                    batch_label_input = train_labels[
-                        offset:(offset + self.batch_size), :]
+                    batch_label_input = train_labels[offset:(
+                        offset + self.batch_size), :]
                     batch_xs_target = batch_xs_input
                     # add salt & pepper noise
                     # batch_xs_input = batch_xs_input * \
@@ -276,7 +276,8 @@ class PoseVAE(object):
                     _, tot_loss, loss_likelihood, loss_divergence, summary_str = self.sess.run(
                         (self.train_op, self.loss,
                          self.neg_marginal_likelihood, self.KL_divergence, self.sum),
-                        feed_dict={self.x_hat: batch_xs_input, self.label_hat: batch_label_input, self.x: batch_xs_target})
+                        feed_dict={self.x_hat: batch_xs_input, self.label_hat: batch_label_input,
+                                   self.x: batch_xs_target})
 
                     self.writer.add_summary(summary_str, counter)
                     # print cost every epoch
@@ -354,7 +355,7 @@ if __name__ == '__main__':
         import data.h36m as h36m
         ds = Dataset()
         # for i in range(0, 20000, 20000):
-        ds.loadH36M(1024, mode='train', tApp=True, replace=False)
+        ds.loadH36M(40960, mode='train', tApp=True, replace=False)
 
         val_ds = Dataset()
         # for i in range(0, 20000, 20000):
