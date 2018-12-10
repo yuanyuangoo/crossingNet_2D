@@ -69,7 +69,7 @@ class PoseVAE(object):
         self.z_in_sum = histogram_summary("z_in", self.z_in)
 
         self.y, self.z, self.loss, self.neg_marginal_likelihood, self.KL_divergence = self.autoencoder(
-            self.x_hat, self.label_hat, self.x, self.dim_x, self.dim_z, self.n_hidden)
+            self.x_hat, self.label_hat, self.x, self.dim_x, self.dim_z, self.n_hidden, is_training=True)
         self.y_sum = histogram_summary("y", self.y)
         self.z_sum = histogram_summary("z", self.z)
         self.loss_sum = scalar_summary("loss", self.loss)
@@ -86,19 +86,20 @@ class PoseVAE(object):
         self.saver = tf.train.Saver()
 
     def sampler(self, z, dim_img, n_hidden):
-        y = self.decoder(z, n_hidden, dim_img, 1.0, reuse=True)
+        y = self.decoder(z, n_hidden, dim_img, 1.0,
+                         is_training=False, reuse=True)
         return y
 
     def autoencoder(self, x_hat, label_hat, x, dim_img, dim_z, n_hidden, is_training=True, reuse=False):
 
         mu, sigma = self.encoder(
-            x_hat, label_hat, n_hidden, dim_z, reuse=reuse)
+            x_hat, label_hat, n_hidden, dim_z, reuse=reuse, is_training=is_training)
 
         # sampling by re-parameterization technique
         z = mu + sigma * tf.random_normal(tf.shape(mu), 0, 1, dtype=tf.float32)
 
         # decoding
-        y = self.decoder(z, n_hidden, dim_img)
+        y = self.decoder(z, n_hidden, dim_img, is_training=is_training, reuse=reuse)
         y = tf.clip_by_value(y, 1e-8, 1 - 1e-8)
 
         # loss
@@ -124,35 +125,31 @@ class PoseVAE(object):
         with tf.variable_scope("encoder") as scope:
             if reuse:
                 scope.reuse_variables()
-            # initializers
-            w_init = tf.contrib.layers.variance_scaling_initializer()
-            b_init = tf.constant_initializer(0.)
 
             x = concat([x, label], 1)
             # 1st hidden layer
-            w0 = tf.get_variable(
-                'w0', [x.get_shape()[1], n_hidden], initializer=w_init)
-            b0 = tf.get_variable('b0', [n_hidden], initializer=b_init)
-            h0 = tf.matmul(x, w0) + b0
-            h0 = tf.nn.elu(h0)
-            h0 = dropout(h0, is_training=is_training)
+            h0 = lrelu(
+                bn(dropout(linear(x, n_hidden, 'h0_lin'),
+                           is_training=is_training), is_training=is_training, scope="h0_bn"))
+
             h0 = concat([h0, label], 1)
 
             # 2nd hidden layer
-            w1 = tf.get_variable(
-                'w1', [h0.get_shape()[1], n_hidden], initializer=w_init)
-            b1 = tf.get_variable('b1', [n_hidden], initializer=b_init)
-            h1 = tf.matmul(h0, w1) + b1
-            # h1 = tf.nn.tanh(h1)
-            h1 = dropout(h1, is_training=is_training)
+            h1 = lrelu(
+                bn(dropout(linear(h0, n_hidden, 'h1_lin'),
+                           is_training=is_training), is_training=is_training, scope="h1_bn"))
+
             h1 = concat([h1, label], 1)
 
             # output layer
             # borrowed from https: // github.com / altosaar / vae / blob / master / vae.py
-            wo = tf.get_variable(
-                'wo', [h1.get_shape()[1], n_output * 2], initializer=w_init)
-            bo = tf.get_variable('bo', [n_output * 2], initializer=b_init)
-            gaussian_params = tf.matmul(h1, wo) + bo
+            # wo = tf.get_variable(
+            #     'wo', [h1.get_shape()[1], n_output * 2], initializer=w_init)
+            # bo = tf.get_variable('bo', [n_output * 2], initializer=b_init)
+            # gaussian_params = tf.matmul(h1, wo) + bo
+            
+            gaussian_params = linear(h1, n_output*2)
+
 
             # The mean parameter is unconstrained
             mean = gaussian_params[:, :n_output]
@@ -163,33 +160,22 @@ class PoseVAE(object):
 
     def decoder(self, z, n_hidden, n_output, is_training=True, reuse=False):
         with tf.variable_scope("decoder", reuse=reuse):
-            # initializers
-            w_init = tf.contrib.layers.variance_scaling_initializer()
-            b_init = tf.constant_initializer(0.)
 
             # 1st hidden layer
-            w0 = tf.get_variable(
-                'w0', [z.get_shape()[1], n_hidden], initializer=w_init)
-            b0 = tf.get_variable('b0', [n_hidden], initializer=b_init)
-            h0 = tf.matmul(z, w0) + b0
-            h0 = tf.nn.leaky_relu(h0)
-            h0 = dropout(h0, is_training=is_training)
+            h0 = lrelu(
+                bn(dropout(linear(z, n_hidden, 'h0_lin'),
+                           is_training=is_training), is_training=is_training, scope="h0_bn"))
 
             # 2nd hidden layer
-            w1 = tf.get_variable(
-                'w1', [h0.get_shape()[1], n_hidden], initializer=w_init)
-            b1 = tf.get_variable('b1', [n_hidden], initializer=b_init)
-            h1 = tf.matmul(h0, w1) + b1
-            # h1 = tf.nn.elu(h1)
-            h1 = dropout(h1, is_training=is_training)
+            h1 = lrelu(
+                bn(dropout(linear(h0, n_hidden, 'h1_lin'),
+                           is_training=is_training), is_training=is_training, scope="h1_bn"))
 
             # output layer-mean
-            wo = tf.get_variable(
-                'wo', [h1.get_shape()[1], n_output], initializer=w_init)
-            bo = tf.get_variable('bo', [n_output], initializer=b_init)
-            y = tf.matmul(h1, wo) + bo
             # y = tf.sigmoid(tf.matmul(h1, wo) + bo)
-
+            y = tf.tanh(
+                bn(dropout(linear(h1, n_output, 'y_lin'),
+                           is_training=is_training), is_training=is_training, scope="y_bn"))
         return y
 
     def train(self, train_dataset, valid_dataset):

@@ -2,7 +2,7 @@ import tensorflow as tf
 from tqdm import tqdm
 
 from poseVAE import PoseVAE
-from wgan import ImageWGAN
+from imageGAN import ImageGAN
 from numpy.matlib import repmat
 from numpy.random import RandomState
 import numpy as np
@@ -31,13 +31,22 @@ class ForwardRender(object):
         self.origin_input = tf.placeholder(tf.float32, shape=(None, 3),name="origin")
         self.origin_input_sum = histogram_summary("origin_input", self.origin_input)
 
-        self.image_gan = ImageWGAN()
+        self.image_gan = ImageGAN()
         self.dim_z = self.image_gan.dim_z
 
+        _, self.z_train, _, _, _ = self.pose_vae.autoencoder(
+            self.pose_vae.x_hat, self.pose_vae.label_hat, self.pose_vae.x, self.pose_vae.dim_x,
+            self.pose_vae.dim_z, self.pose_vae.n_hidden, is_training=True, reuse=True)
+        _, self.z_test, _, _, _ = self.pose_vae.autoencoder(
+            self.pose_vae.x_hat, self.pose_vae.label_hat, self.pose_vae.x, self.pose_vae.dim_x,
+            self.pose_vae.dim_z, self.pose_vae.n_hidden, is_training=False, reuse=True)
+
         self.render = self.build_latent_alignment_layer(
-            self.pose_vae, reuse=False)
+            self.z_train, is_training=True, reuse=False)
         self.sample = self.build_latent_alignment_layer(
-            self.pose_vae, keep_prob=1,reuse=True)
+            self.z_test, is_training=False, reuse=True)
+
+
         _, self.dis_px_layer, self.feamat_layer,  = self.image_gan.build_discriminator(
             self.render, self.image_gan.y, reuse=True)
         self.render_sum = image_summary("render", self.render)
@@ -51,8 +60,9 @@ class ForwardRender(object):
 
         #Train Ali
         self.real_image = self.image_gan.inputs
-        self.pixel_loss = tf.losses.mean_squared_error(self.real_image, self.render)
-        self.pixel_loss = tf.clip_by_value(self.pixel_loss, 0, 1.0)
+        self.pixel_loss = tf.losses.mean_squared_error(
+            self.real_image, self.render, weights=255.0)
+        self.pixel_loss = tf.clip_by_value(self.pixel_loss, 0, 255.0)
 
         # self.pixel_loss = tf.nn.l2_loss(self.real_image-self.render)
         # self.pixel_loss = tf.clip_by_value(self.pixel_loss, 0, 10000)
@@ -64,26 +74,25 @@ class ForwardRender(object):
 
         self.forwarRender_vars = self.pose_vae.encoder_vars + \
             self.alignment_vars+self.image_gan.g_vars
+
         optimizer = tf.train.AdamOptimizer(
             self.lr, self.b1)
         self.ali_train_op = tf.train.AdamOptimizer(
             self.lr, self.b1).minimize(self.pixel_loss, var_list=self.forwarRender_vars)
-        self.grads_and_vars = optimizer.compute_gradients(
-            self.pixel_loss, self.forwarRender_vars)
 
         # self.gradients_sum = scalar_summary("gradients", self.gradients)
 
-    def build_latent_alignment_layer(self, pose_vae,
+    def build_latent_alignment_layer(self, pose_vae_z,
                                      origin_layer=None,
-                                     quad_layer=None, keep_prob=0.5,reuse=False,is_training=True):
+                                     quad_layer=None, reuse=False, is_training=True):
 
-        self.pose_z_dim = int(pose_vae.z.shape[1])
+        self.pose_z_dim = int(pose_vae_z.shape[1])
         self.z_dim = self.pose_z_dim
         if origin_layer is not None:
             self.z_dim += 3
         if quad_layer is not None:
             self.z_dim += 4
-        latent = pose_vae.z
+        latent = pose_vae_z
 
         if origin_layer is not None:
             latent = tf.concat([latent, origin_layer], axis=1)
@@ -99,9 +108,9 @@ class ForwardRender(object):
             # use None input, to adapt z from both pose-vae and real-test
             self.alignment = lrelu(bn(
                 tf.layers.dense(self.latent, self.image_gan.dim_z), is_training=is_training, scope='ali_bn'))
-            self.alignment = tf.nn.dropout(self.alignment, keep_prob)
+            self.alignment = dropout(self.alignment, is_training=is_training)
         render = self.image_gan.build_generator(
-            self.alignment, self.image_gan.y, reuse=True, is_training=True)
+            self.alignment, self.image_gan.y, reuse=True, is_training=is_training)
         return render
 
     def train(self, nepoch,  train_dataset, valid_dataset, desc='dummy'):
@@ -148,18 +157,15 @@ class ForwardRender(object):
                 for i in tqdm(range(total_batch)):
                     # Compute the offset of the current minibatch in the data.
                     offset = (i * self.batch_size) % (total_batch)
-                    _, tot_loss,grads_and_vars, summary_str = self.sess.run(
-                        (self.ali_train_op, self.pixel_loss, self.grads_and_vars, self.ali_sum), feed_dict={
+                    _, tot_loss, summary_str = self.sess.run(
+                        (self.ali_train_op, self.pixel_loss, self.ali_sum), feed_dict={
                             self.image_gan.inputs: train_img[offset:(offset + self.batch_size), :, :, :],
                             self.pose_vae.x_hat: train_skel[offset:(offset + self.batch_size), :],
                             self.pose_vae.label_hat: train_labels[offset:(offset + self.batch_size), :],
                             self.image_gan.y: train_labels[offset:(
                                 offset + self.batch_size), :]
                         })
-                    fil.write('\n')
-                    fil.write(str(epoch))
-                    for g,_ in grads_and_vars:
-                        fil.write((' '.join(['%10.6f ']*g.flatten().size)+'\n\n') % tuple(g.flatten()))
+
                     counter = counter+1
                     self.writer.add_summary(summary_str, counter)
                     print("epoch %d: L_tot %03.2f" %
