@@ -17,7 +17,7 @@ from data.dataset import *
 from data.util import *
 from data.ops import *
 
-minloss = 1e-5
+minloss = 1e-2
 
 
 class ForwardRender(object):
@@ -61,8 +61,8 @@ class ForwardRender(object):
         #Train Ali
         self.real_image = self.image_gan.inputs
         self.pixel_loss = tf.losses.mean_squared_error(
-            self.real_image, self.render, weights=255.0)
-        self.pixel_loss = tf.clip_by_value(self.pixel_loss, 0, 255.0)
+            self.real_image, self.render)
+        self.pixel_loss = tf.clip_by_value(self.pixel_loss, 0, 1.0)
 
         # self.pixel_loss = tf.nn.l2_loss(self.real_image-self.render)
         # self.pixel_loss = tf.clip_by_value(self.pixel_loss, 0, 10000)
@@ -75,12 +75,8 @@ class ForwardRender(object):
         self.forwarRender_vars = self.pose_vae.encoder_vars + \
             self.alignment_vars+self.image_gan.g_vars
 
-        optimizer = tf.train.AdamOptimizer(
-            self.lr, self.b1)
         self.ali_train_op = tf.train.AdamOptimizer(
             self.lr, self.b1).minimize(self.pixel_loss, var_list=self.forwarRender_vars)
-
-        # self.gradients_sum = scalar_summary("gradients", self.gradients)
 
     def build_latent_alignment_layer(self, pose_vae_z,
                                      origin_layer=None,
@@ -107,8 +103,10 @@ class ForwardRender(object):
 
             # use None input, to adapt z from both pose-vae and real-test
             self.alignment = lrelu(bn(
-                tf.layers.dense(self.latent, self.image_gan.dim_z), is_training=is_training, scope='ali_bn'))
+                linear(self.latent, self.image_gan.dim_z), is_training=is_training, scope='ali_bn'))
+
             self.alignment = dropout(self.alignment, is_training=is_training)
+
         render = self.image_gan.build_generator(
             self.alignment, self.image_gan.y, reuse=True, is_training=is_training)
         return render
@@ -121,7 +119,7 @@ class ForwardRender(object):
         
         train_labels, train_skel, train_img, test_labels, test_skel, test_img, n_samples, total_batch = prep_data(
             train_dataset, valid_dataset, self.batch_size)
-        
+
         print('[ForwardRender] enter training loop with %d epoches' % nepoch)
         with tf.Session() as self.sess:
             self.ali_sum = merge_summary([self.pixel_loss_sum])
@@ -143,6 +141,7 @@ class ForwardRender(object):
             self.saver = tf.train.Saver()
             # could_load, checkpoint_counter = self.load(
             #     self.checkpoint_dir)
+
             if could_load:
                 counter = checkpoint_counter
                 print(" [*] Load SUCCESS")
@@ -151,13 +150,16 @@ class ForwardRender(object):
                 counter=1
 
             self.writer = SummaryWriter(
-                os.path.join(globalConfig.Forward_Render_pretrain_path, "logs"), graph=self.sess.graph, filename_suffix='.ForwardRender')
-            fil = open("grad.txt", "w")
-            for epoch in tqdm(range(nepoch)):
-                for i in tqdm(range(total_batch)):
+                os.path.join(
+                    globalConfig.Forward_Render_pretrain_path, "logs"),
+                graph=self.sess.graph, filename_suffix='.ForwardRender')
+
+            for epoch in range(nepoch):
+                tot_loss = 0
+                for i in range(total_batch):
                     # Compute the offset of the current minibatch in the data.
                     offset = (i * self.batch_size) % (total_batch)
-                    _, tot_loss, summary_str = self.sess.run(
+                    _, tot_loss_, summary_str = self.sess.run(
                         (self.ali_train_op, self.pixel_loss, self.ali_sum), feed_dict={
                             self.image_gan.inputs: train_img[offset:(offset + self.batch_size), :, :, :],
                             self.pose_vae.x_hat: train_skel[offset:(offset + self.batch_size), :],
@@ -165,11 +167,12 @@ class ForwardRender(object):
                             self.image_gan.y: train_labels[offset:(
                                 offset + self.batch_size), :]
                         })
-
+                    tot_loss += tot_loss_
                     counter = counter+1
                     self.writer.add_summary(summary_str, counter)
-                    print("epoch %d: L_tot %03.2f" %
-                          (epoch, tot_loss))
+                tot_loss = tot_loss/total_batch
+                print("epoch %d: L_tot %f" % (epoch, tot_loss))
+
                 if epoch % 10 == 0:
                     samples, real = self.sess.run((self.sample, self.real_image), feed_dict={
                         self.pose_input: test_skel,
@@ -225,11 +228,6 @@ class ForwardRender(object):
             pt2 = skel[0:2, edge[1]]
             cv2.line(img, (int(pt1[0]), int(pt1[1])),
                      (int(pt2[0]), int(pt2[1])), (np.asarray(color[i])*255).tolist(), 4)
-        # for b in bones:
-        #     pt1 = skel2[b[0]]
-        #     pt2 = skel2[b[1]]
-        #     color = b[2]
-        #     cv2.line(img, pt1, pt2, color, 2)
         return img
 
     @property
@@ -287,4 +285,4 @@ if __name__ == '__main__':
         raise ValueError('unknown dataset %s' % globalConfig.dataset)
 
     Fr = ForwardRender(dim_x=Num_of_Joints*3)
-    Fr.train(2000, ds, val_ds)
+    Fr.train(200, ds, val_ds)
