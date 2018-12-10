@@ -58,8 +58,8 @@ class ImageWGAN(object):
         
     def build_model(self):
         #self.y is label
-        self.y = tf.placeholder(
-            tf.float32, [self.batch_size, self.y_dim], name='y')
+        # self.y = tf.placeholder(
+        #     tf.float32, [self.batch_size, self.y_dim], name='y')
 
         if self.crop:
             image_dims = [self.output_height, self.output_width, 1]
@@ -77,40 +77,25 @@ class ImageWGAN(object):
         self.z_sum = histogram_summary("z", self.z)
 
         #Generator for fake image
-        self.G = self.build_generator(self.z, self.y, reuse=False)
+        self.G = self.build_generator(self.z, is_training=True, reuse=False)
         #Discriminator for real image
-        self.D, self.D_logits, _ = self.build_discriminator(
-            inputs, self.y, reuse=False)
+        self.D, self.D_real, _ = self.build_discriminator(
+            inputs, reuse=False, is_training=True)
         #image
-        self.sampler = self.build_generator(self.z, self.y, reuse=True)
+        self.sampler = self.build_generator(
+            self.z,  reuse=True, is_training=True)
         #Discriminator for fake image
-        self.D_, self.D_logits_, _ = self.build_discriminator(
-            self.G, self.y, reuse=True)
-        self.build_metric()
+        self.D_, self.D_fake, _ = self.build_discriminator(
+            self.G, reuse=True, is_training=False)
+        # self.build_metric()
         self.d_sum = histogram_summary("d", self.D)
         self.d__sum = histogram_summary("d_", self.D_)
         self.G_sum = image_summary("G", self.G)
 
-        self.d_loss_real = - tf.reduce_mean(self.D_logits)
-        self.d_loss_fake = tf.reduce_mean(self.D_logits_)
+        self.d_loss_real = - tf.reduce_mean(self.D_real)
+        self.d_loss_fake = tf.reduce_mean(self.D_fake)
         self.g_loss = - self.d_loss_fake
         self.d_loss = self.d_loss_real + self.d_loss_fake
-
-        # def sigmoid_cross_entropy_with_logits(x, y):
-        #     return tf.nn.sigmoid_cross_entropy_with_logits(logits=x, labels=y)
-
-        # self.smooth = 0.05
-        # self.d_loss_real = tf.reduce_mean(
-        #     sigmoid_cross_entropy_with_logits(self.D_logits, tf.ones_like(self.D_logits)) * (1 - self.smooth))  # for real image Discriminator
-        # self.d_loss_fake = tf.reduce_mean(
-        #     sigmoid_cross_entropy_with_logits(self.D_logits_, tf.zeros_like(self.D_logits_)))  # for fake image Discriminator
-        # self.g_loss = tf.reduce_mean(
-        #     sigmoid_cross_entropy_with_logits(self.D_logits_, tf.ones_like(self.D_logits_)*(1-self.smooth)))  # for fake image Generator
-
-        self.d_loss_real_sum = scalar_summary(
-            "d_loss_real", self.d_loss_real)
-        self.d_loss_fake_sum = scalar_summary(
-            "d_loss_fake", self.d_loss_fake)
 
 
 
@@ -118,17 +103,22 @@ class ImageWGAN(object):
         self.disc_iters = 1
         """ Gradient Penalty """
         # This is borrowed from https://github.com/kodalinaveen3/DRAGAN/blob/master/DRAGAN.ipynb
-        alpha = tf.random_uniform(shape=self.inputs.get_shape(), minval=0.,maxval=1.)
-        differences = self.G - self.inputs # This is different from MAGAN
+        alpha = tf.random_uniform(
+            shape=self.inputs.get_shape(), minval=0., maxval=1.)
+        differences = self.G - self.inputs  # This is different from MAGAN
         interpolates = self.inputs + (alpha * differences)
         _, D_inter, _ = self.build_discriminator(
-            interpolates, self.y, reuse=True)
+            interpolates, is_training=True, reuse=True)
         gradients = tf.gradients(D_inter, [interpolates])[0]
-        slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients), reduction_indices=[1]))
+        slopes = tf.sqrt(tf.reduce_sum(
+            tf.square(gradients), reduction_indices=[1]))
         gradient_penalty = tf.reduce_mean((slopes - 1.) ** 2)
         self.d_loss += self.lambd * gradient_penalty
 
-
+        self.d_loss_real_sum = tf.summary.scalar(
+            "d_loss_real", self.d_loss_real)
+        self.d_loss_fake_sum = tf.summary.scalar(
+            "d_loss_fake", self.d_loss_fake)
         self.g_loss_sum = scalar_summary("g_loss", self.g_loss)
         self.d_loss_sum = scalar_summary("d_loss", self.d_loss)
 
@@ -144,27 +134,29 @@ class ImageWGAN(object):
             if reuse:
                 scope.reuse_variables()
             self.dis_render_layer = image
-            yb = tf.reshape(y, [self.batch_size, 1, 1, self.y_dim])
-            x = conv_cond_concat(image, yb)
+            # yb = tf.reshape(y, [self.batch_size, 1, 1, self.y_dim])
+            # x = conv_cond_concat(image, yb)
 
-            h0_0 = lrelu(
-                conv2d(x, self.c_dim + self.y_dim, name='d_h0_conv'))
+            h0 = lrelu(
+                conv2d(image, self.df_dim, name='d_h0_conv'))
 
-            h0 = conv_cond_concat(h0_0, yb)
-            self.dis_hidden = h0_0
-            self.dis_metric = h0_0
-            h1_0 = lrelu(bn(
-                conv2d(h0, self.df_dim + self.y_dim, name='d_h1_conv'), is_training=is_training, scope="d_h1_bn"))
-            self.feamat_layer = h1_0
-            h1 = tf.reshape(h1_0, [self.batch_size, -1])
-            h1 = concat([h1, y], 1)
+            # h0 = conv_cond_concat(h0_0, yb)
+            self.dis_hidden = h0
+            self.dis_metric = h0
+
+            h1 = lrelu(bn(
+                conv2d(h0, self.df_dim, name='d_h1_conv'), is_training=is_training, scope="d_h1_bn"))
+            self.feamat_layer = h1
+            h1 = tf.reshape(h1, [self.batch_size, -1])
+            # h1 = concat([h1, y], 1)
 
             h2 = lrelu(bn(linear(h1, self.dfc_dim, 'd_h2_lin'),
                           is_training=is_training, scope="d_h2_bn"))
-            h2 = concat([h2, y], 1)
+            # h2 = concat([h2, y], 1)
 
             # logits
             h3 = linear(h2, 1, 'd_h3_lin')
+
             self.dis_px_layer = h3
             return tf.nn.tanh(h3), h3, h2
 
@@ -172,8 +164,8 @@ class ImageWGAN(object):
         with tf.variable_scope("generator") as scope:
             if reuse:
                 scope.reuse_variables()
-            yb = tf.reshape(y, [self.batch_size, 1, 1, self.y_dim])
-            z = concat([z, y], 1)
+            # yb = tf.reshape(y, [self.batch_size, 1, 1, self.y_dim])
+            # z = concat([z, y], 1)
 
             s_h, s_w = self.output_height, self.output_width
             s_h2, s_h4 = int(s_h/2), int(s_h/4)
@@ -183,18 +175,18 @@ class ImageWGAN(object):
 
             h0 = lrelu(
                 bn(linear(z, self.gfc_dim, 'g_h0_lin'), is_training=is_training, scope="g_h0_bn"))
-            h0 = concat([h0, y], 1)
+            # h0 = concat([h0, y], 1)
 
             h1 = lrelu(bn(
                 linear(h0, self.gf_dim*2*s_h4*s_w4, 'g_h1_lin'), is_training=is_training, scope="g_h1_bn"))
             h1 = tf.reshape(
                 h1, [self.batch_size, s_h4, s_w4, self.gf_dim * 2])
 
-            h1 = conv_cond_concat(h1, yb)
+            # h1 = conv_cond_concat(h1, yb)
 
             h2 = lrelu(bn(deconv2d(
-                h1, [self.batch_size, s_h2, s_w2, self.gf_dim * 2], name='g_h2'), is_training=is_training, scope="g_h2_bn"))
-            h2 = conv_cond_concat(h2, yb)
+                h1, [self.batch_size, s_h2, s_w2, self.gf_dim], name='g_h2'), is_training=is_training, scope="g_h2_bn"))
+            # h2 = conv_cond_concat(h2, yb)
 
             return tf.nn.tanh(
                 deconv2d(h2, [self.batch_size, s_h, s_w, 1], name='g_h3'))
@@ -251,14 +243,11 @@ class ImageWGAN(object):
         with tf.variable_scope("metric") as scope:
             if reuse:
                 scope.reuse_variables()
-            h0 = bn(
-                conv2d(hidden_layer, self.df_dim, name='m_h0_conv'))
+            h0 = bn(conv2d(hidden_layer, self.df_dim, name='m_h0_conv'))
 
-            h1 = bn(
-                conv2d(h0, self.df_dim, name='m_h1_conv'))
+            h1 = bn(conv2d(h0, self.df_dim, name='m_h1_conv'))
 
-            h2 = bn(
-                conv2d(h1, self.df_dim, name='m_h2_conv'))
+            h2 = bn(conv2d(h1, self.df_dim, name='m_h2_conv'))
 
             h2 = tf.reshape(h2, [self.batch_size, -1])
 
@@ -287,7 +276,7 @@ class ImageWGAN(object):
             with tf.control_dependencies(tf.get_collection(tf.GraphKeys.UPDATE_OPS)):
                 d_optim = tf.train.AdamOptimizer(self.learning_rate, beta1=self.beta1) \
                     .minimize(self.d_loss, var_list=self.d_vars)
-                g_optim = tf.train.AdamOptimizer(self.learning_rate, beta1=self.beta1) \
+                g_optim = tf.train.AdamOptimizer(self.learning_rate*5, beta1=self.beta1) \
                     .minimize(self.g_loss, var_list=self.g_vars)
             try:
                 tf.global_variables_initializer().run()
@@ -305,7 +294,7 @@ class ImageWGAN(object):
                                          size=(self.sample_num, self.dim_z))
 
             sample_inputs = test_img
-            sample_labels = test_labels
+            # sample_labels = test_labels
 
             counter = 1
             start_time = time.time()
@@ -323,8 +312,8 @@ class ImageWGAN(object):
                 for idx in xrange(0, int(batch_idxs)):
                     batch_images = train_img[idx *
                                                self.batch_size:(idx+1)*self.batch_size]
-                    batch_labels = train_labels[idx *
-                                               self.batch_size:(idx+1)*self.batch_size]
+                    # batch_labels = train_labels[idx *
+                    #                            self.batch_size:(idx+1)*self.batch_size]
 
                     batch_z = np.random.uniform(-1, 1, [self.batch_size, self.dim_z]) \
                         .astype(np.float32)
@@ -332,34 +321,35 @@ class ImageWGAN(object):
                     _, summary_str, errD = self.sess.run([d_optim, self.d_sum, self.d_loss],
                                                          feed_dict={
                         self.inputs: batch_images,
-                        self.z: batch_z,
-                        self.y: batch_labels,
+                        self.z: batch_z
+                        # self.y: batch_labels,
                     })
                     self.writer.add_summary(summary_str, counter)
-
-                    batch_z = np.random.uniform(-1, 1, [self.batch_size, self.dim_z]) \
-                        .astype(np.float32)
-                    # Update G network
-                    _, summary_str, errG = self.sess.run([g_optim, self.g_sum, self.g_loss],
-                                                         feed_dict={
-                        self.z: batch_z,
-                        self.y: batch_labels,
-                    })
-                    self.writer.add_summary(summary_str, counter)
+                    
+                    if (counter-1) % self.disc_iters == 0:
+                        batch_z = np.random.uniform(-1, 1, [self.batch_size, self.dim_z]) \
+                            .astype(np.float32)
+                        # Update G network
+                        _, summary_str, errG = self.sess.run([g_optim, self.g_sum, self.g_loss],
+                                                             feed_dict={
+                            self.z: batch_z,
+                            # self.y: batch_labels,
+                        })
+                        self.writer.add_summary(summary_str, counter)
 
                     counter += 1
                     print("Epoch: [%2d/%2d] [%4d/%4d] time: %4.4f, d_loss: %.8f, g_loss: %.8f"
                           % (epoch, self.epoch, idx, batch_idxs,
                              time.time() - start_time, errD, errG))
 
-                    if np.mod(counter, 640) == 1:
+                    if np.mod(counter, 150) == 1:
                         # show_all_variables()
                         samples, d_loss, g_loss = self.sess.run(
                             [self.sampler, self.d_loss, self.g_loss],
                             feed_dict={
                                 self.z: sample_z,
                                 self.inputs: sample_inputs,
-                                self.y: sample_labels,
+                                # self.y: sample_labels,
                             }
                         )
                         save_images(samples, image_manifold_size(samples.shape[0]),
@@ -409,7 +399,7 @@ if __name__ == '__main__':
         import data.h36m as h36m
         ds = Dataset()
         # for i in range(0, 20000, 20000):
-        ds.loadH36M(40960, mode='train', tApp=True, replace=False)
+        ds.loadH36M(10240, mode='train', tApp=True, replace=False)
 
         val_ds = Dataset()
         # for i in range(0, 20000, 20000):

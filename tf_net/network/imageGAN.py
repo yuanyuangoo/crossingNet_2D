@@ -48,26 +48,6 @@ class ImageGAN(object):
         self.dfc_dim = dfc_dim
 
         # batch normalization : deals with poor initialization helps gradient flow
-        self.d_bn1 = batch_norm(name='d_bn1')
-        self.d_bn2 = batch_norm(name='d_bn2')
-
-        if not self.y_dim:
-            self.d_bn3 = batch_norm(name='d_bn3')
-
-        self.g_bn0 = batch_norm(name='g_bn0')
-        self.g_bn1 = batch_norm(name='g_bn1')
-        self.g_bn2 = batch_norm(name='g_bn2')
-
-        self.m_bn0 = batch_norm(name='m_bn0')
-        self.m_bn1 = batch_norm(name='m_bn1')
-        self.m_bn2 = batch_norm(name='m_bn2')
-
-        self.r_bn0 = batch_norm(name='r_bn0')
-        self.r_bn1 = batch_norm(name='r_bn1')
-        self.r_bn2 = batch_norm(name='r_bn2')
-
-        if not self.y_dim:
-            self.g_bn3 = batch_norm(name='g_bn3')
 
         self.dataset_name = dataset_name
         self.checkpoint_dir = os.path.join(
@@ -98,16 +78,15 @@ class ImageGAN(object):
         self.z_sum = histogram_summary("z", self.z)
 
         #Generator for fake image
-        self.G = self.build_generator(self.z, self.y, reuse=False)
+        self.G = self.build_generator(self.z, self.y, reuse=False, is_training=True)
         #Discriminator for real image
         self.D, self.D_logits, _ = self.build_discriminator(
-            inputs, self.y, reuse=False)
+            inputs, self.y, reuse=False, is_training=True)
         #image
-        self.sampler = self.build_generator(self.z, self.y, reuse=True)
+        self.sampler = self.build_generator(self.z, self.y, reuse=True, is_training=False)
         #Discriminator for fake image
         self.D_, self.D_logits_, _ = self.build_discriminator(
-            self.G, self.y, reuse=True)
-        self.build_metric()
+            self.G, self.y, reuse=True, is_training=True)
         self.d_sum = histogram_summary("d", self.D)
         self.d__sum = histogram_summary("d_", self.D_)
         self.G_sum = image_summary("G", self.G)
@@ -140,7 +119,7 @@ class ImageGAN(object):
 
         self.saver = tf.train.Saver()
 
-    def build_discriminator(self, image, y=None, reuse=False):
+    def build_discriminator(self, image, y=None, reuse=False, is_training=True):
         with tf.variable_scope("discriminator") as scope:
             if reuse:
                 scope.reuse_variables()
@@ -154,13 +133,14 @@ class ImageGAN(object):
             h0 = conv_cond_concat(h0_0, yb)
             self.dis_hidden = h0_0
             self.dis_metric = h0_0
-            h1_0 = lrelu(self.d_bn1(
-                conv2d(h0, self.df_dim + self.y_dim, name='d_h1_conv')))
+            h1_0 = lrelu(bn(
+                conv2d(h0, self.df_dim + self.y_dim, name='d_h1_conv'), is_training=is_training, scope="d_h1_bn"))
             self.feamat_layer = h1_0
             h1 = tf.reshape(h1_0, [self.batch_size, -1])
             h1 = concat([h1, y], 1)
 
-            h2 = lrelu(self.d_bn2(linear(h1, self.dfc_dim, 'd_h2_lin')))
+            h2 = lrelu(bn(linear(h1, self.dfc_dim, 'd_h2_lin'),
+                          is_training=is_training, scope="d_h2_bn"))
             h2 = concat([h2, y], 1)
 
             # logits
@@ -168,7 +148,7 @@ class ImageGAN(object):
             self.dis_px_layer = h3
             return tf.nn.tanh(h3), h3, h2
 
-    def build_generator(self, z, y=None,reuse=False):
+    def build_generator(self, z, y=None,reuse=False, is_training=True):
         with tf.variable_scope("generator") as scope:
             if reuse:
                 scope.reuse_variables()
@@ -181,26 +161,26 @@ class ImageGAN(object):
 
             # yb = tf.expand_dims(tf.expand_dims(y, 1),2)
 
+            h0 = lrelu(
+                bn(dropout(linear(z, self.gfc_dim, 'g_h0_lin'), is_training=is_training), is_training=is_training, scope="g_h0_bn"))
 
-            h0 = tf.nn.relu(
-                self.g_bn0(linear(z, self.gfc_dim, 'g_h0_lin')))
             h0 = concat([h0, y], 1)
 
-            h1 = tf.nn.relu(self.g_bn1(
-                linear(h0, self.gf_dim*2*s_h4*s_w4, 'g_h1_lin')))
+            h1 = lrelu(bn(
+                dropout(linear(h0, self.gf_dim*2*s_h4*s_w4, 'g_h1_lin'), is_training=is_training), is_training=is_training, scope="g_h1_bn"))
             h1 = tf.reshape(
                 h1, [self.batch_size, s_h4, s_w4, self.gf_dim * 2])
 
             h1 = conv_cond_concat(h1, yb)
 
-            h2 = tf.nn.relu(self.g_bn2(deconv2d(h1,
-                                                [self.batch_size, s_h2, s_w2, self.gf_dim * 2], name='g_h2')))
+            h2 = lrelu(bn(deconv2d(
+                h1, [self.batch_size, s_h2, s_w2, self.gf_dim], name='g_h2'), is_training=is_training, scope="g_h2_bn"))
             h2 = conv_cond_concat(h2, yb)
 
             return tf.nn.tanh(
                 deconv2d(h2, [self.batch_size, s_h, s_w, 1], name='g_h3'))
 
-    def build_recognition(self, output_dim=23, hidden_layer=None, reuse=False, keep_prob=1):
+    def build_recognition(self, output_dim=23, hidden_layer=None, reuse=False, is_training=True):
         if hidden_layer is None:
             hidden_layer = self.dis_hidden
         with tf.variable_scope("recognition") as scope:
@@ -222,7 +202,7 @@ class ImageGAN(object):
 
             return lrelu(h3)
 
-    def build_metric(self, output_dim=23, hidden_layer=None, reuse=False, keep_prob=1):
+    def build_metric(self, output_dim=23, hidden_layer=None, reuse=False, is_training=True):
         if hidden_layer is None:
             hidden_layer = self.dis_metric
         with tf.variable_scope("metric") as scope:
@@ -246,19 +226,18 @@ class ImageGAN(object):
             h4 = tf.reshape(h4, [self.batch_size, hidden_dim, output_dim])
             return lrelu(h4)
 
-    def build_metric_combi(self, output_dim=23, hidden_layer=None, reuse=False, keep_prob=1):
+    def build_metric_combi(self, output_dim=23, hidden_layer=None, reuse=False,is_training=True):
         if hidden_layer is None:
             hidden_layer = self.dis_metric
         with tf.variable_scope("metric") as scope:
             if reuse:
                 scope.reuse_variables()
-            h0 = self.m_bn0(
-                conv2d(hidden_layer, self.df_dim, name='m_h0_conv'))
+            h0 = bn(conv2d(hidden_layer, self.df_dim, name='m_h0_conv'))
 
-            h1 = self.m_bn1(
+            h1 = bn(
                 conv2d(h0, self.df_dim, name='m_h1_conv'))
 
-            h2 = self.m_bn2(
+            h2 = bn(
                 conv2d(h1, self.df_dim, name='m_h2_conv'))
 
             h2 = tf.reshape(h2, [self.batch_size, -1])
@@ -287,8 +266,10 @@ class ImageGAN(object):
         with tf.Session() as self.sess:
             d_optim = tf.train.AdamOptimizer(self.learning_rate, beta1=self.beta1) \
                 .minimize(self.d_loss, var_list=self.d_vars)
+
             g_optim = tf.train.AdamOptimizer(self.learning_rate, beta1=self.beta1) \
                 .minimize(self.g_loss, var_list=self.g_vars)
+
             try:
                 tf.global_variables_initializer().run()
             except:
@@ -301,8 +282,6 @@ class ImageGAN(object):
             self.writer = SummaryWriter(
                 os.path.join(globalConfig.gan_pretrain_path, "logs"), graph=self.sess.graph, filename_suffix='.imageGAN')
 
-            sample_z = np.random.uniform(-1, 1,
-                                         size=(self.sample_num, self.dim_z))
 
             sample_inputs = test_img
             sample_labels = test_labels
@@ -315,7 +294,8 @@ class ImageGAN(object):
             #     print(" [*] Load SUCCESS")
             # else:
             #     print(" [!] Load failed...")
-
+            d_loss = 10
+            g_loss = 10
             for epoch in xrange(self.epoch):
                 batch_idxs = min(
                     len(train_img), self.train_size) // self.batch_size
@@ -326,65 +306,54 @@ class ImageGAN(object):
                     batch_labels = train_labels[idx *
                                                self.batch_size:(idx+1)*self.batch_size]
 
-                    batch_z = np.random.uniform(-1, 1, [self.batch_size, self.dim_z]) \
-                        .astype(np.float32)
-
-                    # Update D network
-                    _, summary_str = self.sess.run([d_optim, self.d_sum],
-                                                   feed_dict={
-                        self.inputs: batch_images,
-                        self.z: batch_z,
-                        self.y: batch_labels,
-                    })
-                    self.writer.add_summary(summary_str, counter)
-
-                    # Update G network
-                    _, summary_str = self.sess.run([g_optim, self.g_sum],
-                                                   feed_dict={
-                        self.z: batch_z,
-                        self.y: batch_labels,
-                    })
-                    self.writer.add_summary(summary_str, counter)
-
-                    # Run g_optim twice to make sure that d_loss does not go to zero (different from paper)
-                    _, summary_str = self.sess.run([g_optim, self.g_sum],
-                                                   feed_dict={self.z: batch_z, self.y: batch_labels})
-                    self.writer.add_summary(summary_str, counter)
-
-                    errD_fake = self.d_loss_fake.eval({
-                        self.z: batch_z,
-                        self.y: batch_labels
-                    })
-                    errD_real = self.d_loss_real.eval({
-                        self.inputs: batch_images,
-                        self.y: batch_labels
-                    })
-                    errG = self.g_loss.eval({
-                        self.z: batch_z,
-                        self.y: batch_labels
-                    })
+                    # batch_z = np.random.uniform(-1, 1, [self.batch_size, self.dim_z]) \
+                    #     .astype(np.float32)
+                    batch_z = np.random.normal(
+                        loc=0, scale=0.3, size=(self.batch_size, self.dim_z))
+                    batch_z = np.clip(batch_z,-1,1).astype(np.float32)
+                    if d_loss > 1:
+                            # Update D network
+                        _, summary_str, d_loss = self.sess.run([d_optim, self.d_sum, self.d_loss],
+                                                               feed_dict={
+                            self.inputs: batch_images,
+                            self.z: batch_z,
+                            self.y: batch_labels,
+                        })
+                        self.writer.add_summary(summary_str, counter)
+                    if g_loss > 0.5:
+                        # Update G network
+                        _, summary_str, g_loss = self.sess.run([g_optim, self.g_sum, self.g_loss],
+                                                               feed_dict={
+                            self.z: batch_z,
+                            self.y: batch_labels,
+                        })
+                        self.writer.add_summary(summary_str, counter)
 
                     counter += 1
                     print("Epoch: [%2d/%2d] [%4d/%4d] time: %4.4f, d_loss: %.8f, g_loss: %.8f"
                           % (epoch, self.epoch, idx, batch_idxs,
-                             time.time() - start_time, errD_fake+errD_real, errG))
+                             time.time() - start_time, d_loss, g_loss))
 
-                    if np.mod(counter, 82) == 1:
-                        # show_all_variables()
-                        samples, d_loss, g_loss = self.sess.run(
-                            [self.sampler, self.d_loss, self.g_loss],
-                            feed_dict={
-                                self.z: sample_z,
-                                self.inputs: sample_inputs,
-                                self.y: sample_labels,
-                            }
-                        )
-                        save_images(samples, image_manifold_size(samples.shape[0]),
-                                    '{}/train_{:02d}_{:04d}.png'.format(self.sample_dir, epoch, idx))
-                        print("[Sample] d_loss: %.8f, g_loss: %.8f" %
-                              (d_loss, g_loss))
-                    if np.mod(counter, 500) == 2:
-                        self.save(self.checkpoint_dir, counter)
+                if np.mod(epoch, 1) == 0:
+                    # show_all_variables()
+                    sample_z = np.random.normal(
+                        loc=0, scale=0.3, size=(self.batch_size, self.dim_z))
+                    sample_z = np.clip(sample_z,-1,1).astype(np.float32)
+
+                    samples, d_loss, g_loss = self.sess.run(
+                        [self.sampler, self.d_loss, self.g_loss],
+                        feed_dict={
+                            self.z: sample_z,
+                            self.inputs: sample_inputs,
+                            self.y: sample_labels,
+                        }
+                    )
+                    save_images(samples, image_manifold_size(samples.shape[0]),
+                                '{}/train_{:02d}_{:04d}.png'.format(self.sample_dir, epoch, idx))
+                    print("[Sample] d_loss: %.8f, g_loss: %.8f" %
+                            (d_loss, g_loss))
+                if np.mod(counter, 500) == 2:
+                    self.save(self.checkpoint_dir, counter)
 
     @property
     def model_dir(self):

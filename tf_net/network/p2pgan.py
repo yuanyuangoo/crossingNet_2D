@@ -71,7 +71,8 @@ class P2PGAN(object):
             #fake D
             self.D_ = self.build_discriminator(
                 self.image_input, self.G, reuse=True)
-            self.sampler = self.build_generator(self.image_input, out_channels,reuse=True)
+            self.sampler = self.build_generator(
+                self.image_input, out_channels, istraining=False, reuse=True)
 
             self.d_sum = histogram_summary("d", self.D)
             self.d__sum = histogram_summary("d_", self.D_)
@@ -220,7 +221,7 @@ class P2PGAN(object):
 
             return layers[-1]
 
-    def build_generator(self, input, generator_outputs_channels,reuse=False):
+    def build_generator(self, input, generator_outputs_channels,reuse=False,is_training=True):
         with tf.variable_scope("generator") as scope:
             if reuse:
                 scope.reuse_variables()
@@ -287,7 +288,7 @@ class P2PGAN(object):
                     output = batchnorm(output)
 
                     if dropout > 0.0:
-                        output = tf.nn.dropout(output, keep_prob=1 - dropout)
+                        output =dropout(output, keep_prob=1 - dropout)
 
                     layers.append(output)
 

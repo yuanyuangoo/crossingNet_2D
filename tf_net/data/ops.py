@@ -14,6 +14,12 @@ else:
     def concat(tensors, axis, *args, **kwargs):
         return tf.concat(tensors, axis, *args, **kwargs)
 
+
+def dropout(x, is_training=True):
+    return tf.layers.dropout(x, rate=0.1, training=is_training)
+
+
+
 def bn(x, is_training, scope):
     return tf.contrib.layers.batch_norm(x,
                                         decay=0.9,

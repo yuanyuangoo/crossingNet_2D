@@ -123,9 +123,9 @@ class GanRender(ForwardRender):
 
         # estimating the latent variable part, Lpos
         self.z_est = self.image_gan.build_recognition(
-            self.image_gan.inputs, self.image_gan.y, output_dim=self.z_dim, keep_prob=0.5, reuse=False)
+            self.image_gan.inputs, self.image_gan.y, output_dim=self.z_dim, is_training=is_training, reuse=False)
         self.z_est_t = self.image_gan.build_recognition(
-            self.image_gan.inputs, self.image_gan.y, output_dim=self.z_dim, keep_prob=1, reuse=True)
+            self.image_gan.inputs, self.image_gan.y, output_dim=self.z_dim, is_training=is_training, reuse=True)
 
         # disciminator loss on same image input consistent
         self.loss_dis_est = tf.losses.mean_squared_error(

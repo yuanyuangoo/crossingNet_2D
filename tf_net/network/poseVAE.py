@@ -1,14 +1,15 @@
+import os
+import numpy as np
+import tensorflow as tf
 import sys
 sys.path.append('./')
-from data.layers import *
-import globalConfig
-import data.plot_utils as plot_utils
-from data.util import *
-from data.dataset import *
+from data.ops import *
 import data.ref as ref
-import tensorflow as tf
-import numpy as np
-import os
+from data.dataset import *
+from data.util import *
+import data.plot_utils as plot_utils
+import globalConfig
+from data.layers import *
 IMAGE_SIZE_H36M = 128
 Num_of_Joints = ref.nJoints
 VALIDATION_SIZE = 5000  # Size of the validation set.
@@ -62,14 +63,13 @@ class PoseVAE(object):
         self.label_hat_sum = histogram_summary("label_hat", self.label_hat)
         self.x_sum = histogram_summary("x", self.x)
 
-        self.keep_prob = 0.9
         #latent_variable
         self.z_in = tf.placeholder(
             tf.float32, shape=[None, dim_z], name='latent_variable')
         self.z_in_sum = histogram_summary("z_in", self.z_in)
 
         self.y, self.z, self.loss, self.neg_marginal_likelihood, self.KL_divergence = self.autoencoder(
-            self.x_hat, self.label_hat, self.x, self.dim_x, self.dim_z, self.n_hidden, self.keep_prob)
+            self.x_hat, self.label_hat, self.x, self.dim_x, self.dim_z, self.n_hidden)
         self.y_sum = histogram_summary("y", self.y)
         self.z_sum = histogram_summary("z", self.z)
         self.loss_sum = scalar_summary("loss", self.loss)
@@ -89,16 +89,16 @@ class PoseVAE(object):
         y = self.decoder(z, n_hidden, dim_img, 1.0, reuse=True)
         return y
 
-    def autoencoder(self, x_hat, label_hat, x, dim_img, dim_z, n_hidden, keep_prob, reuse=False):
+    def autoencoder(self, x_hat, label_hat, x, dim_img, dim_z, n_hidden, is_training=True, reuse=False):
 
         mu, sigma = self.encoder(
-            x_hat, label_hat, n_hidden, dim_z, keep_prob, reuse=reuse)
+            x_hat, label_hat, n_hidden, dim_z, reuse=reuse)
 
         # sampling by re-parameterization technique
         z = mu + sigma * tf.random_normal(tf.shape(mu), 0, 1, dtype=tf.float32)
 
         # decoding
-        y = self.decoder(z, n_hidden, dim_img, keep_prob)
+        y = self.decoder(z, n_hidden, dim_img)
         y = tf.clip_by_value(y, 1e-8, 1 - 1e-8)
 
         # loss
@@ -120,7 +120,7 @@ class PoseVAE(object):
 
         return y, z, loss, marginal_likelihood, KL_divergence
 
-    def encoder(self, x, label, n_hidden, n_output, keep_prob, reuse=True):
+    def encoder(self, x, label, n_hidden, n_output, is_training=True, reuse=True):
         with tf.variable_scope("encoder") as scope:
             if reuse:
                 scope.reuse_variables()
@@ -135,7 +135,7 @@ class PoseVAE(object):
             b0 = tf.get_variable('b0', [n_hidden], initializer=b_init)
             h0 = tf.matmul(x, w0) + b0
             h0 = tf.nn.elu(h0)
-            h0 = tf.nn.dropout(h0, keep_prob)
+            h0 = dropout(h0, is_training=is_training)
             h0 = concat([h0, label], 1)
 
             # 2nd hidden layer
@@ -144,7 +144,7 @@ class PoseVAE(object):
             b1 = tf.get_variable('b1', [n_hidden], initializer=b_init)
             h1 = tf.matmul(h0, w1) + b1
             # h1 = tf.nn.tanh(h1)
-            h1 = tf.nn.dropout(h1, keep_prob)
+            h1 = dropout(h1, is_training=is_training)
             h1 = concat([h1, label], 1)
 
             # output layer
@@ -161,7 +161,7 @@ class PoseVAE(object):
             stddev = 1e-6 + tf.nn.softplus(gaussian_params[:, n_output:])
             return mean, stddev
 
-    def decoder(self, z, n_hidden, n_output, keep_prob, reuse=False):
+    def decoder(self, z, n_hidden, n_output, is_training=True, reuse=False):
         with tf.variable_scope("decoder", reuse=reuse):
             # initializers
             w_init = tf.contrib.layers.variance_scaling_initializer()
@@ -173,7 +173,7 @@ class PoseVAE(object):
             b0 = tf.get_variable('b0', [n_hidden], initializer=b_init)
             h0 = tf.matmul(z, w0) + b0
             h0 = tf.nn.leaky_relu(h0)
-            h0 = tf.nn.dropout(h0, keep_prob)
+            h0 = dropout(h0, is_training=is_training)
 
             # 2nd hidden layer
             w1 = tf.get_variable(
@@ -181,7 +181,7 @@ class PoseVAE(object):
             b1 = tf.get_variable('b1', [n_hidden], initializer=b_init)
             h1 = tf.matmul(h0, w1) + b1
             # h1 = tf.nn.elu(h1)
-            h1 = tf.nn.dropout(h1, keep_prob)
+            h1 = dropout(h1, is_training=is_training)
 
             # output layer-mean
             wo = tf.get_variable(
