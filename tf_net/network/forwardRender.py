@@ -57,6 +57,8 @@ class ForwardRender(object):
         # show_all_variables()
 
         self.pose_input = self.pose_vae.x_hat
+        self.image_gan.y = self.pose_vae.label_hat
+        self.label = self.pose_vae.label_hat
 
         #Train Ali
         self.real_image = self.image_gan.inputs
@@ -101,7 +103,7 @@ class ForwardRender(object):
                   .format(latent.shape))
             self.latent = latent
 
-            # use None input, to adapt z from both pose-vae and real-test
+            # use None input, to adapt z from both pose-vae and InvalidArgumentError (see above for traceback): You must feed a value for placeholder tensor 'y_1' with dtype float and shape [64,15]real-test
             self.alignment = lrelu(bn(
                 linear(self.latent, self.image_gan.dim_z), is_training=is_training, scope='ali_bn'))
 
@@ -178,7 +180,8 @@ class ForwardRender(object):
                         self.pose_input: test_skel,
                         self.pose_vae.label_hat: test_labels,
                         self.image_gan.y: test_labels,
-                        self.real_image: test_img})
+                        self.real_image: test_img
+                    })
 
                     save_images(samples, image_manifold_size(samples.shape[0]),
                                 '{}/train_{:02d}.png'.format(self.sample_dir, epoch), skel=test_skel)

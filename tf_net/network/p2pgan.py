@@ -1,13 +1,13 @@
+import os
+import cv2
+import tensorflow as tf
+from data.layers import *
+from data.util import *
+from data.dataset import *
+import globalConfig
 import sys
 sys.path.append('./')
 sys.path.append('./data/')
-import globalConfig
-from data.dataset import *
-from data.util import *
-from data.layers import *
-import tensorflow as tf
-import cv2
-import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 EPS = 1e-12
 CROP_SIZE = 128
@@ -72,7 +72,7 @@ class P2PGAN(object):
             self.D_ = self.build_discriminator(
                 self.image_input, self.G, reuse=True)
             self.sampler = self.build_generator(
-                self.image_input, out_channels, istraining=False, reuse=True)
+                self.image_input, out_channels,  reuse=True, is_training=False)
 
             self.d_sum = histogram_summary("d", self.D)
             self.d__sum = histogram_summary("d_", self.D_)
@@ -92,98 +92,6 @@ class P2PGAN(object):
                 var for var in t_vars if 'discriminator' in var.name]
             self.g_vars = [var for var in t_vars if 'generator' in var.name]
             self.saver = tf.train.Saver()
-
-    def train(self, train_input, train_target, train_label):
-        if not os.path.exists(self.checkpoint_dir):
-            os.makedirs(self.checkpoint_dir)
-        if not os.path.exists(self.sample_dir):
-            os.makedirs(self.sample_dir)
-        with tf.Session() as self.sess:
-            d_optim = tf.train.AdamOptimizer(self.learning_rate, beta1=self.beta1) \
-                .minimize(self.d_loss, var_list=self.d_vars)
-            g_optim = tf.train.AdamOptimizer(self.learning_rate, beta1=self.beta1) \
-                .minimize(self.g_loss, var_list=self.g_vars)
-            try:
-                tf.global_variables_initializer().run()
-            except:
-                tf.initialize_all_variables().run()
-            self.g_sum = merge_summary([self.image_input_sum, self.d__sum,
-                                        self.G_sum, self.g_loss_sum])
-            self.d_sum = merge_summary(
-                [self.image_input_sum, self.image_target_sum, self.d_sum,  self.d_loss_sum])
-            self.writer = SummaryWriter(
-                os.path.join(globalConfig.p2p_pretrain_path, "logs"), graph=self.sess.graph, filename_suffix='.p2pGAN')
-            nsamples=train_input.shape[0]
-            counter = 1
-            start_time = time.time()
-            batch_idxs = int(nsamples/self.batch_size)
-            for epoch in xrange(self.epoch):
-                for idx in xrange(0, int(batch_idxs)):
-                    batch_target = train_target[idx *
-                                               self.batch_size:(idx+1)*self.batch_size]
-                    batch_labels = train_label[idx *
-                                               self.batch_size:(idx+1)*self.batch_size]
-
-                    batch_input = train_input[idx *
-                                               self.batch_size:(idx+1)*self.batch_size]
-
-                    # Update D network
-                    _, summary_str = self.sess.run([d_optim, self.d_sum],
-                                                   feed_dict={
-                        self.image_target: batch_target,
-                        self.image_input: batch_input,
-                        self.label: batch_labels,
-                    })
-                    self.writer.add_summary(summary_str, counter)
-
-                    # Update G network
-                    _, summary_str = self.sess.run([g_optim, self.g_sum],
-                                                   feed_dict={
-                        self.image_input: batch_input,
-                        self.image_target: batch_target,
-                        self.label: batch_labels,
-                    })
-                    self.writer.add_summary(summary_str, counter)
-                    # Run g_optim twice to make sure that d_loss does not go to zero (different from paper)
-                    _, summary_str = self.sess.run([g_optim, self.g_sum],
-                                                   feed_dict={
-                                                       self.image_input: batch_input,
-                                                       self.image_target: batch_target,
-                                                       self.label: batch_labels
-                    })
-                    self.writer.add_summary(summary_str, counter)
-
-                    errD = self.d_loss.eval({
-                        self.image_input: batch_input,
-                        self.label: batch_labels,
-                        self.image_target: batch_target
-                    })
-                    errG = self.g_loss.eval({
-                        self.image_input: batch_input,
-                        self.image_target: batch_target,
-                        self.label: batch_labels
-                    })
-                    counter += 1
-                    print("Epoch: [%2d/%2d] [%4d/%4d] time: %4.4f, d_loss: %.8f, g_loss: %.8f"
-                          % (epoch, self.epoch, idx, batch_idxs,
-                             time.time() - start_time, errD, errG))
-
-                    if np.mod(counter, 100) == 1:
-                        # show_all_variables()
-                        samples, d_loss, g_loss = self.sess.run(
-                            [self.sampler, self.d_loss, self.g_loss],
-                            feed_dict={
-                                self.image_target: batch_target,
-                                self.image_input: batch_input,
-                                self.label: batch_labels
-                            }
-                        )
-                        save_images(samples, image_manifold_size(samples.shape[0]),
-                                    '{}/train_{:02d}_{:04d}.png'.format(self.sample_dir, epoch, idx))
-                        print("[Sample] d_loss: %.8f, g_loss: %.8f" %
-                              (d_loss, g_loss))
-                    if np.mod(counter, 500) == 2:
-                        self.save(self.checkpoint_dir, counter)
 
     def build_discriminator(self, input, target, reuse=False):
         with tf.variable_scope("discriminator") as scope:
@@ -221,7 +129,7 @@ class P2PGAN(object):
 
             return layers[-1]
 
-    def build_generator(self, input, generator_outputs_channels,reuse=False,is_training=True):
+    def build_generator(self, input, generator_outputs_channels, reuse=False, is_training=True):
         with tf.variable_scope("generator") as scope:
             if reuse:
                 scope.reuse_variables()
@@ -280,7 +188,8 @@ class P2PGAN(object):
                         # since it is directly connected to the skip_layer
                         input = layers[-1]
                     else:
-                        input = tf.concat([layers[-1], layers[skip_layer]], axis=3)
+                        input = tf.concat(
+                            [layers[-1], layers[skip_layer]], axis=3)
 
                     rectified = tf.nn.relu(input)
                     # [batch, in_height, in_width, in_channels] => [batch, in_height*2, in_width*2, out_channels]
@@ -288,7 +197,7 @@ class P2PGAN(object):
                     output = batchnorm(output)
 
                     if dropout > 0.0:
-                        output =dropout(output, keep_prob=1 - dropout)
+                        output = tf.nn.dropout(output, keep_prob=1 - dropout)
 
                     layers.append(output)
 
@@ -301,6 +210,98 @@ class P2PGAN(object):
                 layers.append(output)
 
             return layers[-1]
+
+    def train(self, train_input, train_target, train_label):
+        if not os.path.exists(self.checkpoint_dir):
+            os.makedirs(self.checkpoint_dir)
+        if not os.path.exists(self.sample_dir):
+            os.makedirs(self.sample_dir)
+        with tf.Session() as self.sess:
+            d_optim = tf.train.AdamOptimizer(self.learning_rate, beta1=self.beta1) \
+                .minimize(self.d_loss, var_list=self.d_vars)
+            g_optim = tf.train.AdamOptimizer(self.learning_rate, beta1=self.beta1) \
+                .minimize(self.g_loss, var_list=self.g_vars)
+            try:
+                tf.global_variables_initializer().run()
+            except:
+                tf.initialize_all_variables().run()
+            self.g_sum = merge_summary([self.image_input_sum, self.d__sum,
+                                        self.G_sum, self.g_loss_sum])
+            self.d_sum = merge_summary(
+                [self.image_input_sum, self.image_target_sum, self.d_sum,  self.d_loss_sum])
+            self.writer = SummaryWriter(
+                os.path.join(globalConfig.p2p_pretrain_path, "logs"), graph=self.sess.graph, filename_suffix='.p2pGAN')
+            nsamples = train_input.shape[0]
+            counter = 1
+            start_time = time.time()
+            batch_idxs = int(nsamples/self.batch_size)
+            for epoch in xrange(self.epoch):
+                for idx in xrange(0, int(batch_idxs)):
+                    batch_target = train_target[idx *
+                                                self.batch_size:(idx+1)*self.batch_size]
+                    batch_labels = train_label[idx *
+                                               self.batch_size:(idx+1)*self.batch_size]
+
+                    batch_input = train_input[idx *
+                                              self.batch_size:(idx+1)*self.batch_size]
+
+                    # Update D network
+                    _, summary_str = self.sess.run([d_optim, self.d_sum],
+                                                   feed_dict={
+                        self.image_target: batch_target,
+                        self.image_input: batch_input,
+                        self.label: batch_labels,
+                    })
+                    self.writer.add_summary(summary_str, counter)
+
+                    # Update G network
+                    _, summary_str = self.sess.run([g_optim, self.g_sum],
+                                                   feed_dict={
+                        self.image_input: batch_input,
+                        self.image_target: batch_target,
+                        self.label: batch_labels,
+                    })
+                    self.writer.add_summary(summary_str, counter)
+                    # Run g_optim twice to make sure that d_loss does not go to zero (different from paper)
+                    _, summary_str = self.sess.run([g_optim, self.g_sum],
+                                                   feed_dict={
+                                                       self.image_input: batch_input,
+                                                       self.image_target: batch_target,
+                                                       self.label: batch_labels
+                    })
+                    self.writer.add_summary(summary_str, counter)
+
+                    errD = self.d_loss.eval({
+                        self.image_input: batch_input,
+                        self.label: batch_labels,
+                        self.image_target: batch_target
+                    })
+                    errG = self.g_loss.eval({
+                        self.image_input: batch_input,
+                        self.image_target: batch_target,
+                        self.label: batch_labels
+                    })
+                    counter += 1
+                    print("Epoch: [%2d/%2d] [%4d/%4d] time: %4.4f, d_loss: %.8f, g_loss: %.8f"
+                          % (epoch, self.epoch, idx, batch_idxs,
+                             time.time() - start_time, errD, errG))
+
+                    if np.mod(counter, 100) == 1:
+                        # show_all_variables()
+                        samples, d_loss, g_loss = self.sess.run(
+                            [self.sampler, self.d_loss, self.g_loss],
+                            feed_dict={
+                                self.image_target: batch_target,
+                                self.image_input: batch_input,
+                                self.label: batch_labels
+                            }
+                        )
+                        save_images(samples, image_manifold_size(samples.shape[0]),
+                                    '{}/train_{:02d}_{:04d}.png'.format(self.sample_dir, epoch, idx))
+                        print("[Sample] d_loss: %.8f, g_loss: %.8f" %
+                              (d_loss, g_loss))
+                    if np.mod(counter, 500) == 2:
+                        self.save(self.checkpoint_dir, counter)
 
     @property
     def model_dir(self):
