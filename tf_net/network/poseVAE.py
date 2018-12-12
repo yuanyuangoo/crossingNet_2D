@@ -79,7 +79,7 @@ class PoseVAE(object):
         self.KL_divergence_sum = scalar_summary(
             "KL_divergence", self.KL_divergence)
 
-        t_vars = tf.all_variables()
+        t_vars = tf.global_variables()
         self.encoder_vars = [var for var in t_vars if 'encoder' in var.name]
         self.decoder_vars = [var for var in t_vars if 'decoder' in var.name]
 

@@ -264,12 +264,11 @@ class P2PGAN(object):
                     })
                     self.writer.add_summary(summary_str, counter)
                     # Run g_optim twice to make sure that d_loss does not go to zero (different from paper)
-                    _, summary_str = self.sess.run([g_optim, self.g_sum],
-                                                   feed_dict={
-                                                       self.image_input: batch_input,
-                                                       self.image_target: batch_target,
-                                                       self.label: batch_labels
-                    })
+                    _, summary_str = self.sess.run([g_optim, self.g_sum], feed_dict={
+                                                   self.image_input: batch_input,
+                                                   self.image_target: batch_target,
+                                                   self.label: batch_labels
+                                                   })
                     self.writer.add_summary(summary_str, counter)
 
                     errD = self.d_loss.eval({

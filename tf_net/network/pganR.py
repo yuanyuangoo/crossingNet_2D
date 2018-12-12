@@ -42,37 +42,105 @@ class PganR(object):
             self.sample = self.p2p.build_generator(
                 tf.image.grayscale_to_rgb(self.sample_G), 3, reuse=True, is_training=False)
 
-        # self.image_input_sum = histogram_summary(
-        #     "image_input", self.FR.image_input)
         self.batch_size = self.FR.batch_size
         self.p2p.label = self.FR.pose_vae.label_hat
-        self.loss=self.p2p.d_loss
+        self.g_loss = self.p2p.g_loss
+        self.d_loss = self.p2p.d_loss
+
+
+
     def train(self, train_dataset, valid_dataset):
         if not os.path.exists(self.checkpoint_dir):
             os.makedirs(self.checkpoint_dir)
         if not os.path.exists(self.sample_dir):
             os.makedirs(self.sample_dir)
-        _, _, _, test_labels, test_skel, test_img, _, _ = prep_data(
-            train_dataset, valid_dataset, self.batch_size)
+
+        train_labels, train_skel, train_img, train_img_rgb, _, batch_idxs = prep_data(
+            train_dataset, self.batch_size)
+        test_labels, test_skel, test_img, test_img_rgb, _, _ = prep_data(
+            valid_dataset, self.batch_size)
         with tf.Session() as self.sess:
+            d_optim = tf.train.AdamOptimizer(self.p2p.learning_rate, beta1=self.p2p.beta1) \
+                .minimize(self.d_loss)
+            g_optim = tf.train.AdamOptimizer(self.p2p.learning_rate, beta1=self.p2p.beta1) \
+                .minimize(self.g_loss)
+            # self.g_sum = merge_summary([self.image_input_sum, self.d__sum,
+            #                             self.G_sum, self.g_loss_sum])
+            # self.d_sum = merge_summary(
+            #     [self.image_input_sum, self.image_target_sum, self.d_sum,  self.d_loss_sum])
+            self.writer = SummaryWriter(
+                os.path.join(globalConfig.p2p_pretrain_path, "logs"), graph=self.sess.graph, filename_suffix='.pganR')
+
             tf.global_variables_initializer().run()
+            forward_gan_var = [
+                val for val in tf.global_variables() if 'p2p' not in val.name]
+            self.saver = tf.train.Saver(forward_gan_var)
+            _, _ = self.load(self.FR.checkpoint_dir)
+
+            p2p_gan_var = [val for val in tf.global_variables(
+            ) if 'p2p' in val.name]
+            self.saver = tf.train.Saver(p2p_gan_var)
+            could_load, checkpoint_counter = self.load(
+                self.p2p.checkpoint_dir)
+
+            nsamples = train_img.shape[0]
+            counter = 1
+            start_time = time.time()
+            self.epoch=200
+
+            for epoch in xrange(self.epoch):
+                for idx in xrange(0, int(batch_idxs)):
+                    batch_target = train_img_rgb[idx *
+                                                 self.batch_size:(idx+1)*self.batch_size]
+                    batch_labels = train_labels[idx *
+                                                self.batch_size:(idx+1)*self.batch_size]
+                    batch_skel = train_skel[idx *
+                                            self.batch_size:(idx+1)*self.batch_size]
+
+                    _, _, d_loss, g_loss = self.sess.run([d_optim, g_optim, self.d_loss, self.g_loss], feed_dict={
+                        self.FR.pose_input: batch_skel,
+                        self.FR.pose_vae.label_hat: batch_labels,
+                        self.FR.image_gan.y: batch_labels,
+                        self.p2p.label: batch_labels,
+                        self.p2p.image_target: batch_target
+                    })
+                    counter += 1
+                    print("Epoch: [%2d/%2d] [%4d/%4d] time: %4.4f, d_loss: %.8f, g_loss: %.8f"
+                          % (epoch, self.epoch, idx, batch_idxs,
+                             time.time() - start_time, d_loss, g_loss))
+
+                    if np.mod(counter, 100) == 1:
+                        # show_all_variables()
+                        sample_G,samples = self.sess.run([self.sample_G,self.sample], feed_dict={
+                            self.FR.pose_input: test_skel,
+                            self.FR.pose_vae.label_hat: test_labels,
+                            self.FR.image_gan.y: test_labels,
+                            self.p2p.label: test_labels
+                        })
+                    save_images(sample_G, image_manifold_size(sample_G.shape[0]),
+                                '{}/train_{:04d}_G.png'.format(self.sample_dir, idx))
+                    save_images(samples, image_manifold_size(samples.shape[0]),
+                                '{}/train_{:04d}.png'.format(self.sample_dir, idx))
+
+                    if np.mod(counter, 500) == 1:
+                        self.save(self.checkpoint_dir, counter)
 
     def test(self, train_dataset, valid_dataset):
         if not os.path.exists(self.checkpoint_dir):
             os.makedirs(self.checkpoint_dir)
         if not os.path.exists(self.sample_dir):
             os.makedirs(self.sample_dir)
-        _, _, _, test_labels, test_skel, test_img, _, _ = prep_data(
-            train_dataset, valid_dataset, self.batch_size)
+        test_labels, test_skel, test_img, test_img_rgb, _, _ = prep_data(
+            valid_dataset, self.batch_size)
         with tf.Session() as self.sess:
             tf.global_variables_initializer().run()
 
             forward_gan_var = [
-                val for val in tf.all_variables() if 'p2p' not in val.name]
+                val for val in tf.global_variables() if 'p2p' not in val.name]
             self.saver = tf.train.Saver(forward_gan_var)
             _, _ = self.load(self.FR.checkpoint_dir)
 
-            p2p_gan_var = [val for val in tf.all_variables(
+            p2p_gan_var = [val for val in tf.global_variables(
             ) if 'p2p' in val.name]
             self.saver = tf.train.Saver(p2p_gan_var)
             could_load, checkpoint_counter = self.load(
@@ -99,8 +167,7 @@ class PganR(object):
     @property
     def model_dir(self):
         return "{}_{}".format(
-            globalConfig.dataset, self.batch_size,
-        )
+            globalConfig.dataset, self.batch_size)
 
     def load(self, checkpoint_dir):
         import re
@@ -145,4 +212,5 @@ if __name__ == '__main__':
         raise ValueError('unknown dataset %s' % globalConfig.dataset)
 
     pganR = PganR()
-    pganR.test(ds, val_ds)
+    # pganR.test(ds, val_ds)
+    pganR.train(ds, val_ds)

@@ -287,7 +287,7 @@ def merge(images, size, skel=None):
                          'must have dimensions: HxW or HxWx3 or HxWx4')
 
 
-def prep_data(train_dataset, valid_dataset, batch_size):
+def prep_data(train_dataset, batch_size):
         train_skel = []
         train_labels = []
         train_img = []
