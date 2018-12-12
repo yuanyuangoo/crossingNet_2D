@@ -73,7 +73,7 @@ class Dataset(object):
             skel.shape = (-1)
 
             img = Image('H36M', frmPath)
-            img_RGB = Image('H36M', frmPath_rgb)
+            img_RGB = Image('H36M', frmPath_rgb, RGB=True)
 
             self.frmList.append(Frame(img, img_RGB, skel, label, frmPath))
             # self.frmList[-1].saveOnlyForTrain()
@@ -95,7 +95,7 @@ if __name__ == '__main__':
         import data.h36m as h36m
         ds = Dataset()
         # for i in range(0, 20000, 20000):
-        ds.loadH36M(512, mode='train', tApp=True, replace=True)
+        ds.loadH36M(1024, mode='train', tApp=True, replace=True)
 
         val_ds = Dataset()
         # for i in range(0, 20000, 20000):

@@ -55,6 +55,11 @@ class P2PGAN(object):
 
             self.image_input = tf.placeholder(
                 tf.float32, [self.batch_size, self.input_width, self.input_height, 3], name='background_image')
+            self.image_input_noise=tf.placeholder(tf.float32,self.image_input.shape,name='image_input_noise')
+
+            self.image_input_n = tf.multiply(
+                self.image_input, self.image_input_noise)
+
             #label
             self.label = tf.placeholder(
                 tf.float32, [self.batch_size, self.label_dim], name='label')

@@ -171,8 +171,10 @@ class ForwardRender(object):
         if not os.path.exists(self.sample_dir):
             os.makedirs(self.sample_dir)
         
-        train_labels, train_skel, train_img, test_labels, test_skel, test_img, n_samples, total_batch = prep_data(
-            train_dataset, valid_dataset, self.batch_size)
+        train_labels, train_skel, train_img,  _, n_samples, total_batch = prep_data(
+            train_dataset, self.batch_size)
+        test_labels, test_skel, test_img, _, _, _ = prep_data(
+            valid_dataset, self.batch_size)
 
         print('[ForwardRender] enter training loop with %d epoches' % nepoch)
         with tf.Session() as self.sess:
@@ -180,13 +182,13 @@ class ForwardRender(object):
             tf.global_variables_initializer().run()
 
 
-            pose_vae_var = [val for val in tf.global_variables(
+            pose_vae_var = [val for val in tf.trainable_variables(
             ) if 'encoder' in val.name or 'decoder' in val.name]
             self.saver = tf.train.Saver(pose_vae_var)
             could_load, checkpoint_counter = self.load(
                 self.pose_vae.checkpoint_dir)
 
-            image_gan_var = [val for val in tf.global_variables(
+            image_gan_var = [val for val in tf.trainable_variables(
             ) if 'generator' in val.name or 'discriminator' in val.name]
             self.saver = tf.train.Saver(image_gan_var)
             could_load, checkpoint_counter = self.load(
@@ -340,5 +342,5 @@ if __name__ == '__main__':
         raise ValueError('unknown dataset %s' % globalConfig.dataset)
 
     Fr = ForwardRender(dim_x=Num_of_Joints*3)
-    # Fr.train(200, ds, val_ds)
-    Fr.test(ds, val_ds)
+    Fr.train(200, ds, val_ds)
+    # Fr.test(ds, val_ds)

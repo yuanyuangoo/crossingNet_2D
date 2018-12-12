@@ -20,6 +20,7 @@ from data.util import *
 from data.ops import *
 import pprint as pp
 Num_of_Joints = 17
+EPS = 1e-12
 
 
 class PganR(object):
@@ -44,12 +45,29 @@ class PganR(object):
             scope.reuse_variables()
             self.sample = self.p2p.build_generator(
                 tf.image.grayscale_to_rgb(self.sample_G), 3, reuse=True, is_training=False)
+            # self.D = self.p2p.build_discriminator(
+            #     tf.image.grayscale_to_rgb(self.sample_G), self.p2p.image_target, reuse=True)
+            # #fake D
+            # self.D_ = self.p2p.build_discriminator(
+            #     tf.image.grayscale_to_rgb(self.sample_G), self.p2p.G, reuse=True)
+
+            # self.g_loss_GAN = tf.reduce_mean(-tf.log(self.D_ + EPS))
+            # self.g_loss_L1 = tf.reduce_mean(tf.abs(self.p2p.image_target - self.p2p.G))
+            # self.g_loss = self.g_loss_GAN * self.p2p.gan_weight + self.g_loss_L1 * self.p2p.l1_weight
+            # self.g_loss_sum = scalar_summary("g_loss", self.g_loss)
+
+            # self.d_loss = tf.reduce_mean(-(tf.log(self.D + EPS) +
+            #                                tf.log(1 - self.D_ + EPS)))
+            # self.d_loss_sum = scalar_summary("d_loss", self.d_loss)
+
+            self.g_var = self.p2p.g_vars
+            self.d_var = self.p2p.d_vars
+            self.saver = tf.train.Saver()
 
         self.batch_size = self.FR.batch_size
         self.p2p.label = self.FR.pose_vae.label_hat
-        self.g_loss = self.p2p.g_loss
-        self.d_loss = self.p2p.d_loss
-
+        self.g_loss=self.p2p.g_loss
+        self.d_loss=self.p2p.d_loss
 
 
     def train(self, train_dataset, valid_dataset):
@@ -63,10 +81,7 @@ class PganR(object):
         test_labels, test_skel, test_img, test_img_rgb, _, _ = prep_data(
             valid_dataset, self.batch_size)
         with tf.Session() as self.sess:
-            d_optim = tf.train.AdamOptimizer(self.p2p.learning_rate, beta1=self.p2p.beta1) \
-                .minimize(self.d_loss)
-            g_optim = tf.train.AdamOptimizer(self.p2p.learning_rate, beta1=self.p2p.beta1) \
-                .minimize(self.g_loss)
+
             # self.g_sum = merge_summary([self.image_input_sum, self.d__sum,
             #                             self.G_sum, self.g_loss_sum])
             # self.d_sum = merge_summary(
@@ -91,10 +106,22 @@ class PganR(object):
             start_time = time.time()
             self.epoch=200
 
+            d_optim = tf.train.AdamOptimizer(self.p2p.learning_rate, beta1=self.p2p.beta1) \
+                .minimize(self.d_loss, var_list=self.d_var)
+            g_optim = tf.train.AdamOptimizer(self.p2p.learning_rate, beta1=self.p2p.beta1) \
+                .minimize(self.g_loss, var_list=self.g_var)
+            rest_var = [
+                val for val in tf.global_variables() if val not in forward_gan_var and val not in p2p_gan_var]
+            
+            init_new_vars_op = tf.initialize_variables(rest_var).run()
+
+
             for epoch in xrange(self.epoch):
                 for idx in xrange(0, int(batch_idxs)):
                     batch_target = train_img_rgb[idx *
                                                  self.batch_size:(idx+1)*self.batch_size]
+                    batch_img = train_img[idx *
+                                          self.batch_size:(idx+1)*self.batch_size]
                     batch_labels = train_labels[idx *
                                                 self.batch_size:(idx+1)*self.batch_size]
                     batch_skel = train_skel[idx *
@@ -105,7 +132,8 @@ class PganR(object):
                         self.FR.pose_vae.label_hat: batch_labels,
                         self.FR.image_gan.y: batch_labels,
                         self.p2p.label: batch_labels,
-                        self.p2p.image_target: batch_target
+                        self.p2p.image_target: batch_target,
+                        self.p2p.image_input:batch_target
                     })
                     counter += 1
                     print("Epoch: [%2d/%2d] [%4d/%4d] time: %4.4f, d_loss: %.8f, g_loss: %.8f"
@@ -114,16 +142,16 @@ class PganR(object):
 
                     if np.mod(counter, 100) == 1:
                         # show_all_variables()
-                        sample_G,samples = self.sess.run([self.sample_G,self.sample], feed_dict={
+                        sample_G, samples = self.sess.run([self.sample_G, self.sample], feed_dict={
                             self.FR.pose_input: test_skel,
                             self.FR.pose_vae.label_hat: test_labels,
                             self.FR.image_gan.y: test_labels,
                             self.p2p.label: test_labels
                         })
-                    save_images(sample_G, image_manifold_size(sample_G.shape[0]),
-                                '{}/train_{:04d}_G.png'.format(self.sample_dir, idx))
-                    save_images(samples, image_manifold_size(samples.shape[0]),
-                                '{}/train_{:04d}.png'.format(self.sample_dir, idx))
+                        save_images(sample_G, image_manifold_size(sample_G.shape[0]),
+                                    '{}/train_{:04d}_G.png'.format(self.sample_dir, counter))
+                        save_images(samples, image_manifold_size(samples.shape[0]),
+                                    '{}/train_{:04d}.png'.format(self.sample_dir, counter))
 
                     if np.mod(counter, 500) == 1:
                         self.save(self.checkpoint_dir, counter)
@@ -201,12 +229,13 @@ class PganR(object):
                         os.path.join(checkpoint_dir, model_name),
                         global_step=step)
 
+
 if __name__ == '__main__':
     if globalConfig.dataset == 'H36M':
         import data.h36m as h36m
         ds = Dataset()
         # for i in range(0, 20000, 20000):
-        ds.loadH36M(10240, mode='train', tApp=True, replace=False)
+        ds.loadH36M(40960, mode='train', tApp=True, replace=False)
 
         val_ds = Dataset()
         # for i in range(0, 20000, 20000):

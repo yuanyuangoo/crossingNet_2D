@@ -9,6 +9,9 @@ def binary_activation(x, r):
     out = tf.where(cond, -1*tf.ones(tf.shape(x)), tf.ones(tf.shape(x)))
     return out
 
+    
+tf.image.random_brightness
+
 
 x = tf.constant((0.8, 0.4,111), dtype=tf.float32)
 a = binary_activation(x, 0.5)
