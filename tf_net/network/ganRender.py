@@ -142,7 +142,7 @@ class GanRender(ForwardRender):
             [self.gen_loss_sum, self.gan_loss_gen_sum, self.recons_loss_sum, self.metric_loss_sum])
         self.d_sum = merge_summary(
             [self.dis_loss_sum, self.loss_dis_gan_sum, self.loss_dis_est_sum, self.metric_loss_sum])
-        t_vars = tf.all_variables()
+        t_vars = tf.global_variables()
         self.image_gan.m_vars = [var for var in t_vars if 'm_' in var.name]
         self.image_gan.r_vars = [var for var in t_vars if 'r_' in var.name]
         self.dis_optim = tf.train.AdamOptimizer(learning_rate=self.lr, beta1=self.b1).minimize(
@@ -211,13 +211,13 @@ class GanRender(ForwardRender):
             except:
                 tf.initialize_all_variables().run()
 
-            pose_vae_var = [val for val in tf.all_variables(
+            pose_vae_var = [val for val in tf.global_variables(
             ) if 'encoder' in val.name or 'decoder' in val.name]
             self.saver = tf.train.Saver(pose_vae_var)
             could_load, checkpoint_counter = self.load(
                 self.pose_vae.checkpoint_dir)
 
-            image_gan_var = [val for val in tf.all_variables(
+            image_gan_var = [val for val in tf.global_variables(
             ) if 'generator' in val.name or 'discriminator' in val.name]
             self.saver = tf.train.Saver(image_gan_var)
             could_load, checkpoint_counter = self.load(

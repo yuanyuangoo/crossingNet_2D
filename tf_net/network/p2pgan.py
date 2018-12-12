@@ -88,7 +88,7 @@ class P2PGAN(object):
                                            tf.log(1 - self.D_ + EPS)))
             self.d_loss_sum = scalar_summary("d_loss", self.d_loss)
 
-            t_vars = tf.all_variables()
+            t_vars = tf.global_variables()
             self.d_vars = [
                 var for var in t_vars if 'discriminator' in var.name]
             self.g_vars = [var for var in t_vars if 'generator' in var.name]

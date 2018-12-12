@@ -112,7 +112,7 @@ class ImageGAN(object):
         self.g_loss_sum = scalar_summary("g_loss", self.g_loss)
         self.d_loss_sum = scalar_summary("d_loss", self.d_loss)
 
-        t_vars = tf.all_variables()
+        t_vars = tf.global_variables()
 
         self.d_vars = [var for var in t_vars if 'discriminator' in var.name]
         self.g_vars = [var for var in t_vars if 'generator' in var.name]

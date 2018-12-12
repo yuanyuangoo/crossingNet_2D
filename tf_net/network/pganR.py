@@ -32,10 +32,13 @@ class PganR(object):
 
 
         
-        self.FR = ForwardRender(self.dim_x)
-        self.p2p = P2PGAN(mode='test')
-        self.sample_G = self.FR.sample
 
+
+    # with tf.variable_scope("FR") as scope:
+    #     scope.reuse_variables()
+        self.FR = ForwardRender(self.dim_x)
+        self.sample_G = self.FR.sample
+        self.p2p = P2PGAN(mode='test')
 
         with tf.variable_scope("p2p") as scope:
             scope.reuse_variables()

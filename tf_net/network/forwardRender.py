@@ -69,7 +69,7 @@ class ForwardRender(object):
 
         self.pixel_loss_sum = scalar_summary("pixel_loss", self.pixel_loss)
         
-        t_vars = tf.all_variables()
+        t_vars = tf.global_variables()
         self.alignment_vars = [var for var in t_vars if 'ali' in var.name]
 
         self.forwarRender_vars = self.pose_vae.encoder_vars + \
@@ -116,19 +116,22 @@ class ForwardRender(object):
             os.makedirs(self.checkpoint_dir)
         if not os.path.exists(self.sample_dir):
             os.makedirs(self.sample_dir)
-        train_labels, train_skel, train_img, test_labels, test_skel, test_img, n_samples, total_batch = prep_data(
-            train_dataset, valid_dataset, self.batch_size)
+
+        train_labels, train_skel, train_img,  _, n_samples, total_batch = prep_data(
+            train_dataset, self.batch_size)
+        test_labels, test_skel, test_img, _, _, _ = prep_data(
+            valid_dataset, self.batch_size)
 
         with tf.Session() as self.sess:
             self.ali_sum = merge_summary([self.pixel_loss_sum])
             tf.global_variables_initializer().run()
-            pose_vae_var = [val for val in tf.all_variables(
+            pose_vae_var = [val for val in tf.trainable_variables(
             ) if 'encoder' in val.name or 'decoder' in val.name]
             self.saver = tf.train.Saver(pose_vae_var)
             could_load, checkpoint_counter = self.load(
                 self.pose_vae.checkpoint_dir)
 
-            image_gan_var = [val for val in tf.all_variables(
+            image_gan_var = [val for val in tf.trainable_variables(
             ) if 'generator' in val.name or 'discriminator' in val.name]
             self.saver = tf.train.Saver(image_gan_var)
             could_load, checkpoint_counter = self.load(
@@ -177,13 +180,13 @@ class ForwardRender(object):
             tf.global_variables_initializer().run()
 
 
-            pose_vae_var = [val for val in tf.all_variables(
+            pose_vae_var = [val for val in tf.global_variables(
             ) if 'encoder' in val.name or 'decoder' in val.name]
             self.saver = tf.train.Saver(pose_vae_var)
             could_load, checkpoint_counter = self.load(
                 self.pose_vae.checkpoint_dir)
 
-            image_gan_var = [val for val in tf.all_variables(
+            image_gan_var = [val for val in tf.global_variables(
             ) if 'generator' in val.name or 'discriminator' in val.name]
             self.saver = tf.train.Saver(image_gan_var)
             could_load, checkpoint_counter = self.load(

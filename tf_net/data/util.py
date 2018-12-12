@@ -35,7 +35,7 @@ msraColorIdx = [0] + [1]*4 + [2]*4 + [3]*4 + [4]*4 + [5]*4
 
 
 def show_all_variables():
-  model_vars = tf.all_variables()
+  model_vars = tf.global_variables()
   slim.model_analyzer.analyze_vars(model_vars, print_info=True)
 
 
