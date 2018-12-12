@@ -17,19 +17,6 @@ class H36M:
         # print('==>initializing 3D data.')
         annot = {}
 
-        #tags=['S','center','index','normalize','part',
-        #'person','scale','torsoangle','visible','zind']
-        #f=h5py.File('/media/a/D/datasets/h36m/annot/'+split+'.h5','r')
-        #fortagintags:
-        #annot[tag]=np.asarray(f[tag]).copy()
-        #f.close()
-        #annot['imgname']={}
-        #self.nSamples=len(annot['scale'])
-
-        #withopen('/media/a/D/datasets/h36m/annot/'+split+'_images.txt','r')asf:
-        #foriinrange(self.nSamples):
-        #annot['imgname'][i]=f.readline()[:-1]
-
         annotPath = os.path.join(
             globalConfig.h36m_base_path, 'annot', split+'.mat')
         from scipy.io import loadmat
@@ -72,6 +59,12 @@ class H36M:
             self.annot['imgname'][0][0][index][0][0][:]+'.jpg'
         label = self.getOneHotedLabel(imgname)
         return imgname, label
+
+    def getImgName_RGB(self, index):
+        imgname = ref.h36mImgDir_origin + \
+            self.annot['imgname'][0][0][index][0][0][:]+'.jpg'
+        return imgname
+
 
     def getImgName_Label(self, index):
         imgname = ref.h36mImgDir + \

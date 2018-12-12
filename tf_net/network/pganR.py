@@ -18,31 +18,44 @@ from data.layers import *
 from data.dataset import *
 from data.util import *
 from data.ops import *
-
+import pprint as pp
 Num_of_Joints = 17
 
 
 class PganR(object):
     def __init__(self, dim_x=Num_of_Joints*3,sample_dir="samples",checkpoint_dir="./checkpoint"):
         self.checkpoint_dir = os.path.join(
-            globalConfig.Forward_Render_pretrain_path, checkpoint_dir)
+            globalConfig.pganR_pretrain_path, checkpoint_dir)
         self.sample_dir = os.path.join(
-            globalConfig.Forward_Render_pretrain_path, sample_dir)
+            globalConfig.pganR_pretrain_path, sample_dir)
         self.dim_x = dim_x
 
 
         
         self.FR = ForwardRender(self.dim_x)
         self.p2p = P2PGAN(mode='test')
+        self.sample_G = self.FR.sample
+
+
         with tf.variable_scope("p2p") as scope:
             scope.reuse_variables()
             self.sample = self.p2p.build_generator(
-                tf.image.grayscale_to_rgb(self.FR.sample), 3, reuse=True, is_training=False)
+                tf.image.grayscale_to_rgb(self.sample_G), 3, reuse=True, is_training=False)
 
-        self.image_input_sum = histogram_summary(
-            "image_input", self.p2p.image_input)
-        self.batch_size = self.p2p.batch_size
+        # self.image_input_sum = histogram_summary(
+        #     "image_input", self.FR.image_input)
+        self.batch_size = self.FR.batch_size
         self.p2p.label = self.FR.pose_vae.label_hat
+        self.loss=self.p2p.d_loss
+    def train(self, train_dataset, valid_dataset):
+        if not os.path.exists(self.checkpoint_dir):
+            os.makedirs(self.checkpoint_dir)
+        if not os.path.exists(self.sample_dir):
+            os.makedirs(self.sample_dir)
+        _, _, _, test_labels, test_skel, test_img, _, _ = prep_data(
+            train_dataset, valid_dataset, self.batch_size)
+        with tf.Session() as self.sess:
+            tf.global_variables_initializer().run()
 
     def test(self, train_dataset, valid_dataset):
         if not os.path.exists(self.checkpoint_dir):
@@ -52,13 +65,14 @@ class PganR(object):
         _, _, _, test_labels, test_skel, test_img, _, _ = prep_data(
             train_dataset, valid_dataset, self.batch_size)
         with tf.Session() as self.sess:
-            forward_gan_var = [val for val in tf.trainable_variables(
-            ) if 'p2p' not in val.name]
-            self.saver = tf.train.Saver(forward_gan_var)
-            _, _ = self.load(
-                self.FR.checkpoint_dir)
+            tf.global_variables_initializer().run()
 
-            p2p_gan_var = [val for val in tf.trainable_variables(
+            forward_gan_var = [
+                val for val in tf.all_variables() if 'p2p' not in val.name]
+            self.saver = tf.train.Saver(forward_gan_var)
+            _, _ = self.load(self.FR.checkpoint_dir)
+
+            p2p_gan_var = [val for val in tf.all_variables(
             ) if 'p2p' in val.name]
             self.saver = tf.train.Saver(p2p_gan_var)
             could_load, checkpoint_counter = self.load(
@@ -67,23 +81,20 @@ class PganR(object):
             nsamples = test_img.shape[0]
             counter = 1
             start_time = time.time()
-            batch_idxs = int(nsamples/self.batch_size)
-            for idx in tqdm(xrange(0, int(batch_idxs))):
-                batch_labels = test_labels[idx *
-                                           self.batch_size:(idx+1)*self.batch_size]
-                batch_skels = test_skel[idx *
-                                        self.batch_size:(idx+1)*self.batch_size]
-                batch_img = test_img[idx *
-                                     self.batch_size:(idx+1)*self.batch_size]
 
-                samples = self.sess.run([self.sample], feed_dict={
-                    self.FR.pose_input: batch_skels,
-                    self.FR.label: batch_labels,
-                    self.FR.image_gan.y: batch_labels
-                })
-                save_images(samples, image_manifold_size(samples.shape[0]),
-                            '{}/test_{:04d}.png'.format(self.sample_dir, idx))
-                counter += 1
+            sample_G,samples = self.sess.run([self.sample_G,self.sample], feed_dict={
+                self.FR.pose_input: test_skel,
+                self.FR.pose_vae.label_hat: test_labels,
+                self.FR.image_gan.y: test_labels,
+                self.p2p.label: test_labels
+            })
+            idx = 0
+
+            save_images(sample_G, image_manifold_size(sample_G.shape[0]),
+                        '{}/test_{:04d}_G.png'.format(self.sample_dir, idx))
+            save_images(samples, image_manifold_size(samples.shape[0]),
+                        '{}/test_{:04d}.png'.format(self.sample_dir, idx))
+            counter += 1
 
     @property
     def model_dir(self):
@@ -106,7 +117,7 @@ class PganR(object):
             print(" [*] Success to read {}".format(ckpt_name))
             return True, counter
         else:
-            print(" [*] Failed to find a checkpoint")
+            print(" [*] Failed to find a ch10240kpoint")
             return False, 0
 
     def save(self, checkpoint_dir, step):

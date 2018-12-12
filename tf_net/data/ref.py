@@ -71,6 +71,8 @@ disturb = 10
 dataDir = '../data'
 mpiiImgDir = '/home/zxy/Datasets/mpii/images/'
 h36mImgDir = os.path.join(globalConfig.h36m_base_path, 'resized/')
+h36mImgDir_origin = os.path.join(globalConfig.h36m_base_path, 'images_resized/')
+
 expDir = '../exp'
 
 nThreads = 4

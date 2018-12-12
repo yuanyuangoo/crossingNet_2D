@@ -83,7 +83,7 @@ class ImageGAN(object):
         self.D, self.D_logits, _ = self.build_discriminator(
             inputs, self.y, reuse=False, is_training=True)
         #image
-        self.sampler = self.build_generator(self.z, self.y, reuse=True, is_training=False)
+        self.sampler = binary_activation(self.build_generator(self.z, self.y, reuse=True, is_training=False),0)
         #Discriminator for fake image
         self.D_, self.D_logits_, _ = self.build_discriminator(
             self.G, self.y, reuse=True, is_training=True)
@@ -112,7 +112,7 @@ class ImageGAN(object):
         self.g_loss_sum = scalar_summary("g_loss", self.g_loss)
         self.d_loss_sum = scalar_summary("d_loss", self.d_loss)
 
-        t_vars = tf.trainable_variables()
+        t_vars = tf.all_variables()
 
         self.d_vars = [var for var in t_vars if 'discriminator' in var.name]
         self.g_vars = [var for var in t_vars if 'generator' in var.name]
@@ -179,6 +179,8 @@ class ImageGAN(object):
 
             return tf.nn.tanh(
                 deconv2d(h2, [self.batch_size, s_h, s_w, 1], name='g_h3'))
+            # return binary_activation(
+            #     deconv2d(h2, [self.batch_size, s_h, s_w, 1], name='g_h3'), 0)
 
     def build_recognition(self, output_dim=23, hidden_layer=None, reuse=False, is_training=True):
         if hidden_layer is None:
@@ -312,18 +314,18 @@ class ImageGAN(object):
                         loc=0, scale=0.3, size=(self.batch_size, self.dim_z))
                     batch_z = np.clip(batch_z,-1,1).astype(np.float32)
                     if d_loss > 1:
-                            # Update D network
+                        # Update D network
                         _, summary_str, d_loss = self.sess.run([d_optim, self.d_sum, self.d_loss],
-                                                               feed_dict={
+                                                                feed_dict={
                             self.inputs: batch_images,
                             self.z: batch_z,
                             self.y: batch_labels,
                         })
-                        self.writer.add_summary(summary_str, counter)
+                    self.writer.add_summary(summary_str, counter)
                     if g_loss > 0.5:
                         # Update G network
                         _, summary_str, g_loss = self.sess.run([g_optim, self.g_sum, self.g_loss],
-                                                               feed_dict={
+                                                                feed_dict={
                             self.z: batch_z,
                             self.y: batch_labels,
                         })
@@ -348,10 +350,11 @@ class ImageGAN(object):
                             self.y: sample_labels,
                         }
                     )
+                    
                     save_images(samples, image_manifold_size(samples.shape[0]),
                                 '{}/train_{:02d}_{:04d}.png'.format(self.sample_dir, epoch, idx))
                     print("[Sample] d_loss: %.8f, g_loss: %.8f" %
-                            (d_loss, g_loss))
+                          (d_loss, g_loss))
                 if np.mod(counter, 500) == 2:
                     self.save(self.checkpoint_dir, counter)
 

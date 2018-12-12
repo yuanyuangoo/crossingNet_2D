@@ -79,15 +79,14 @@ class PoseVAE(object):
         self.KL_divergence_sum = scalar_summary(
             "KL_divergence", self.KL_divergence)
 
-        t_vars = tf.trainable_variables()
+        t_vars = tf.all_variables()
         self.encoder_vars = [var for var in t_vars if 'encoder' in var.name]
         self.decoder_vars = [var for var in t_vars if 'decoder' in var.name]
 
         self.saver = tf.train.Saver()
 
     def sampler(self, z, dim_img, n_hidden):
-        y = self.decoder(z, n_hidden, dim_img, 1.0,
-                         is_training=False, reuse=True)
+        y = self.decoder(z, n_hidden, dim_img, is_training=False, reuse=True)
         return y
 
     def autoencoder(self, x_hat, label_hat, x, dim_img, dim_z, n_hidden, is_training=True, reuse=False):

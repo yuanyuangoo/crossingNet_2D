@@ -1,18 +1,16 @@
-import time
-import sys
-sys.path.append('./')
-from data.util import Frame
-import globalConfig
-import h5py
-import numpy as np
-from numpy.matlib import repmat
-from numpy.linalg import svd, det
-from Image import Image
-import os
-import pickle
-from tqdm import tqdm
-import util
 from h36m import H36M
+import util
+from tqdm import tqdm
+import pickle
+import os
+from Image import Image
+from numpy.linalg import svd, det
+from numpy.matlib import repmat
+import numpy as np
+import h5py
+import globalConfig
+from data.util import Frame
+import time
 import sys
 sys.path.append('./')
 
@@ -55,30 +53,29 @@ class Dataset(object):
             t1 = time.time() - t1
             print('loaded with {}s'.format(t1))
             return self.frmList
-        
+
         data = H36M(mode)
-        # if frmStartNum >= data.nSamples:
-        #     return
-        #     raise ValueError(
-        #         'invalid start frame, shoud be lower than {}'.format(data.nSamples))
+
         frmEndNum = data.nSamples
-        # frmStartNum = fileIdx*self.h36m_frm_perfile
-        # frmEndNum = min(frmStartNum+self.h36m_frm_perfile, data.nSamples)
 
-        # print('frmStartNum={}, frmEndNum={}, fileIdx={}'.format(frmStartNum,
-        #                                                         frmEndNum,
-        #                                                         fileIdx))
-
-        for frmIdx in tqdm(range(frmStartNum, int(frmEndNum/Fsize)*Fsize,int(frmEndNum/Fsize))):
-            [frmPath, label] = data.getImgName_onehotLabel(frmIdx)
-
+        for frmIdx in tqdm(range(frmStartNum, int(frmEndNum/Fsize)*Fsize, int(frmEndNum/Fsize))):
+            while True:
+                [frmPath, label] = data.getImgName_onehotLabel(frmIdx)
+                frmPath_rgb = data.getImgName_RGB(frmIdx)
+                if os.path.exists(frmPath) and os.path.exists(frmPath_rgb):
+                    break
+                else:
+                    frmIdx = frmIdx+1
+            
             skel = np.asarray(data.getSkel(frmIdx))
             if skel.shape == ():
                 continue
             skel.shape = (-1)
 
             img = Image('H36M', frmPath)
-            self.frmList.append(Frame(img, skel, label,frmPath))
+            img_RGB = Image('H36M', frmPath_rgb)
+
+            self.frmList.append(Frame(img, img_RGB, skel, label, frmPath))
             # self.frmList[-1].saveOnlyForTrain()
 
         if not os.path.exists(self.cache_base_path):
@@ -94,10 +91,14 @@ class Dataset(object):
 
 
 if __name__ == '__main__':
-    dataset = globalConfig.dataset
-
-    if dataset == 'H36M':
+    if globalConfig.dataset == 'H36M':
+        import data.h36m as h36m
         ds = Dataset()
-        for i in range(0, 3000000, 10000):
-            print(i)
-            ds.loadH36M(i, tApp=True, replace=False, mode='train')
+        # for i in range(0, 20000, 20000):
+        ds.loadH36M(512, mode='train', tApp=True, replace=True)
+
+        val_ds = Dataset()
+        # for i in range(0, 20000, 20000):
+        val_ds.loadH36M(64, mode='valid', tApp=True, replace=True)
+    else:
+        raise ValueError('unknown dataset %s' % globalConfig.dataset)

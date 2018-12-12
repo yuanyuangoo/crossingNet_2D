@@ -35,7 +35,7 @@ msraColorIdx = [0] + [1]*4 + [2]*4 + [3]*4 + [4]*4 + [5]*4
 
 
 def show_all_variables():
-  model_vars = tf.trainable_variables()
+  model_vars = tf.all_variables()
   slim.model_analyzer.analyze_vars(model_vars, print_info=True)
 
 
@@ -61,12 +61,9 @@ msraBones = flattenBones(
 class Frame(object):
     skel_norm_ratio = 50.0
 
-    def __init__(self, img=None, skel=None, label=None, path=None):
-        # if not isinstance(com2D, np.ndarray):
-        #     (self.crop_dm, self.trans, self.com3D) = dm.Detector()
-        # else:
-        #     (self.crop_dm, self.trans, self.com3D) = dm.cropArea3D(dm.dmData, com2D)
+    def __init__(self, img=None, img_RGB=None, skel=None, label=None, path=None):
         self.norm_img = img.Data
+        self.norm_img_RGB = img_RGB.Data
         if isinstance(skel, np.ndarray):
             if len(skel) % 3 != 0:
                 raise ValueError('invalid length of the skeleton mat')
@@ -74,12 +71,8 @@ class Frame(object):
             self.label = label
             self.with_skel = True
             self.skel = skel.astype(np.float32)
-            self.path=path
-            # self.norm_skel = skel.astype(np.float32)
-            #crop_skel is the training label for neurual network, normalize wrt com3D
-            # self.crop_skel = (self.skel - repmat(self.com3D, 1, jntNum))[0]
-            # self.crop_skel = self.crop_skel.astype(np.float32)
-            # self.normSkel()
+            self.path = path
+
         else:
             self.skel = None
             self.crop_skel = None
@@ -179,20 +172,20 @@ def rotation_matrix(axis, theta):
                      [2 * (bd + ac), 2 * (cd - ab), aa + dd - bb - cc]])
 
 
-def drawImageCV(skel,img=None, axis=(0, 1, 0), theta=0):
+def drawImageCV(skel, img=None, axis=(0, 1, 0), theta=0):
         if not skel.shape == (3, 17):
             skel = np.reshape(skel, (3, 17))
         skel = skel.T
         skel = np.dot(skel, rotation_matrix(axis, theta))
         skel = skel[:, 0:2]
-        skel=(skel*256)-128
+        skel = (skel*256)-128
         # min_s = skel.min()
         # max_s = skel.max()
         # mid_s = (min_s+max_s)/2
         # skel = (((skel-mid_s)/(max_s-min_s))+0.52)*125
         if img is None:
             img = 255*np.ones((128, 128, 3))
-        elif img.shape[2]==1:
+        elif img.shape[2] == 1:
             img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
         for i, edge in enumerate(ref.edges):
             pt1 = skel[edge[0]]
@@ -214,7 +207,7 @@ def imsave(images, size, path, skel=None):
 
 
 def save_images(images,  size, image_path, skel=None):
-    return imsave(inverse_transform(images), size, image_path,skel)
+    return imsave(inverse_transform(images), size, image_path, skel)
 
 
 def image_manifold_size(num_images):
@@ -275,7 +268,7 @@ def merge(images, size, skel=None):
             i = idx % size[1]
             j = idx // size[1]
             if skel is not None:
-                image=drawImageCV(skel[idx],image)
+                image = drawImageCV(skel[idx], image)
             img[j * h:j * h + h, i * w:i * w + w, :] = image
         return img
     elif images.shape[3] == 1:
@@ -298,27 +291,17 @@ def prep_data(train_dataset, valid_dataset, batch_size):
         train_skel = []
         train_labels = []
         train_img = []
+        train_img_RGB = []
         for frm in train_dataset.frmList:
             train_skel.append(frm.skel)
             train_labels.append(frm.label)
             train_img.append(frm.norm_img)
-
-        #load valid dataset
-        test_skel = []
-        test_labels = []
-        test_img = []
-        for frm in valid_dataset.frmList:
-            test_skel.append(frm.skel)
-            test_labels.append(frm.label)
-            test_img.append(frm.norm_img)
+            train_img_RGB.append(frm.norm_img_RGB)
 
         train_skel = (np.asarray(train_skel)+128)/256
         train_labels = np.asarray(train_labels)
         train_img = np.asarray(train_img)
-
-        test_skel = (np.asarray(test_skel)+128)/256
-        test_labels = np.asarray(test_labels)
-        test_img = np.asarray(test_img)
+        train_img_RGB = np.asarray(train_img_RGB)
 
         n_samples = train_skel.shape[0]
         total_batch = int(n_samples / batch_size)
@@ -327,8 +310,10 @@ def prep_data(train_dataset, valid_dataset, batch_size):
         np.random.seed(seed)
         idx = np.array(range(n_samples))
         np.random.shuffle(idx)
+
         train_labels = train_labels[idx]
         train_skel = train_skel[idx]
         train_img = train_img[idx]
+        train_img_RGB = train_img_RGB[idx]
 
-        return train_labels, train_skel, train_img, test_labels, test_skel, test_img, n_samples, total_batch
+        return train_labels, train_skel, train_img,train_img_RGB, n_samples, total_batch

@@ -73,6 +73,12 @@ def deconv2d(input_, output_shape, k_h=5, k_w=5, d_h=2, d_w=2, name="deconv2d", 
 def lrelu(x, leak=0.2, name="lrelu"):
     return tf.maximum(x, leak*x)
 
+def binary_activation(x, r):
+    cond = tf.less(x, r*tf.ones(tf.shape(x)))
+    out = tf.where(cond, -1*tf.ones(tf.shape(x)), tf.ones(tf.shape(x)))
+    return out
+
+
 def linear(input_, output_size, scope=None, stddev=0.02, bias_start=0.0, with_w=False):
     shape = input_.get_shape().as_list()
 

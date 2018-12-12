@@ -4,11 +4,11 @@ import os
 
 
 class Image(object):
-    def __init__(self, dataset, path):
+    def __init__(self, dataset, path, RGB=False):
         if dataset.upper() == 'SKATE':
             self.loadSKATE(path)
         elif dataset.upper() == 'H36M':
-            self.loadH36M(path)
+            self.loadH36M(path, RGB=RGB)
         # self.data = []
     '''
     loading module
@@ -21,12 +21,17 @@ class Image(object):
         self.size2 = self.Data.shape
         return self.Data
 
-    def loadH36M(self, path):
+    def loadH36M(self, path, RGB=False):
         if os.path.exists(path) == False:
             raise IOError('Can''t find the image {}'.format(path))
 
-        img = cv2.imread(path, 0)
-        img = img.reshape(128, 128, 1)
+        if RGB:
+            img = cv2.imread(path)
+        else:
+            img = cv2.imread(path, 0)
+            
+        img = img.reshape(128, 128, -1)
+        
         self.Data = np.asarray(img-127.5, np.float32)/127.5
         self.size2 = self.Data.shape
         return self.Data

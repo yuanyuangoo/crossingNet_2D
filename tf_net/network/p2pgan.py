@@ -1,13 +1,14 @@
 import os
 import cv2
 import tensorflow as tf
+
+import sys
+sys.path.append('./')
+sys.path.append('./data/')
 from data.layers import *
 from data.util import *
 from data.dataset import *
 import globalConfig
-import sys
-sys.path.append('./')
-sys.path.append('./data/')
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 EPS = 1e-12
 CROP_SIZE = 128
@@ -87,7 +88,7 @@ class P2PGAN(object):
                                            tf.log(1 - self.D_ + EPS)))
             self.d_loss_sum = scalar_summary("d_loss", self.d_loss)
 
-            t_vars = tf.trainable_variables()
+            t_vars = tf.all_variables()
             self.d_vars = [
                 var for var in t_vars if 'discriminator' in var.name]
             self.g_vars = [var for var in t_vars if 'generator' in var.name]

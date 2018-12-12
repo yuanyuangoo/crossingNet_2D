@@ -43,8 +43,8 @@ class ForwardRender(object):
 
         self.render = self.build_latent_alignment_layer(
             self.z_train, is_training=True, reuse=False)
-        self.sample = self.build_latent_alignment_layer(
-            self.z_test, is_training=False, reuse=True)
+        self.sample = binary_activation(self.build_latent_alignment_layer(
+            self.z_test, is_training=False, reuse=True), 0)
 
 
         _, self.dis_px_layer, self.feamat_layer,  = self.image_gan.build_discriminator(
@@ -57,8 +57,6 @@ class ForwardRender(object):
         # show_all_variables()
 
         self.pose_input = self.pose_vae.x_hat
-        self.image_gan.y = self.pose_vae.label_hat
-        self.label = self.pose_vae.label_hat
 
         #Train Ali
         self.real_image = self.image_gan.inputs
@@ -71,7 +69,7 @@ class ForwardRender(object):
 
         self.pixel_loss_sum = scalar_summary("pixel_loss", self.pixel_loss)
         
-        t_vars = tf.trainable_variables()
+        t_vars = tf.all_variables()
         self.alignment_vars = [var for var in t_vars if 'ali' in var.name]
 
         self.forwarRender_vars = self.pose_vae.encoder_vars + \
@@ -113,6 +111,57 @@ class ForwardRender(object):
             self.alignment, self.image_gan.y, reuse=True, is_training=is_training)
         return render
 
+    def test(self,  train_dataset, valid_dataset, desc='dummy'):
+        if not os.path.exists(self.checkpoint_dir):
+            os.makedirs(self.checkpoint_dir)
+        if not os.path.exists(self.sample_dir):
+            os.makedirs(self.sample_dir)
+        train_labels, train_skel, train_img, test_labels, test_skel, test_img, n_samples, total_batch = prep_data(
+            train_dataset, valid_dataset, self.batch_size)
+
+        with tf.Session() as self.sess:
+            self.ali_sum = merge_summary([self.pixel_loss_sum])
+            tf.global_variables_initializer().run()
+            pose_vae_var = [val for val in tf.all_variables(
+            ) if 'encoder' in val.name or 'decoder' in val.name]
+            self.saver = tf.train.Saver(pose_vae_var)
+            could_load, checkpoint_counter = self.load(
+                self.pose_vae.checkpoint_dir)
+
+            image_gan_var = [val for val in tf.all_variables(
+            ) if 'generator' in val.name or 'discriminator' in val.name]
+            self.saver = tf.train.Saver(image_gan_var)
+            could_load, checkpoint_counter = self.load(
+                self.image_gan.checkpoint_dir)
+
+            # self.saver = tf.train.Saver()
+            # could_load, checkpoint_counter = self.load(self.checkpoint_dir)
+            if could_load:
+                counter = checkpoint_counter
+                print(" [*] Load SUCCESS")
+            else:
+                print(" [!] Load failed...")
+                counter=1
+
+            self.writer = SummaryWriter(
+                os.path.join(
+                    globalConfig.Forward_Render_pretrain_path, "logs"),
+                graph=self.sess.graph, filename_suffix='.ForwardRender')
+            total_batch=test_labels.shape[0]
+
+            # for i in range(total_batch/self.batch_size):
+            samples, real = self.sess.run((self.sample, self.real_image), feed_dict={
+                self.pose_input: test_skel,
+                self.pose_vae.label_hat: test_labels,
+                self.image_gan.y: test_labels,
+                self.real_image: test_img
+            })
+            i=0
+            save_images(samples, image_manifold_size(samples.shape[0]),
+                        '{}/test_{:02d}.png'.format(self.sample_dir, i), skel=test_skel)
+            save_images(real, image_manifold_size(real.shape[0]),
+                        '{}/test_{:02d}_real.png'.format(self.sample_dir, i), skel=test_skel)
+
     def train(self, nepoch,  train_dataset, valid_dataset, desc='dummy'):
         if not os.path.exists(self.checkpoint_dir):
             os.makedirs(self.checkpoint_dir)
@@ -128,13 +177,13 @@ class ForwardRender(object):
             tf.global_variables_initializer().run()
 
 
-            pose_vae_var = [val for val in tf.trainable_variables(
+            pose_vae_var = [val for val in tf.all_variables(
             ) if 'encoder' in val.name or 'decoder' in val.name]
             self.saver = tf.train.Saver(pose_vae_var)
             could_load, checkpoint_counter = self.load(
                 self.pose_vae.checkpoint_dir)
 
-            image_gan_var = [val for val in tf.trainable_variables(
+            image_gan_var = [val for val in tf.all_variables(
             ) if 'generator' in val.name or 'discriminator' in val.name]
             self.saver = tf.train.Saver(image_gan_var)
             could_load, checkpoint_counter = self.load(
@@ -247,8 +296,8 @@ class ForwardRender(object):
         ckpt = tf.train.get_checkpoint_state(checkpoint_dir)
         if ckpt and ckpt.model_checkpoint_path:
             ckpt_name = os.path.basename(ckpt.model_checkpoint_path)
-            self.saver.restore(
-                self.sess, os.path.join(checkpoint_dir, ckpt_name))
+            self.saver.restore(self.sess, os.path.join(
+                checkpoint_dir, ckpt_name))
             counter = int(
                 next(re.finditer("(\d+)(?!.*\d)", ckpt_name)).group(0))
             print(" [*] Success to read {}".format(ckpt_name))
@@ -288,4 +337,5 @@ if __name__ == '__main__':
         raise ValueError('unknown dataset %s' % globalConfig.dataset)
 
     Fr = ForwardRender(dim_x=Num_of_Joints*3)
-    Fr.train(200, ds, val_ds)
+    # Fr.train(200, ds, val_ds)
+    Fr.test(ds, val_ds)
