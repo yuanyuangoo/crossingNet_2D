@@ -43,8 +43,8 @@ class ForwardRender(object):
 
         self.render = self.build_latent_alignment_layer(
             self.z_train, is_training=True, reuse=False)
-        self.sample = binary_activation(self.build_latent_alignment_layer(
-            self.z_test, is_training=False, reuse=True), 0)
+        self.sample = self.build_latent_alignment_layer(
+            self.z_test, is_training=False, reuse=True)
 
 
         _, self.dis_px_layer, self.feamat_layer,  = self.image_gan.build_discriminator(
@@ -60,12 +60,12 @@ class ForwardRender(object):
 
         #Train Ali
         self.real_image = self.image_gan.inputs
-        self.pixel_loss = tf.losses.mean_squared_error(
-            self.real_image, self.render)
-        self.pixel_loss = tf.clip_by_value(self.pixel_loss, 0, 1.0)
+        # self.pixel_loss = tf.losses.mean_squared_error(
+        #     self.real_image, self.render)
 
-        # self.pixel_loss = tf.nn.l2_loss(self.real_image-self.render)
-        # self.pixel_loss = tf.clip_by_value(self.pixel_loss, 0, 10000)
+        self.pixel_loss=tf.reduce_mean(tf.abs(self.real_image - self.render))
+
+        self.pixel_loss = tf.clip_by_value(self.pixel_loss, 0, 10.0)
 
         self.pixel_loss_sum = scalar_summary("pixel_loss", self.pixel_loss)
         
@@ -101,15 +101,25 @@ class ForwardRender(object):
                   .format(latent.shape))
             self.latent = latent
 
-            # use None input, to adapt z from both pose-vae and InvalidArgumentError (see above for traceback): You must feed a value for placeholder tensor 'y_1' with dtype float and shape [64,15]real-test
             self.alignment = lrelu(bn(
-                linear(self.latent, self.image_gan.dim_z), is_training=is_training, scope='ali_bn'))
+                linear(self.latent, self.image_gan.dim_z, "ali_lin1"), is_training=is_training, scope='ali_bn'))
 
             self.alignment = dropout(self.alignment, is_training=is_training)
 
         render = self.image_gan.build_generator(
             self.alignment, self.image_gan.y, reuse=True, is_training=is_training)
-        return render
+        with tf.variable_scope("ali", reuse=reuse) as scope:
+            if reuse:
+                scope.reuse_variables()
+            # render_ = lrelu(bn(
+            #     linear(tf.layers.flatten(render), render.shape[1]*render.shape[2]*render.shape[3], "ali_lin2"), is_training=is_training, scope='ali_bn2'))
+
+            render_ = lrelu(
+                conv2d(render, render.shape[3], name='ali_conv'))
+        render__ = tf.image.resize_images(
+            render_, [render.shape[1], render.shape[2]])
+
+        return render__
 
     def test(self,  train_dataset, valid_dataset, desc='dummy'):
         if not os.path.exists(self.checkpoint_dir):
@@ -125,20 +135,20 @@ class ForwardRender(object):
         with tf.Session() as self.sess:
             self.ali_sum = merge_summary([self.pixel_loss_sum])
             tf.global_variables_initializer().run()
-            pose_vae_var = [val for val in tf.trainable_variables(
-            ) if 'encoder' in val.name or 'decoder' in val.name]
-            self.saver = tf.train.Saver(pose_vae_var)
-            could_load, checkpoint_counter = self.load(
-                self.pose_vae.checkpoint_dir)
+            # pose_vae_var = [val for val in tf.trainable_variables(
+            # ) if 'encoder' in val.name or 'decoder' in val.name]
+            # self.saver = tf.train.Saver(pose_vae_var)
+            # could_load, checkpoint_counter = self.load(
+            #     self.pose_vae.checkpoint_dir)
 
-            image_gan_var = [val for val in tf.trainable_variables(
-            ) if 'generator' in val.name or 'discriminator' in val.name]
-            self.saver = tf.train.Saver(image_gan_var)
-            could_load, checkpoint_counter = self.load(
-                self.image_gan.checkpoint_dir)
+            # image_gan_var = [val for val in tf.trainable_variables(
+            # ) if 'generator' in val.name or 'discriminator' in val.name]
+            # self.saver = tf.train.Saver(image_gan_var)
+            # could_load, checkpoint_counter = self.load(
+            #     self.image_gan.checkpoint_dir)
 
-            # self.saver = tf.train.Saver()
-            # could_load, checkpoint_counter = self.load(self.checkpoint_dir)
+            self.saver = tf.train.Saver()
+            could_load, checkpoint_counter = self.load(self.checkpoint_dir)
             if could_load:
                 counter = checkpoint_counter
                 print(" [*] Load SUCCESS")
@@ -333,7 +343,7 @@ if __name__ == '__main__':
         import data.h36m as h36m
         ds = Dataset()
         # for i in range(0, 20000, 20000):
-        ds.loadH36M(10240, mode='train', tApp=True, replace=False)
+        ds.loadH36M(40960, mode='train', tApp=True, replace=False)
 
         val_ds = Dataset()
         # for i in range(0, 20000, 20000):
@@ -342,5 +352,5 @@ if __name__ == '__main__':
         raise ValueError('unknown dataset %s' % globalConfig.dataset)
 
     Fr = ForwardRender(dim_x=Num_of_Joints*3)
-    Fr.train(200, ds, val_ds)
+    Fr.train(20000, ds, val_ds)
     # Fr.test(ds, val_ds)

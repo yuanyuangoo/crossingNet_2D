@@ -251,6 +251,16 @@ class P2PGAN(object):
                     batch_input = train_input[idx *
                                               self.batch_size:(idx+1)*self.batch_size]
 
+
+                    # add salt & pepper noise
+                    batch_input = batch_input * \
+                        np.random.normal(0, 0.05, batch_input.shape)
+                    np.random.randint(
+                        0.9, high=0.1, size=batch_input.shape)
+                    batch_input += np.random.randint(
+                        2, size=batch_input.shape)
+
+
                     # Update D network
                     _, summary_str = self.sess.run([d_optim, self.d_sum],
                                                    feed_dict={

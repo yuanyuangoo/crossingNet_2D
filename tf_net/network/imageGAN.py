@@ -1,8 +1,8 @@
 import sys
 sys.path.append('./')
 import globalConfig
-from data.ops import *
-# from data.layers import *
+# from data.ops import *
+from data.layers import *
 from data.dataset import *
 from data.util import *
 import tensorflow as tf

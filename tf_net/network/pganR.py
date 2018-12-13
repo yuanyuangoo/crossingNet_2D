@@ -113,7 +113,7 @@ class PganR(object):
             rest_var = [
                 val for val in tf.global_variables() if val not in forward_gan_var and val not in p2p_gan_var]
             
-            init_new_vars_op = tf.initialize_variables(rest_var).run()
+            init_new_vars_op = tf.variables_initializer(rest_var).run()
 
 
             for epoch in xrange(self.epoch):
@@ -133,7 +133,7 @@ class PganR(object):
                         self.FR.image_gan.y: batch_labels,
                         self.p2p.label: batch_labels,
                         self.p2p.image_target: batch_target,
-                        self.p2p.image_input:batch_target
+                        self.p2p.image_input:batch_img
                     })
                     counter += 1
                     print("Epoch: [%2d/%2d] [%4d/%4d] time: %4.4f, d_loss: %.8f, g_loss: %.8f"
@@ -235,7 +235,7 @@ if __name__ == '__main__':
         import data.h36m as h36m
         ds = Dataset()
         # for i in range(0, 20000, 20000):
-        ds.loadH36M(40960, mode='train', tApp=True, replace=False)
+        ds.loadH36M(1024, mode='train', tApp=True, replace=False)
 
         val_ds = Dataset()
         # for i in range(0, 20000, 20000):

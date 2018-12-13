@@ -1,0 +1,340 @@
+import os
+import cv2
+import time
+from numpy.random import RandomState
+import shutil
+from six.moves import xrange
+import tensorflow as tf
+
+import sys
+sys.path.append('./')
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+
+from data.util import *
+from data.dataset import *
+from data.layers import *
+import globalConfig
+
+image_summary = tf.summary.image
+scalar_summary = tf.summary.scalar
+histogram_summary = tf.summary.histogram
+merge_summary = tf.summary.merge
+SummaryWriter = tf.summary.FileWriter
+NumofJoints = 17*3
+
+
+class ImageWGAN(object):
+    def __init__(self, batch_size=64, output_height=128, output_width=128, label_dim=15, dim_z=NumofJoints, gf_dim=64, df_dim=64,
+                 gfc_dim=1024, dfc_dim=1024, c_dim=1, dataset_name='H36M', checkpoint_dir="./checkpoint", sample_dir="samples",
+                 learning_rate=0.0002, beta1=0.5, epoch=300, reuse=False):
+        self.sample_dir = os.path.join(
+            globalConfig.gan_pretrain_path2, sample_dir)
+        self.epoch = epoch
+        self.learning_rate = learning_rate
+        self.batch_size = batch_size
+        self.beta1 = beta1
+        self.output_height = output_height
+        self.output_width = output_width
+        self.label_dim = label_dim
+        self.dim_z = dim_z
+        self.c_dim = 1
+        self.gf_dim = gf_dim
+        self.df_dim = df_dim
+
+        self.gfc_dim = gfc_dim
+        self.dfc_dim = dfc_dim
+
+        # batch normalization : deals with poor initialization helps gradient flow
+        self.dataset_name = dataset_name
+        self.checkpoint_dir = os.path.join(
+            globalConfig.gan_pretrain_path2, checkpoint_dir)
+        self.build_model()
+
+    def build_model(self):
+        #self.y is label
+        self.y = tf.placeholder(
+            tf.float32, [self.batch_size, self.label_dim], name='y')
+
+        self.pose_input = tf.placeholder(
+            tf.float32, [self.batch_size, self.dim_z], name='pose_input')
+
+        #real image input
+        self.image_target = tf.placeholder(
+            tf.float32, [self.batch_size, self.output_height, self.output_width, 1], name='background_image')
+        self.image_target_sum = image_summary(
+            "image_target", self.image_target)
+
+        #Generator for fake image
+        self.G = self.build_generator(
+            self.pose_input, self.y, is_training=True, reuse=False)
+
+        #image
+        self.sampler = self.build_generator(
+            self.pose_input, self.y,  reuse=True, is_training=False)
+
+        # self.build_metric()
+        self.G_sum = image_summary("G", self.G)
+
+        self.g_loss = tf.reduce_mean(tf.abs(self.image_target - self.G))*100
+        self.g_loss_sum = scalar_summary("g_loss", self.g_loss)
+
+        t_vars = tf.global_variables()
+
+        self.g_vars = [var for var in t_vars if 'generator' in var.name]
+
+        self.saver = tf.train.Saver()
+
+    def build_discriminator(self, image, y=None, reuse=False, is_training=True):
+        with tf.variable_scope("discriminator") as scope:
+            if reuse:
+                scope.reuse_variables()
+            self.dis_render_layer = image
+            # yb = tf.reshape(y, [self.batch_size, 1, 1, self.label_dim])
+            # x = conv_cond_concat(image, yb)
+
+            h0 = lrelu(
+                conv2d(image, self.df_dim, name='d_h0_conv'))
+
+            # h0 = conv_cond_concat(h0_0, yb)
+            self.dis_hidden = h0
+            self.dis_metric = h0
+
+            h1 = lrelu(bn(
+                conv2d(h0, self.df_dim, name='d_h1_conv'), is_training=is_training, scope="d_h1_bn"))
+            self.feamat_layer = h1
+            h1 = tf.reshape(h1, [self.batch_size, -1])
+            # h1 = concat([h1, y], 1)
+
+            h2 = lrelu(bn(linear(h1, self.dfc_dim, 'd_h2_lin'),
+                          is_training=is_training, scope="d_h2_bn"))
+            # h2 = concat([h2, y], 1)
+
+            # logits
+            h3 = linear(h2, 1, 'd_h3_lin')
+
+            self.dis_px_layer = h3
+            return tf.nn.tanh(h3), h3, h2
+
+    def build_generator(self, z, y=None, reuse=False, is_training=True):
+        with tf.variable_scope("generator") as scope:
+            if reuse:
+                scope.reuse_variables()
+            yb = tf.reshape(y, [self.batch_size, 1, 1, self.label_dim])
+            z = concat([z, y], 1)
+
+            s_h, s_w = self.output_height, self.output_width
+            s_h2, s_h4 = int(s_h/2), int(s_h/4)
+            s_w2, s_w4 = int(s_w/2), int(s_w/4)
+
+            # yb = tf.expand_dims(tf.expand_dims(y, 1),2)
+
+            h0 = lrelu(
+                bn(dropout(linear(z, self.gfc_dim, 'g_h0_lin'), is_training=is_training), is_training=is_training, scope="g_h0_bn"))
+
+            # h0 = concat([h0, y], 1)
+
+            h1 = lrelu(bn(
+                dropout(linear(h0, self.gf_dim*2*s_h4*s_w4, 'g_h1_lin'), is_training=is_training), is_training=is_training, scope="g_h1_bn"))
+            h1 = tf.reshape(
+                h1, [self.batch_size, s_h4, s_w4, self.gf_dim * 2])
+
+            # h1 = conv_cond_concat(h1, yb)
+
+            h2 = lrelu(bn(deconv2d(
+                h1, [self.batch_size, s_h2, s_w2, self.gf_dim], name='g_h2'), is_training=is_training, scope="g_h2_bn"))
+
+            h3 = tf.nn.tanh(
+                deconv2d(h2, [self.batch_size, s_h, s_w, 1], name='g_h3'))
+
+            # h4 = tf.nn.tanh(bn(
+            #     linear(tf.layers.flatten(h3), h3.shape[1]*h3.shape[2]*h3.shape[3], "g_h4_lin"), is_training=is_training, scope='g_h4_bn'))
+            
+            render = lrelu(
+                conv2d(h3, h3.shape[3], name='g_conv'))
+
+            h4 = tf.nn.tanh(bn(
+                linear(tf.layers.flatten(render), render.shape[1]*render.shape[2]*render.shape[3], "g_h4_lin"), is_training=is_training, scope='g_h4_bn'))
+
+            h4 = tf.reshape(
+                h4, [self.batch_size, int(self.output_height/2), int(self.output_width/2), 1])
+
+            h4 = tf.nn.tanh(
+                deconv2d(h4, [self.batch_size, s_h, s_w, 1], name='g_h4'))
+            return h4
+    def test(self, valid_dataset):
+        if not os.path.exists(self.checkpoint_dir):
+            os.makedirs(self.checkpoint_dir)
+        if not os.path.exists(self.sample_dir):
+            os.makedirs(self.sample_dir)
+
+        test_labels, test_skel, test_img, _, _, _ = prep_data(
+            valid_dataset, self.batch_size)
+        with tf.Session() as self.sess:
+            with tf.control_dependencies(tf.get_collection(tf.GraphKeys.UPDATE_OPS)):
+                g_optim = tf.train.AdamOptimizer(self.learning_rate, beta1=self.beta1) \
+                    .minimize(self.g_loss, var_list=self.g_vars)
+            try:
+                tf.global_variables_initializer().run()
+            except:
+                tf.initialize_all_variables().run()
+
+            self.g_sum = merge_summary([self.G_sum, self.g_loss_sum])
+
+            self.writer = SummaryWriter(
+                os.path.join(globalConfig.gan_pretrain_path2, "logs"), graph=self.sess.graph, filename_suffix='.GAN')
+
+            sample_inputs = test_img
+            sample_labels = test_labels
+            sample_pose = test_skel
+
+            counter = 1
+            start_time = time.time()
+            could_load, checkpoint_counter = self.load(self.checkpoint_dir)
+            if could_load:
+                counter = checkpoint_counter
+                print(" [*] Load SUCCESS")
+            else:
+                print(" [!] Load failed...")
+
+            samples = self.sess.run(
+                self.sampler,
+                feed_dict={
+                    self.pose_input: sample_pose,
+                    self.image_target: sample_inputs,
+                    self.y: sample_labels,
+                }
+            )
+            save_images(samples, image_manifold_size(samples.shape[0]),
+                        '{}/test_{:02d}.png'.format(self.sample_dir), skel=test_skel)
+
+            save_images(test_img, image_manifold_size(test_img.shape[0]),
+                        '{}/test_real_{:02d}.png'.format(self.sample_dir), skel=test_skel)
+
+    def train(self, train_dataset, valid_dataset):
+        if not os.path.exists(self.checkpoint_dir):
+            os.makedirs(self.checkpoint_dir)
+        if not os.path.exists(self.sample_dir):
+            os.makedirs(self.sample_dir)
+        train_labels, train_skel, train_img,  _, n_samples, total_batch = prep_data(
+            train_dataset, self.batch_size)
+        test_labels, test_skel, test_img, _, _, _ = prep_data(
+            valid_dataset, self.batch_size)
+
+        with tf.Session() as self.sess:
+            with tf.control_dependencies(tf.get_collection(tf.GraphKeys.UPDATE_OPS)):
+                g_optim = tf.train.AdamOptimizer(self.learning_rate, beta1=self.beta1) \
+                    .minimize(self.g_loss, var_list=self.g_vars)
+            try:
+                tf.global_variables_initializer().run()
+            except:
+                tf.initialize_all_variables().run()
+
+            self.g_sum = merge_summary([self.G_sum, self.g_loss_sum])
+
+            self.writer = SummaryWriter(
+                os.path.join(globalConfig.gan_pretrain_path2, "logs"), graph=self.sess.graph, filename_suffix='.GAN')
+
+            sample_inputs = test_img
+            sample_labels = test_labels
+            sample_pose = test_skel
+
+            counter = 1
+            start_time = time.time()
+            # could_load, checkpoint_counter = self.load(self.checkpoint_dir)
+            # if could_load:test_skel
+            #     counter = checkpoint_counter
+            #     print(" [*] Load SUCCESS")
+            # else:
+            #     print(" [!] Load failed...")
+
+            for epoch in xrange(self.epoch):
+                batch_idxs = len(train_img) // self.batch_size
+
+                for idx in xrange(int(batch_idxs)):
+                    batch_images = train_img[idx *
+                                             self.batch_size:(idx+1)*self.batch_size]
+                    batch_labels = train_labels[idx *
+                                                self.batch_size:(idx+1)*self.batch_size]
+
+                    batch_pose = train_skel[idx *
+                                            self.batch_size:(idx+1)*self.batch_size]
+
+                    # Update G network
+                    _, summary_str, errG = self.sess.run([g_optim, self.g_sum, self.g_loss],
+                                                         feed_dict={
+                        self.pose_input: batch_pose,
+                        self.y: batch_labels,
+                        self.image_target: batch_images
+                    })
+                    self.writer.add_summary(summary_str, counter)
+
+                    counter += 1
+                    print("Epoch: [%2d/%2d] [%4d/%4d] time: %4.4f,  g_loss: %.8f"
+                          % (epoch, self.epoch, idx, batch_idxs,
+                             time.time() - start_time, errG))
+
+                    if np.mod(counter, 150) == 1:
+                        # show_all_variables()
+                        samples = self.sess.run(
+                            self.sampler,
+                            feed_dict={
+                                self.pose_input: sample_pose,
+                                self.image_target: sample_inputs,
+                                self.y: sample_labels,
+                            }
+                        )
+                        save_images(samples, image_manifold_size(samples.shape[0]),
+                                    '{}/train_{:02d}_{:04d}.png'.format(self.sample_dir, epoch, idx), skel=test_skel)
+
+                    if np.mod(counter, 5000) == 2:
+                        self.save(self.checkpoint_dir, counter)
+
+    @property
+    def model_dir(self):
+        return "{}_{}".format(
+            self.dataset_name, self.batch_size)
+
+    def save(self, checkpoint_dir, step):
+        model_name = "GAN.model"
+        checkpoint_dir = os.path.join(checkpoint_dir, self.model_dir)
+
+        if not os.path.exists(checkpoint_dir):
+            os.makedirs(checkpoint_dir)
+
+        self.saver.save(self.sess,
+                        os.path.join(checkpoint_dir, model_name),
+                        global_step=step)
+
+    def load(self, checkpoint_dir):
+        import re
+        print(" [*] Reading checkpoints...")
+        checkpoint_dir = os.path.join(checkpoint_dir, self.model_dir)
+
+        ckpt = tf.train.get_checkpoint_state(checkpoint_dir)
+        if ckpt and ckpt.model_checkpoint_path:
+            ckpt_name = os.path.basename(ckpt.model_checkpoint_path)
+            self.saver.restore(
+                self.sess, os.path.join(checkpoint_dir, ckpt_name))
+            counter = int(
+                next(re.finditer("(\dbuild_generator+)(?!.*\d)", ckpt_name)).group(0))
+            print(" [*] Success to read {}".format(ckpt_name))
+            return True, counter
+        else:
+            print(" [*] Failed to find a checkpoint")
+            return False, 0
+
+
+if __name__ == '__main__':
+    if globalConfig.dataset == 'H36M':
+        import data.h36m as h36m
+        ds = Dataset()
+        # ds.loadH36M(40960, mode='train', tApp=True, replace=False)
+
+        val_ds = Dataset()
+        val_ds.loadH36M(64, mode='valid', tApp=True, replace=False)
+    else:
+        raise ValueError('unknown dataset %s' % globalConfig.dataset)
+
+    gan = ImageWGAN()
+    # gan.train(ds, val_ds)
+    gan.test(val_ds)
