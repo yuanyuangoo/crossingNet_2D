@@ -1,3 +1,6 @@
+import sys
+sys.path.append('./')
+sys.path.append('./data/')
 import globalConfig
 from data.dataset import *
 from data.util import *
@@ -6,9 +9,7 @@ import os
 import cv2
 import tensorflow as tf
 
-import sys
-sys.path.append('./')
-sys.path.append('./data/')
+
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 EPS = 1e-12
 CROP_SIZE = 128

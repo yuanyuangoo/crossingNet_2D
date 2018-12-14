@@ -51,8 +51,11 @@ class PganR(object):
             self.G_sum = image_summary("G", self.G)
 
             self.g_loss_GAN = tf.reduce_mean(-tf.log(self.D_ + EPS))
-            self.g_loss_L1 = tf.reduce_mean(tf.abs(self.p2p.image_target - self.G))
-            self.g_loss = self.g_loss_GAN * self.p2p.gan_weight + self.p2p.g_loss_L1 * self.p2p.l1_weight
+            mask = ((-1*self.p2p.image_input)+1)/2
+            self.g_loss_L1 = tf.reduce_mean(
+                tf.abs(tf.multiply(self.p2p.image_target - self.G, mask)))
+            self.g_loss = self.g_loss_GAN * self.p2p.gan_weight + \
+                self.p2p.g_loss_L1 * self.p2p.l1_weight
             self.g_loss_sum = scalar_summary("g_loss", self.g_loss)
 
             self.d_loss = tf.reduce_mean(-(tf.log(self.D + EPS) +
@@ -65,13 +68,6 @@ class PganR(object):
 
         self.batch_size = self.FR.batch_size
         
-
-
-        self.g_loss_p2p = tf.reduce_mean(
-            tf.abs(self.p2p.image_target - self.G))*100
-        self.g_loss_fr = tf.reduce_mean(
-            tf.abs(self.FR.image_target - self.FR_G))*100
-
         # self.d_loss=self.p2p.d_loss
 
 
@@ -131,7 +127,7 @@ class PganR(object):
                                                 self.batch_size:(idx+1)*self.batch_size]
                     batch_skel = train_skel[idx *
                                             self.batch_size:(idx+1)*self.batch_size]
-                    noise = noisy('s&p', batch_target)
+                    # noise = noisy('s&p', batch_target)
 
                     _, _,  d_loss, g_loss = self.sess.run([d_optim, g_optim, self.d_loss, self.g_loss], feed_dict={
                         self.FR.pose_input: batch_skel,
@@ -147,7 +143,7 @@ class PganR(object):
                           % (epoch, self.epoch, idx, batch_idxs,
                              time.time() - start_time, d_loss, g_loss))
 
-                    if np.mod(counter, 600) == 1:
+                    if np.mod(counter, 200) == 1:
                         # show_all_variables()
                         sample_G, samples, _ = self.sess.run([self.sample_G, self.sample, self.p2p.image_target], feed_dict={
                             self.FR.pose_input: test_skel,
@@ -247,7 +243,7 @@ if __name__ == '__main__':
         import data.h36m as h36m
         ds = Dataset()
         # for i in range(0, 20000, 20000):
-        ds.loadH36M(1024, mode='train', tApp=True, replace=False)
+        ds.loadH36M(10240, mode='train', tApp=True, replace=False)
 
         val_ds = Dataset()
         # for i in range(0, 20000, 20000):
