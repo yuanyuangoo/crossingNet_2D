@@ -1,3 +1,7 @@
+import globalConfig
+from data.dataset import *
+from data.util import *
+from data.layers import *
 import os
 import cv2
 import tensorflow as tf
@@ -5,10 +9,6 @@ import tensorflow as tf
 import sys
 sys.path.append('./')
 sys.path.append('./data/')
-from data.layers import *
-from data.util import *
-from data.dataset import *
-import globalConfig
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 EPS = 1e-12
 CROP_SIZE = 128
@@ -17,8 +17,7 @@ scalar_summary = tf.summary.scalar
 histogram_summary = tf.summary.histogram
 merge_summary = tf.summary.merge
 SummaryWriter = tf.summary.FileWriter
-
-
+gray2rgb = tf.image.grayscale_to_rgb
 class P2PGAN(object):
     def __init__(self, mode='train', sample_dir='samples', checkpoint_dir="./checkpoint",
                  epoch=200, aspect_ratio=1, batch_size=64, ngf=64, ndf=64, scale_size=286, train_size=4000, test_size=1000, flip=True, label_dim=15, learning_rate=0.0002,
@@ -54,11 +53,7 @@ class P2PGAN(object):
                 tf.float32, [self.batch_size, self.input_width, self.input_height, 3], name='real_image')
 
             self.image_input = tf.placeholder(
-                tf.float32, [self.batch_size, self.input_width, self.input_height, 3], name='background_image')
-            self.image_input_noise=tf.placeholder(tf.float32,self.image_input.shape,name='image_input_noise')
-
-            self.image_input_n = tf.multiply(
-                self.image_input, self.image_input_noise)
+                tf.float32, [self.batch_size, self.input_width, self.input_height, 1], name='background_image')
 
             #label
             self.label = tf.placeholder(
@@ -70,15 +65,15 @@ class P2PGAN(object):
             self.label_sum = histogram_summary(
                 "label", self.label)
             out_channels = self.image_target.shape[-1]
-            self.G = self.build_generator(self.image_input, out_channels)
+            self.G = self.build_generator(gray2rgb(self.image_input), out_channels)
             #real D
             self.D = self.build_discriminator(
-                self.image_input, self.image_target, reuse=False)
+                gray2rgb(self.image_input), self.image_target, reuse=False)
             #fake D
             self.D_ = self.build_discriminator(
-                self.image_input, self.G, reuse=True)
+                gray2rgb(self.image_input), self.G, reuse=True)
             self.sampler = self.build_generator(
-                self.image_input, out_channels,  reuse=True, is_training=False)
+                gray2rgb(self.image_input), out_channels,  reuse=True, is_training=False)
 
             self.d_sum = histogram_summary("d", self.D)
             self.d__sum = histogram_summary("d_", self.D_)
@@ -251,7 +246,6 @@ class P2PGAN(object):
                     batch_input = train_input[idx *
                                               self.batch_size:(idx+1)*self.batch_size]
 
-
                     # add salt & pepper noise
                     batch_input = batch_input * \
                         np.random.normal(0, 0.05, batch_input.shape)
@@ -259,7 +253,6 @@ class P2PGAN(object):
                         0.9, high=0.1, size=batch_input.shape)
                     batch_input += np.random.randint(
                         2, size=batch_input.shape)
-
 
                     # Update D network
                     _, summary_str = self.sess.run([d_optim, self.d_sum],
@@ -317,7 +310,8 @@ class P2PGAN(object):
                               (d_loss, g_loss))
                     if np.mod(counter, 500) == 2:
                         self.save(self.checkpoint_dir, counter)
-
+                        
+            self.save(self.checkpoint_dir, counter)
     @property
     def model_dir(self):
         return "{}_{}".format(

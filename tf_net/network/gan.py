@@ -69,7 +69,7 @@ class ImageWGAN(object):
             self.pose_input, self.y, is_training=True, reuse=False)
 
         #image
-        self.sampler = self.build_generator(
+        self.sample = self.build_generator(
             self.pose_input, self.y,  reuse=True, is_training=False)
 
         # self.build_metric()
@@ -197,7 +197,7 @@ class ImageWGAN(object):
                 print(" [!] Load failed...")
 
             samples = self.sess.run(
-                self.sampler,
+                self.sample,
                 feed_dict={
                     self.pose_input: sample_pose,
                     self.image_target: sample_inputs,
@@ -205,10 +205,10 @@ class ImageWGAN(object):
                 }
             )
             save_images(samples, image_manifold_size(samples.shape[0]),
-                        '{}/test_{:02d}.png'.format(self.sample_dir), skel=test_skel)
+                        '{}/test.png'.format(self.sample_dir), skel=test_skel)
 
             save_images(test_img, image_manifold_size(test_img.shape[0]),
-                        '{}/test_real_{:02d}.png'.format(self.sample_dir), skel=test_skel)
+                        '{}/test_real.png'.format(self.sample_dir), skel=test_skel)
 
     def train(self, train_dataset, valid_dataset):
         if not os.path.exists(self.checkpoint_dir):
@@ -276,7 +276,7 @@ class ImageWGAN(object):
                     if np.mod(counter, 150) == 1:
                         # show_all_variables()
                         samples = self.sess.run(
-                            self.sampler,
+                            self.sample,
                             feed_dict={
                                 self.pose_input: sample_pose,
                                 self.image_target: sample_inputs,
@@ -288,7 +288,8 @@ class ImageWGAN(object):
 
                     if np.mod(counter, 5000) == 2:
                         self.save(self.checkpoint_dir, counter)
-
+                        
+            self.save(self.checkpoint_dir, counter)
     @property
     def model_dir(self):
         return "{}_{}".format(
@@ -313,10 +314,10 @@ class ImageWGAN(object):
         ckpt = tf.train.get_checkpoint_state(checkpoint_dir)
         if ckpt and ckpt.model_checkpoint_path:
             ckpt_name = os.path.basename(ckpt.model_checkpoint_path)
-            self.saver.restore(
-                self.sess, os.path.join(checkpoint_dir, ckpt_name))
+            self.saver.restore(self.sess, os.path.join(
+                checkpoint_dir, ckpt_name))
             counter = int(
-                next(re.finditer("(\dbuild_generator+)(?!.*\d)", ckpt_name)).group(0))
+                next(re.finditer("(\d+)(?!.*\d)", ckpt_name)).group(0))
             print(" [*] Success to read {}".format(ckpt_name))
             return True, counter
         else:

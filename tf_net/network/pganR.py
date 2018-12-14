@@ -1,11 +1,10 @@
 import tensorflow as tf
 from tqdm import tqdm
 
-from poseVAE import PoseVAE
-from imageGAN import ImageGAN
-from forwardRender import ForwardRender
+# from poseVAE import PoseVAE
+# from imageGAN import ImageGAN
+from gan import ImageWGAN
 from p2pgan import P2PGAN
-from numpy.matlib import repmat
 from numpy.random import RandomState
 import numpy as np
 import time
@@ -17,10 +16,9 @@ import globalConfig
 from data.layers import *
 from data.dataset import *
 from data.util import *
-from data.ops import *
-import pprint as pp
 Num_of_Joints = 17
 EPS = 1e-12
+gray2rgb = tf.image.grayscale_to_rgb
 
 
 class PganR(object):
@@ -31,43 +29,50 @@ class PganR(object):
             globalConfig.pganR_pretrain_path, sample_dir)
         self.dim_x = dim_x
 
-
-        
-
-
-    # with tf.variable_scope("FR") as scope:
-    #     scope.reuse_variables()
-        self.FR = ForwardRender(self.dim_x)
+        self.FR = ImageWGAN()
         self.sample_G = self.FR.sample
+        self.FR_G=self.FR.G
         self.p2p = P2PGAN(mode='test')
 
         with tf.variable_scope("p2p") as scope:
             scope.reuse_variables()
             self.sample = self.p2p.build_generator(
                 tf.image.grayscale_to_rgb(self.sample_G), 3, reuse=True, is_training=False)
-            # self.D = self.p2p.build_discriminator(
-            #     tf.image.grayscale_to_rgb(self.sample_G), self.p2p.image_target, reuse=True)
-            # #fake D
-            # self.D_ = self.p2p.build_discriminator(
-            #     tf.image.grayscale_to_rgb(self.sample_G), self.p2p.G, reuse=True)
 
-            # self.g_loss_GAN = tf.reduce_mean(-tf.log(self.D_ + EPS))
-            # self.g_loss_L1 = tf.reduce_mean(tf.abs(self.p2p.image_target - self.p2p.G))
-            # self.g_loss = self.g_loss_GAN * self.p2p.gan_weight + self.g_loss_L1 * self.p2p.l1_weight
-            # self.g_loss_sum = scalar_summary("g_loss", self.g_loss)
+            self.G = self.p2p.build_generator(tf.image.grayscale_to_rgb(
+                self.FR_G), 3, reuse=True, is_training=True)
+            self.D = self.p2p.build_discriminator(
+                gray2rgb(self.p2p.image_input), self.p2p.image_target, reuse=True)
+            self.D_ = self.p2p.build_discriminator(
+                gray2rgb(self.p2p.image_input), self.G, reuse=True)
 
-            # self.d_loss = tf.reduce_mean(-(tf.log(self.D + EPS) +
-            #                                tf.log(1 - self.D_ + EPS)))
-            # self.d_loss_sum = scalar_summary("d_loss", self.d_loss)
+            self.d_sum = histogram_summary("d", self.D)
+            self.d__sum = histogram_summary("d_", self.D_)
+            self.G_sum = image_summary("G", self.G)
+
+            self.g_loss_GAN = tf.reduce_mean(-tf.log(self.D_ + EPS))
+            self.g_loss_L1 = tf.reduce_mean(tf.abs(self.p2p.image_target - self.G))
+            self.g_loss = self.g_loss_GAN * self.p2p.gan_weight + self.p2p.g_loss_L1 * self.p2p.l1_weight
+            self.g_loss_sum = scalar_summary("g_loss", self.g_loss)
+
+            self.d_loss = tf.reduce_mean(-(tf.log(self.D + EPS) +
+                                           tf.log(1 - self.D_ + EPS)))
+            self.d_loss_sum = scalar_summary("d_loss", self.d_loss)
 
             self.g_var = self.p2p.g_vars
-            self.d_var = self.p2p.d_vars
+            self.d_var=self.p2p.d_vars
             self.saver = tf.train.Saver()
 
         self.batch_size = self.FR.batch_size
-        self.p2p.label = self.FR.pose_vae.label_hat
-        self.g_loss=self.p2p.g_loss
-        self.d_loss=self.p2p.d_loss
+        
+
+
+        self.g_loss_p2p = tf.reduce_mean(
+            tf.abs(self.p2p.image_target - self.G))*100
+        self.g_loss_fr = tf.reduce_mean(
+            tf.abs(self.FR.image_target - self.FR_G))*100
+
+        # self.d_loss=self.p2p.d_loss
 
 
     def train(self, train_dataset, valid_dataset):
@@ -82,10 +87,6 @@ class PganR(object):
             valid_dataset, self.batch_size)
         with tf.Session() as self.sess:
 
-            # self.g_sum = merge_summary([self.image_input_sum, self.d__sum,
-            #                             self.G_sum, self.g_loss_sum])
-            # self.d_sum = merge_summary(
-            #     [self.image_input_sum, self.image_target_sum, self.d_sum,  self.d_loss_sum])
             self.writer = SummaryWriter(
                 os.path.join(globalConfig.p2p_pretrain_path, "logs"), graph=self.sess.graph, filename_suffix='.pganR')
 
@@ -110,14 +111,18 @@ class PganR(object):
                 .minimize(self.d_loss, var_list=self.d_var)
             g_optim = tf.train.AdamOptimizer(self.p2p.learning_rate, beta1=self.p2p.beta1) \
                 .minimize(self.g_loss, var_list=self.g_var)
+
+            # g_optim_fr = tf.train.AdamOptimizer(self.p2p.learning_rate, beta1=self.p2p.beta1) \
+            #     .minimize(self.g_loss_fr, var_list=forward_gan_var)
+
             rest_var = [
                 val for val in tf.global_variables() if val not in forward_gan_var and val not in p2p_gan_var]
             
             init_new_vars_op = tf.variables_initializer(rest_var).run()
 
 
-            for epoch in xrange(self.epoch):
-                for idx in xrange(0, int(batch_idxs)):
+            for epoch in range(self.epoch):
+                for idx in range(0, int(batch_idxs)):
                     batch_target = train_img_rgb[idx *
                                                  self.batch_size:(idx+1)*self.batch_size]
                     batch_img = train_img[idx *
@@ -126,37 +131,42 @@ class PganR(object):
                                                 self.batch_size:(idx+1)*self.batch_size]
                     batch_skel = train_skel[idx *
                                             self.batch_size:(idx+1)*self.batch_size]
+                    noise = noisy('s&p', batch_target)
 
-                    _, _, d_loss, g_loss = self.sess.run([d_optim, g_optim, self.d_loss, self.g_loss], feed_dict={
+                    _, _,  d_loss, g_loss = self.sess.run([d_optim, g_optim, self.d_loss, self.g_loss], feed_dict={
                         self.FR.pose_input: batch_skel,
-                        self.FR.pose_vae.label_hat: batch_labels,
-                        self.FR.image_gan.y: batch_labels,
+                        self.FR.y: batch_labels,
                         self.p2p.label: batch_labels,
                         self.p2p.image_target: batch_target,
-                        self.p2p.image_input:batch_img
+                        self.p2p.image_input: batch_img,
+                        # self.p2p.image_input_n: noise,
+                        self.FR.image_target: batch_img
                     })
                     counter += 1
                     print("Epoch: [%2d/%2d] [%4d/%4d] time: %4.4f, d_loss: %.8f, g_loss: %.8f"
                           % (epoch, self.epoch, idx, batch_idxs,
                              time.time() - start_time, d_loss, g_loss))
 
-                    if np.mod(counter, 100) == 1:
+                    if np.mod(counter, 600) == 1:
                         # show_all_variables()
-                        sample_G, samples = self.sess.run([self.sample_G, self.sample], feed_dict={
+                        sample_G, samples, _ = self.sess.run([self.sample_G, self.sample, self.p2p.image_target], feed_dict={
                             self.FR.pose_input: test_skel,
-                            self.FR.pose_vae.label_hat: test_labels,
-                            self.FR.image_gan.y: test_labels,
-                            self.p2p.label: test_labels
+                            self.FR.y: test_labels,
+                            self.p2p.label: test_labels,
+                            self.p2p.image_target: test_img_rgb
                         })
                         save_images(sample_G, image_manifold_size(sample_G.shape[0]),
-                                    '{}/train_{:04d}_G.png'.format(self.sample_dir, counter))
+                                    '{}/G_train_{:04d}.png'.format(self.sample_dir, counter), skel=test_skel)
                         save_images(samples, image_manifold_size(samples.shape[0]),
-                                    '{}/train_{:04d}.png'.format(self.sample_dir, counter))
-
-                    if np.mod(counter, 500) == 1:
+                                    '{}/train_{:04d}.png'.format(self.sample_dir, counter), skel=test_skel)
+                        # save_images(real_image, image_manifold_size(real_image.shape[0]),
+                        #             '{}/real_train_{:04d}.png'.format(self.sample_dir, counter), skel=test_skel)
+                    if np.mod(counter, 5000) == 1:
                         self.save(self.checkpoint_dir, counter)
 
-    def test(self, train_dataset, valid_dataset):
+            self.save(self.checkpoint_dir, counter)
+
+    def test(self, valid_dataset):
         if not os.path.exists(self.checkpoint_dir):
             os.makedirs(self.checkpoint_dir)
         if not os.path.exists(self.sample_dir):
@@ -181,18 +191,20 @@ class PganR(object):
             counter = 1
             start_time = time.time()
 
-            sample_G,samples = self.sess.run([self.sample_G,self.sample], feed_dict={
+            sample_G,samples,real_image = self.sess.run([self.sample_G,self.sample,self.p2p.image_target], feed_dict={
                 self.FR.pose_input: test_skel,
-                self.FR.pose_vae.label_hat: test_labels,
-                self.FR.image_gan.y: test_labels,
-                self.p2p.label: test_labels
+                self.FR.y: test_labels,
+                self.p2p.label: test_labels,
+                self.p2p.image_target: test_img_rgb
             })
             idx = 0
 
             save_images(sample_G, image_manifold_size(sample_G.shape[0]),
-                        '{}/test_{:04d}_G.png'.format(self.sample_dir, idx))
+                        '{}/test_{:04d}_G.png'.format(self.sample_dir, idx), skel=test_skel)
             save_images(samples, image_manifold_size(samples.shape[0]),
-                        '{}/test_{:04d}.png'.format(self.sample_dir, idx))
+                        '{}/test_{:04d}.png'.format(self.sample_dir, idx), skel=test_skel)
+            save_images(real_image, image_manifold_size(real_image.shape[0]),
+                        '{}/test_{:04d}_real.png'.format(self.sample_dir, idx), skel=test_skel)
             counter += 1
 
     @property
