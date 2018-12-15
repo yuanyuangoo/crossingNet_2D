@@ -23,12 +23,12 @@ SummaryWriter = tf.summary.FileWriter
 NumofJoints = 17*3
 
 
-class ImageWGAN(object):
+class p2igan(object):
     def __init__(self, batch_size=64, output_height=128, output_width=128, label_dim=15, dim_z=NumofJoints, gf_dim=64, df_dim=64,
                  gfc_dim=1024, dfc_dim=1024, c_dim=1, dataset_name='H36M', checkpoint_dir="./checkpoint", sample_dir="samples",
                  learning_rate=0.0002, beta1=0.5, epoch=300, reuse=False):
         self.sample_dir = os.path.join(
-            globalConfig.gan_pretrain_path2, sample_dir)
+            globalConfig.p2i_pretrain_path, sample_dir)
         self.epoch = epoch
         self.learning_rate = learning_rate
         self.batch_size = batch_size
@@ -47,7 +47,7 @@ class ImageWGAN(object):
         # batch normalization : deals with poor initialization helps gradient flow
         self.dataset_name = dataset_name
         self.checkpoint_dir = os.path.join(
-            globalConfig.gan_pretrain_path2, checkpoint_dir)
+            globalConfig.p2i_pretrain_path, checkpoint_dir)
         self.build_model()
 
     def build_model(self):
@@ -74,46 +74,75 @@ class ImageWGAN(object):
 
         # self.build_metric()
         self.G_sum = image_summary("G", self.G)
+        
+        self.g_loss_l1 = tf.reduce_mean(tf.abs(self.image_target - self.G))*50
+        self.g_loss_l2 = tf.nn.l2_loss(self.image_target - self.G)
 
-        self.g_loss = tf.reduce_mean(tf.abs(self.image_target - self.G))*100
+        self.D_real = self.build_discriminator(
+            self.image_target, reuse=False, is_training=True)
+        self.D_fake = self.build_discriminator(
+            self.G, reuse=True, is_training=True)
+
+        def sigmoid_cross_entropy_with_logits(x, y):
+            return tf.nn.sigmoid_cross_entropy_with_logits(logits=x, labels=y)
+        self.smooth = 0.05
+        self.d_loss_real = tf.reduce_mean(
+            sigmoid_cross_entropy_with_logits(self.D_real, tf.ones_like(self.D_real)) * (1 - self.smooth))  # for real image Discriminator
+        self.d_loss_fake = tf.reduce_mean(
+            sigmoid_cross_entropy_with_logits(self.D_fake, tf.zeros_like(self.D_fake)))  # for fake image Discriminator
+        self.g_loss_cross = tf.reduce_mean(
+            sigmoid_cross_entropy_with_logits(self.D_fake, tf.ones_like(self.D_fake)*(1-self.smooth)))  # for fake image Generator
+
+        self.d_loss_real_sum = scalar_summary(
+            "d_loss_real", self.d_loss_real)
+        self.d_loss_fake_sum = scalar_summary(
+            "d_loss_fake", self.d_loss_fake)
+        self.d_loss = self.d_loss_real + self.d_loss_fake
+        self.g_loss = self.g_loss_cross+self.g_loss_l1
+        self.g_loss_cross_sum = scalar_summary(
+            "g_loss_cross", self.g_loss_cross)
+        self.g_loss_l1_sum = scalar_summary("g_loss_l1", self.g_loss_l1)
+
         self.g_loss_sum = scalar_summary("g_loss", self.g_loss)
+        self.d_loss_sum = scalar_summary("d_loss", self.d_loss)
 
         t_vars = tf.global_variables()
 
         self.g_vars = [var for var in t_vars if 'generator' in var.name]
+        self.d_vars = [var for var in t_vars if 'discriminator' in var.name]
 
         self.saver = tf.train.Saver()
+
+        self.g_sum = merge_summary(
+            [self.G_sum, self.g_loss_sum, self.g_loss_l1_sum, self.g_loss_cross_sum])
+        self.d_sum = merge_summary(
+            [self.d_loss_real_sum, self.d_loss_fake_sum, self.d_loss_sum])
 
     def build_discriminator(self, image, y=None, reuse=False, is_training=True):
         with tf.variable_scope("discriminator") as scope:
             if reuse:
                 scope.reuse_variables()
-            self.dis_render_layer = image
+            # self.dis_render_layer = image
             # yb = tf.reshape(y, [self.batch_size, 1, 1, self.label_dim])
             # x = conv_cond_concat(image, yb)
 
             h0 = lrelu(
                 conv2d(image, self.df_dim, name='d_h0_conv'))
 
-            # h0 = conv_cond_concat(h0_0, yb)
-            self.dis_hidden = h0
-            self.dis_metric = h0
-
             h1 = lrelu(bn(
                 conv2d(h0, self.df_dim, name='d_h1_conv'), is_training=is_training, scope="d_h1_bn"))
-            self.feamat_layer = h1
+
+            # self.feamat_layer = h1
+
             h1 = tf.reshape(h1, [self.batch_size, -1])
-            # h1 = concat([h1, y], 1)
 
             h2 = lrelu(bn(linear(h1, self.dfc_dim, 'd_h2_lin'),
                           is_training=is_training, scope="d_h2_bn"))
-            # h2 = concat([h2, y], 1)
 
             # logits
             h3 = linear(h2, 1, 'd_h3_lin')
 
-            self.dis_px_layer = h3
-            return tf.nn.tanh(h3), h3, h2
+            return h3
 
     def build_generator(self, z, y=None, reuse=False, is_training=True):
         with tf.variable_scope("generator") as scope:
@@ -173,15 +202,13 @@ class ImageWGAN(object):
             with tf.control_dependencies(tf.get_collection(tf.GraphKeys.UPDATE_OPS)):
                 g_optim = tf.train.AdamOptimizer(self.learning_rate, beta1=self.beta1) \
                     .minimize(self.g_loss, var_list=self.g_vars)
+                    
+
             try:
                 tf.global_variables_initializer().run()
             except:
                 tf.initialize_all_variables().run()
 
-            self.g_sum = merge_summary([self.G_sum, self.g_loss_sum])
-
-            self.writer = SummaryWriter(
-                os.path.join(globalConfig.gan_pretrain_path2, "logs"), graph=self.sess.graph, filename_suffix='.GAN')
 
             sample_inputs = test_img
             sample_labels = test_labels
@@ -222,17 +249,19 @@ class ImageWGAN(object):
 
         with tf.Session() as self.sess:
             with tf.control_dependencies(tf.get_collection(tf.GraphKeys.UPDATE_OPS)):
+                d_optim = tf.train.AdamOptimizer(self.learning_rate, beta1=self.beta1) \
+                    .minimize(self.d_loss, var_list=self.d_vars)
+
                 g_optim = tf.train.AdamOptimizer(self.learning_rate, beta1=self.beta1) \
                     .minimize(self.g_loss, var_list=self.g_vars)
+
             try:
                 tf.global_variables_initializer().run()
             except:
                 tf.initialize_all_variables().run()
 
-            self.g_sum = merge_summary([self.G_sum, self.g_loss_sum])
-
             self.writer = SummaryWriter(
-                os.path.join(globalConfig.gan_pretrain_path2, "logs"), graph=self.sess.graph, filename_suffix='.GAN')
+                os.path.join(globalConfig.p2i_pretrain_path, "logs"), graph=self.sess.graph, filename_suffix='.p2iGAN')
 
             sample_inputs = test_img
             sample_labels = test_labels
@@ -240,13 +269,16 @@ class ImageWGAN(object):
 
             counter = 1
             start_time = time.time()
-            # could_load, checkpoint_counter = self.load(self.checkpoint_dir)
-            # if could_load:test_skel
-            #     counter = checkpoint_counter
-            #     print(" [*] Load SUCCESS")
-            # else:
-            #     print(" [!] Load failed...")
 
+            could_load, checkpoint_counter = self.load(self.checkpoint_dir)
+
+            if could_load:
+                counter = checkpoint_counter
+                print(" [*] Load SUCCESS")
+            else:
+                print(" [!] Load failed...")
+            errD = 1.1
+            errG = 0.8
             for epoch in xrange(self.epoch):
                 batch_idxs = len(train_img) // self.batch_size
 
@@ -258,20 +290,30 @@ class ImageWGAN(object):
 
                     batch_pose = train_skel[idx *
                                             self.batch_size:(idx+1)*self.batch_size]
+                    if errD > 0.9:
+                        # Update D network
+                        _, summary_str, errD, errG = self.sess.run([d_optim,  self.d_sum,  self.d_loss, self.g_loss],
+                                                                   feed_dict={
+                            self.pose_input: batch_pose,
+                            self.y: batch_labels,
+                            self.image_target: batch_images
+                        })
+                        self.writer.add_summary(summary_str, counter)
 
-                    # Update G network
-                    _, summary_str, errG = self.sess.run([g_optim, self.g_sum, self.g_loss],
-                                                         feed_dict={
-                        self.pose_input: batch_pose,
-                        self.y: batch_labels,
-                        self.image_target: batch_images
-                    })
-                    self.writer.add_summary(summary_str, counter)
+                    if errG > 0.5:
+                        # Update G network
+                        _, summary_str, errD, errG = self.sess.run([g_optim, self.g_sum, self.d_loss, self.g_loss],
+                                                                    feed_dict={
+                            self.pose_input: batch_pose,
+                            self.y: batch_labels,
+                            self.image_target: batch_images
+                        })
+                        self.writer.add_summary(summary_str, counter)
 
                     counter += 1
-                    print("Epoch: [%2d/%2d] [%4d/%4d] time: %4.4f,  g_loss: %.8f"
+                    print("Epoch: [%2d/%2d] [%4d/%4d] time: %4.4f, d_loss: %.8f,err_D g_loss: %.8f"
                           % (epoch, self.epoch, idx, batch_idxs,
-                             time.time() - start_time, errG))
+                             time.time() - start_time, errD, errG))
 
                     if np.mod(counter, 150) == 1:
                         # show_all_variables()
@@ -296,7 +338,7 @@ class ImageWGAN(object):
             self.dataset_name, self.batch_size)
 
     def save(self, checkpoint_dir, step):
-        model_name = "GAN.model"
+        model_name = "p2igan.model"
         checkpoint_dir = os.path.join(checkpoint_dir, self.model_dir)
 
         if not os.path.exists(checkpoint_dir):
@@ -329,13 +371,13 @@ if __name__ == '__main__':
     if globalConfig.dataset == 'H36M':
         import data.h36m as h36m
         ds = Dataset()
-        # ds.loadH36M(40960, mode='train', tApp=True, replace=False)
+        ds.loadH36M(40960, mode='train', tApp=True, replace=False)
 
         val_ds = Dataset()
-        val_ds.loadH36M(64, mode='valid', tApp=True, replace=False)
+        val_ds.loadH36M(64, mode='valid', tApp=True, replace=True)
     else:
         raise ValueError('unknown dataset %s' % globalConfig.dataset)
 
-    gan = ImageWGAN()
-    # gan.train(ds, val_ds)
-    gan.test(val_ds)
+    gan = p2igan()
+    gan.train(ds, val_ds)
+    # gan.test(val_ds)

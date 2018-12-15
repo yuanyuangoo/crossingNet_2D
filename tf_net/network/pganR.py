@@ -3,7 +3,7 @@ from tqdm import tqdm
 
 # from poseVAE import PoseVAE
 # from imageGAN import ImageGAN
-from gan import ImageWGAN
+from p2Igan import p2igan
 from p2pgan import P2PGAN
 from numpy.random import RandomState
 import numpy as np
@@ -29,7 +29,7 @@ class PganR(object):
             globalConfig.pganR_pretrain_path, sample_dir)
         self.dim_x = dim_x
 
-        self.FR = ImageWGAN()
+        self.FR = p2igan()
         self.sample_G = self.FR.sample
         self.FR_G=self.FR.G
         self.p2p = P2PGAN(mode='test')
@@ -37,7 +37,7 @@ class PganR(object):
         with tf.variable_scope("p2p") as scope:
             scope.reuse_variables()
             self.sample = self.p2p.build_generator(
-                tf.image.grayscale_to_rgb(self.sample_G), 3, reuse=True, is_training=False)
+                tf.image.grayscale_to_rgb(binary_activation(self.sample_G,0.4)), 3, reuse=True, is_training=False)
 
             self.G = self.p2p.build_generator(tf.image.grayscale_to_rgb(
                 self.FR_G), 3, reuse=True, is_training=True)
@@ -182,10 +182,6 @@ class PganR(object):
             self.saver = tf.train.Saver(p2p_gan_var)
             could_load, checkpoint_counter = self.load(
                 self.p2p.checkpoint_dir)
-            
-            nsamples = test_img.shape[0]
-            counter = 1
-            start_time = time.time()
 
             sample_G,samples,real_image = self.sess.run([self.sample_G,self.sample,self.p2p.image_target], feed_dict={
                 self.FR.pose_input: test_skel,
@@ -193,15 +189,15 @@ class PganR(object):
                 self.p2p.label: test_labels,
                 self.p2p.image_target: test_img_rgb
             })
-            idx = 0
 
             save_images(sample_G, image_manifold_size(sample_G.shape[0]),
-                        '{}/test_{:04d}_G.png'.format(self.sample_dir, idx), skel=test_skel)
+                        '{}/test_G.png'.format(self.sample_dir), skel=test_skel)
             save_images(samples, image_manifold_size(samples.shape[0]),
-                        '{}/test_{:04d}.png'.format(self.sample_dir, idx), skel=test_skel)
+                        '{}/test.png'.format(self.sample_dir), skel=test_skel)
+            save_images(samples, image_manifold_size(samples.shape[0]),
+                        '{}/test.png'.format(self.sample_dir))
             save_images(real_image, image_manifold_size(real_image.shape[0]),
-                        '{}/test_{:04d}_real.png'.format(self.sample_dir, idx), skel=test_skel)
-            counter += 1
+                        '{}/test_real.png'.format(self.sample_dir), skel=test_skel)
 
     @property
     def model_dir(self):
@@ -243,14 +239,14 @@ if __name__ == '__main__':
         import data.h36m as h36m
         ds = Dataset()
         # for i in range(0, 20000, 20000):
-        ds.loadH36M(10240, mode='train', tApp=True, replace=False)
+        ds.loadH36M(1024, mode='train', tApp=True, replace=False)
 
         val_ds = Dataset()
         # for i in range(0, 20000, 20000):
-        val_ds.loadH36M(64, mode='valid', tApp=True, replace=False)
+        val_ds.loadH36M(64, mode='valid', tApp=True, replace=True)
     else:
         raise ValueError('unknown dataset %s' % globalConfig.dataset)
 
     pganR = PganR()
-    # pganR.test(ds, val_ds)
-    pganR.train(ds, val_ds)
+    pganR.test(val_ds)
+    # pganR.train(ds, val_ds)

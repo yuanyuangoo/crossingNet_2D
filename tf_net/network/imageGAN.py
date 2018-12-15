@@ -47,13 +47,10 @@ class ImageGAN(object):
         self.gfc_dim = gfc_dim
         self.dfc_dim = dfc_dim
 
-        # batch normalization : deals with poor initialization helps gradient flow
-
         self.dataset_name = dataset_name
         self.checkpoint_dir = os.path.join(
             globalConfig.gan_pretrain_path, checkpoint_dir)
-        # self.data_X, self.data_y = self.load_h36m()
-        # self.c_dim = self.data_X[0].shape[-1]
+
         self.grayscale = True
         self.build_model()
         
