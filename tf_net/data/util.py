@@ -1,9 +1,10 @@
 import tensorflow.contrib.slim as slim
+
 from collections import namedtuple
 from numpy.matlib import repmat
 import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib
+# import matplotlib.pyplot as plt
+# import matplotlib
 import cv2
 # import globalConfig
 from numpy.random import randn

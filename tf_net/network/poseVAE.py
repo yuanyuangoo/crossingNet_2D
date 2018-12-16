@@ -3,7 +3,6 @@ import numpy as np
 import tensorflow as tf
 import sys
 sys.path.append('./')
-from data.ops import *
 import data.ref as ref
 from data.dataset import *
 from data.util import *
@@ -185,8 +184,10 @@ class PoseVAE(object):
 
         show_all_variables()
 
-        train_labels, train_skel, _, test_labels, test_skel, _, n_samples, total_batch = prep_data(
-            train_dataset, valid_dataset, self.batch_size)
+        train_labels, train_skel, train_img, train_img_rgb, _, batch_idxs = prep_data(
+            train_dataset, self.batch_size)
+        test_labels, test_skel, test_img, test_img_rgb, _, _ = prep_data(
+            valid_dataset, self.batch_size)
 
         min_tot_loss = 1e6
 

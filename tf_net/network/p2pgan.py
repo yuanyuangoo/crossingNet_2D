@@ -21,7 +21,7 @@ SummaryWriter = tf.summary.FileWriter
 gray2rgb = tf.image.grayscale_to_rgb
 class P2PGAN(object):
     def __init__(self, mode='train', sample_dir='samples', checkpoint_dir="./checkpoint",
-                 epoch=200, aspect_ratio=1, batch_size=64, ngf=64, ndf=64, scale_size=286, train_size=4000, test_size=1000, flip=True, label_dim=15, learning_rate=0.0002,
+                 epoch=20000, aspect_ratio=1, batch_size=64, ngf=64, ndf=64, scale_size=286, train_size=4000, test_size=1000, flip=True, label_dim=15, learning_rate=0.0002,
                  beta1=0.5, l1_weight=100, gan_weight=1, dataset_name='H36M', input_width=128, input_height=128):
         self.sample_dir = os.path.join(
             globalConfig.p2p_pretrain_path, sample_dir)
@@ -229,9 +229,9 @@ class P2PGAN(object):
         with tf.Session() as self.sess:
             tf.global_variables_initializer().run()
 
-            self.saver = tf.train.Saver()
-            could_load, checkpoint_counter = self.load(
-                self.checkpoint_dir)
+            # self.saver = tf.train.Saver()
+            # could_load, checkpoint_counter = self.load(
+            #     self.checkpoint_dir)
 
             samples, real_image = self.sess.run(
                 [self.sampler, self.image_target],
@@ -266,6 +266,11 @@ class P2PGAN(object):
                 tf.global_variables_initializer().run()
             except:
                 tf.initialize_all_variables().run()
+
+            # self.saver = tf.train.Saver()
+            could_load, checkpoint_counter = self.load(
+                self.checkpoint_dir)
+
             self.g_sum = merge_summary([self.image_input_sum, self.d__sum,
                                         self.G_sum, self.g_loss_sum])
             self.d_sum = merge_summary(
@@ -337,7 +342,7 @@ class P2PGAN(object):
             self.dataset_name, self.batch_size)
 
     def save(self, checkpoint_dir, step):
-        model_name = "p2pGAN.model"
+        model_name = "p2pGAN_256.model"
         checkpoint_dir = os.path.join(checkpoint_dir, self.model_dir)
 
         if not os.path.exists(checkpoint_dir):
@@ -375,72 +380,18 @@ def getOneHotedLabel(imgname):
         index = len(ref.actions)-1
     return ref.oneHoted[index, :]
 
-
-def loadH36mForP2P(numofSample=1024, replace=False):
-    cache_base_path = globalConfig.cache_base_path
-    input = []
-    target = []
-    label = []
-    frmList = []
-    Fsize = numofSample
-    pickleCachePath = '{}h36m_{}_{}.pkl'.format(
-        cache_base_path, "forp2pgan", Fsize)
-    if os.path.isfile(pickleCachePath) and not replace:
-        print('direct load from the cache')
-        t1 = time.time()
-        f = open(pickleCachePath, 'rb')
-        # (self.frmList) += pickle.load(f)
-        (frmList) += pickle.load(f)
-        t1 = time.time() - t1
-        print('loaded with {}s'.format(t1))
-        return frmList[0], frmList[1], frmList[2]
-
-    background_dir = os.path.join(globalConfig.h36m_base_path, "resized/")
-    real_dir = os.path.join(globalConfig.h36m_base_path, "images_resized/")
-    items = os.listdir(real_dir)
-    frmEndNum = len(items)
-    frmStartNum = 0
-    for counter in tqdm(range(frmStartNum, int(frmEndNum/Fsize)*Fsize, int(frmEndNum/Fsize))):
-        filename = items[counter]
-
-        im_real = cv2.imread(real_dir+filename)
-        im_background = cv2.imread(background_dir+filename)
-        # Normalise
-        im_real = np.asarray(im_real-127.5, np.float32)/127.5
-        im_background = np.asarray(im_background-127.5, np.float32)/127.5
-
-        input.append(im_background)
-        target.append(im_real)
-        label.append(getOneHotedLabel(filename))
-
-    print('loaded with {} frames'.format(len(input)))
-    input = np.asarray(input)
-    target = np.asarray(target)
-    label = np.asarray(label)
-
-    if not os.path.exists(cache_base_path):
-        os.makedirs(cache_base_path)
-    f = open(pickleCachePath, 'wb')
-    pickle.dump((input, target, label),
-                f, protocol=pickle.HIGHEST_PROTOCOL)
-    f.close()
-    return input, target, label
-
-
 if __name__ == '__main__':
 
     if globalConfig.dataset == 'H36M':
         import data.h36m as h36m
         ds = Dataset()
-        # for i in range(0, 20000, 20000):
-        ds.loadH36M(40960, mode='train', tApp=True, replace=False)
+        ds.loadH36M(256, mode='train', tApp=True, replace=False)
 
         val_ds = Dataset()
-        # for i in range(0, 20000, 20000):
         val_ds.loadH36M(64, mode='valid', tApp=True, replace=True)
     else:
         raise ValueError('unknown dataset %s' % globalConfig.dataset)
 
     p2p = P2PGAN()
     p2p.train(ds,val_ds)
-    p2p.test(val_ds)
+    # p2p.test(val_ds)
