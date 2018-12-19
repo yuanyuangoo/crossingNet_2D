@@ -3,21 +3,19 @@ import numpy as np
 import tensorflow as tf
 import sys
 sys.path.append('./')
-import data.ref as ref
-from data.dataset import *
-from data.util import *
-import data.plot_utils as plot_utils
-import globalConfig
 from data.layers import *
-IMAGE_SIZE_H36M = 128
+import globalConfig
+from data.util import *
+from data.dataset import *
+import data.ref as ref
 Num_of_Joints = ref.nJoints
+IMAGE_SIZE_H36M = 128
 VALIDATION_SIZE = 5000  # Size of the validation set.
 NUM_LABELS = 15
-
-
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 class PoseVAE(object):
     def __init__(
-            self, dim_x=Num_of_Joints*3, batch_size=64, lr=1e-3, num_epochs=30000,
+            self, dim_x=Num_of_Joints*3, batch_size=64, lr=1e-3, num_epochs=1000,
             dim_z=46, label_dim=15, n_hidden=40, PRR=True, PRR_n_img_x=8, PRR_n_img_y=8, PRR_resize_factor=1.0,
             PMLR=True, PMLR_n_img_x=20, PMLR_n_img_y=20, PMLR_resize_factor=1.0,
             PMLR_z_range=2.0, PMLR_n_samples=5000, reuse=False):
@@ -65,6 +63,7 @@ class PoseVAE(object):
         #latent_variable
         self.z_in = tf.placeholder(
             tf.float32, shape=[None, dim_z], name='latent_variable')
+
         self.z_in_sum = histogram_summary("z_in", self.z_in)
 
         self.y, self.z, self.loss, self.neg_marginal_likelihood, self.KL_divergence = self.autoencoder(
@@ -97,12 +96,17 @@ class PoseVAE(object):
         z = mu + sigma * tf.random_normal(tf.shape(mu), 0, 1, dtype=tf.float32)
 
         # decoding
-        y = self.decoder(z, n_hidden, dim_img, is_training=is_training, reuse=reuse)
+        # y = self.decoder(z, n_hidden, dim_img,
+        #                  is_training=is_training, reuse=reuse)
+        # y = tf.clip_by_value(y, 1e-8, 1 - 1e-8)
+
+        y = self.decoder(z, n_hidden, dim_img,
+                                    is_training=False, reuse=reuse)
         y = tf.clip_by_value(y, 1e-8, 1 - 1e-8)
 
         # loss
-        marginal_likelihood=tf.square(y-x)
-        marginal_likelihood=0.5*tf.reduce_sum(marginal_likelihood)*100
+        marginal_likelihood = tf.square(y-x)
+        marginal_likelihood = 0.5*tf.reduce_sum(marginal_likelihood)*100
         # marginal_likelihood = tf.reduce_sum(
         #     x * tf.log(y) + (1 - x) * tf.log(1 - y), [1])
         # marginal_likelihood = -tf.reduce_mean(marginal_likelihood)
@@ -145,9 +149,8 @@ class PoseVAE(object):
             #     'wo', [h1.get_shape()[1], n_output * 2], initializer=w_init)
             # bo = tf.get_variable('bo', [n_output * 2], initializer=b_init)
             # gaussian_params = tf.matmul(h1, wo) + bo
-            
-            gaussian_params = linear(h1, n_output*2)
 
+            gaussian_params = linear(h1, n_output*2)
 
             # The mean parameter is unconstrained
             mean = gaussian_params[:, :n_output]
@@ -176,58 +179,85 @@ class PoseVAE(object):
                            is_training=is_training), is_training=is_training, scope="y_bn"))
         return y
 
+    def test(self, valid_dataset):
+        if not os.path.exists(self.checkpoint_dir):
+            os.makedirs(self.checkpoint_dir)
+        if not os.path.exists(self.sample_dir):
+            os.makedirs(self.sample_dir)
+
+        test_labels, test_skel, _, _, n_samples, total_batch = prep_data(
+            valid_dataset, self.batch_size)
+
+        with tf.Session() as self.sess:
+            tf.global_variables_initializer().run()
+            counter = 1
+            could_load, checkpoint_counter = self.load(
+                self.checkpoint_dir)
+            if could_load:
+                counter = checkpoint_counter
+                print(" [*] Load SUCCESS")
+            else:
+                print(" [!] Load failed...")
+
+            for epoch in range(total_batch):
+                offset = (epoch * self.batch_size) % (n_samples)
+                batch_xs_input = test_skel[
+                    offset:(offset + self.batch_size), :]
+
+                batch_label_input = test_labels[offset:(
+                    offset + self.batch_size), :]
+
+                samples = self.sess.run(
+                    self.y, feed_dict={self.x_hat: batch_xs_input, self.label_hat: batch_label_input})
+
+                images=np.ones((samples.shape[0], 128, 128, 3))
+                save_images(images, image_manifold_size(samples.shape[0]),
+                            '{}/test_{:02d}.png'.format(self.sample_dir, epoch), skel=samples)
+
+    def predict(self,valid_dataset):
+        test_labels, test_skel, _, _, n_samples, total_batch = prep_data(
+            valid_dataset, self.batch_size)
+        with tf.Session() as self.sess:
+            tf.global_variables_initializer().run()
+            counter = 1
+            could_load, checkpoint_counter = self.load(
+                self.checkpoint_dir)
+            if could_load:
+                counter = checkpoint_counter
+                print(" [*] Load SUCCESS")
+            else:
+                print(" [!] Load failed...")
+            samples = self.sess.run(
+                self.y, feed_dict={self.x_hat: test_skel, self.label_hat: test_labels})
+            import csv
+            with open('samples.csv', 'w',newline='') as csvfile:
+                spamwriter = csv.writer(csvfile, delimiter=' ',
+                            quotechar='|', quoting=csv.QUOTE_MINIMAL)
+                spamwriter.writerows(samples)
+                # for item in samples:
+                #     spamwriter.writerow(item)
+
+            # with open('pose_sample.txt', 'w') as f:
+            #     for item in samples:
+            #         f.write("%s\n" % item)
+
     def train(self, train_dataset, valid_dataset):
         if not os.path.exists(self.checkpoint_dir):
             os.makedirs(self.checkpoint_dir)
         if not os.path.exists(self.sample_dir):
             os.makedirs(self.sample_dir)
 
-        show_all_variables()
-
-        train_labels, train_skel, train_img, train_img_rgb, _, batch_idxs = prep_data(
+        train_labels, train_skel, train_img, train_img_rgb, n_samples, total_batch = prep_data(
             train_dataset, self.batch_size)
         test_labels, test_skel, test_img, test_img_rgb, _, _ = prep_data(
             valid_dataset, self.batch_size)
 
         min_tot_loss = 1e6
 
-        if self.PRR:
-            PRR = plot_utils.Plot_Reproduce_Performance(
-                self.sample_dir, self.PRR_n_img_x, self.PRR_n_img_y, IMAGE_SIZE_H36M, IMAGE_SIZE_H36M,
-                self.PRR_resize_factor)
-
-            x_PRR = test_skel[0:PRR.n_tot_imgs, :]
-            lable_PRR = test_labels[0:PRR.n_tot_imgs, :]
-            x_PRR_img = x_PRR.reshape(
-                PRR.n_tot_imgs, -1)
-
-            PRR.save_images(x_PRR_img, name='input.jpg')
-
-            # x_PRR = x_PRR * np.random.normal(0, 0.05, size=x_PRR.shape)
-            # x_PRR += np.random.randint(2, size=x_PRR.shape)
-
-            x_PRR_img = x_PRR.reshape(
-                PRR.n_tot_imgs, -1)
-            PRR.save_images(x_PRR_img, name='input_noise.jpg')
-
-        # Plot for manifold learning result
-        if self.PMLR and self.dim_z == 2:
-
-            PMLR = plot_utils.Plot_Manifold_Learning_Result(
-                self.sample_dir, self.PMLR_n_img_x, self.PMLR_n_img_y,
-                IMAGE_SIZE_H36M, IMAGE_SIZE_H36M, self.PMLR_resize_factor, self.PMLR_z_range)
-
-            x_PMLR = test_skel[0:self.PMLR_n_samples, :]
-            id_PMLR = test_labels[0:self.PMLR_n_samples, :]
-
-            # x_PMLR = x_PMLR * np.random.normal(0, 0.05, size=x_PMLR.shape)
-            # x_PMLR += np.random.randint(2, size=x_PMLR.shape)
-
-            decoded = vae.sampler(self.z_in, self.dim_x, self.n_hidden)
         self.train_op = tf.train.AdamOptimizer(self.lr).minimize(self.loss)
         with tf.Session() as self.sess:
             counter = 1
-            # could_load, checkpoint_counter = self.load(self.checkpoint_dir)
+            could_load, checkpoint_counter = self.load(self.checkpoint_dir)
             could_load = False
             if could_load:
                 counter = checkpoint_counter
@@ -251,13 +281,6 @@ class PoseVAE(object):
                     batch_label_input = train_labels[offset:(
                         offset + self.batch_size), :]
                     batch_xs_target = batch_xs_input
-                    # add salt & pepper noise
-                    # batch_xs_input = batch_xs_input * \
-                    #     np.random.normal(0, 0.05, batch_xs_input.shape)
-                    # np.random.randint(
-                    #     0.9, high=0.1, size=batch_xs_input.shape)
-                    # batch_xs_input += np.random.randint(
-                    #     2, size=batch_xs_input.shape)
 
                     _, tot_loss, loss_likelihood, loss_divergence, summary_str = self.sess.run(
                         (self.train_op, self.loss,
@@ -274,29 +297,12 @@ class PoseVAE(object):
                 # if minimum loss is updated or final epoch, plot results
                 if min_tot_loss > tot_loss or epoch+1 == self.num_epochs or np.mod(counter, 2000) == 1:
                     min_tot_loss = tot_loss
-                    # Plot for reproduce performance
-                    if self.PRR:
-                        y_PRR = self.sess.run(
-                            self.y, feed_dict={self.x_hat: x_PRR, self.label_hat: lable_PRR})
-                        y_PRR_img = y_PRR.reshape(
-                            PRR.n_tot_imgs, -1)
-                        PRR.save_images(
-                            y_PRR_img, name="/PRR_epoch_%02d" % (epoch) + ".jpg")
+                    samples = self.sess.run(
+                        self.y, feed_dict={self.x_hat: test_skel, self.label_hat: test_labels})
 
-                    # Plot for manifold learning result
-                    if self.PMLR and self.dim_z == 2:
-                        y_PMLR = self.sess.run(decoded, feed_dict={
-                            self.z_in: PMLR.z})
-                        y_PMLR_img = y_PMLR.reshape(
-                            PMLR.n_tot_imgs, -1)
-                        PMLR.save_images(
-                            y_PMLR_img, name="/PMLR_epoch_%02d" % (epoch) + ".jpg")
-
-                        # plot distribution of labeled images
-                        z_PMLR = self.sess.run(
-                            self.z, feed_dict={self.x_hat: x_PMLR})
-                        PMLR.save_scattered_image(
-                            z_PMLR, id_PMLR, name="/PMLR_map_epoch_%02d" % (epoch) + ".jpg")
+                    images=np.ones((samples.shape[0], 128, 128, 3))
+                    save_images(images, image_manifold_size(samples.shape[0]),
+                                '{}/train_{:02d}.png'.format(self.sample_dir, epoch), skel=samples)
 
                     if min_tot_loss > tot_loss or epoch+1 == self.num_epochs:
                         self.save(self.checkpoint_dir, counter)
@@ -341,13 +347,15 @@ if __name__ == '__main__':
         import data.h36m as h36m
         ds = Dataset()
         # for i in range(0, 20000, 20000):
-        ds.loadH36M(40960, mode='train', tApp=True, replace=False)
+        ds.loadH36M(1024, mode='train', tApp=True, replace=False)
 
         val_ds = Dataset()
         # for i in range(0, 20000, 20000):
-        val_ds.loadH36M(64, mode='valid', tApp=True, replace=False)
+        val_ds.loadH36M(2048, mode='valid', tApp=True, replace=False)
     else:
         raise ValueError('unknown dataset %s' % globalConfig.dataset)
 
     vae = PoseVAE()
-    vae.train(ds, val_ds)
+    # vae.train(ds, val_ds)
+    # vae.test(val_ds)
+    vae.predict(val_ds)

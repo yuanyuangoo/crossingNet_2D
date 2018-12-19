@@ -328,33 +328,39 @@ def merge(images, size, skel=None):
                          'must have dimensions: HxW or HxWx3 or HxWx4')
 
 
-def prep_data(train_dataset, batch_size):
+def prep_data(train_dataset, batch_size,skel=True):
+
+
+    train_labels = []
+    train_img = []
+    train_img_RGB = []
+    for frm in train_dataset.frmList:
+        train_labels.append(frm.label)
+        train_img.append(frm.norm_img)
+        train_img_RGB.append(frm.norm_img_RGB)
+
+    train_labels = np.asarray(train_labels)
+    train_img = np.asarray(train_img)
+    train_img_RGB = np.asarray(train_img_RGB)
+
+    n_samples = train_img.shape[0]
+    total_batch = int(n_samples / batch_size)
+
+    seed = 547
+    np.random.seed(seed)
+    idx = np.array(range(n_samples))
+    np.random.shuffle(idx)
+
+    train_labels = train_labels[idx]
+    train_img = train_img[idx]
+    train_img_RGB = train_img_RGB[idx]
+    
+    if skel:
         train_skel = []
-        train_labels = []
-        train_img = []
-        train_img_RGB = []
         for frm in train_dataset.frmList:
             train_skel.append(frm.skel)
-            train_labels.append(frm.label)
-            train_img.append(frm.norm_img)
-            train_img_RGB.append(frm.norm_img_RGB)
-
         train_skel = (np.asarray(train_skel)+128)/256
-        train_labels = np.asarray(train_labels)
-        train_img = np.asarray(train_img)
-        train_img_RGB = np.asarray(train_img_RGB)
-
-        n_samples = train_skel.shape[0]
-        total_batch = int(n_samples / batch_size)
-
-        seed = 547
-        np.random.seed(seed)
-        idx = np.array(range(n_samples))
-        np.random.shuffle(idx)
-
-        train_labels = train_labels[idx]
         train_skel = train_skel[idx]
-        train_img = train_img[idx]
-        train_img_RGB = train_img_RGB[idx]
-
         return train_labels, train_skel, train_img,train_img_RGB, n_samples, total_batch
+
+    return train_labels, 1, train_img, train_img_RGB, n_samples, total_batch
