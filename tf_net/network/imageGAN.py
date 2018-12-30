@@ -259,8 +259,10 @@ class ImageGAN(object):
             os.makedirs(self.checkpoint_dir)
         if not os.path.exists(self.sample_dir):
             os.makedirs(self.sample_dir)
-        train_labels, _, train_img, test_labels, _, test_img, n_samples, total_batch = prep_data(
-            train_dataset, valid_dataset, self.batch_size)
+        train_labels, train_skel, train_img,  _, n_samples, total_batch = prep_data(
+            train_dataset, self.batch_size)
+        test_labels, test_skel, test_img, _, _, _ = prep_data(
+            valid_dataset, self.batch_size)
 
         with tf.Session() as self.sess:
             d_optim = tf.train.AdamOptimizer(self.learning_rate, beta1=self.beta1) \
@@ -400,8 +402,18 @@ if __name__ == '__main__':
         val_ds = Dataset()
         # for i in range(0, 20000, 20000):
         val_ds.loadH36M(64, mode='valid', tApp=True, replace=False)
+
+    elif globalConfig.dataset == 'APE':
+        import data.h36m as h36m
+        ds = Dataset()
+        # for i in range(0, 20000, 20000):
+        ds.loadApe(20480, mode='train', tApp=True, replace=False)
+
+        val_ds = Dataset()
+        # for i in range(0, 20000, 20000):
+        val_ds.loadApe(64, mode='valid', tApp=True, replace=False)
     else:
         raise ValueError('unknown dataset %s' % globalConfig.dataset)
 
-    gan = ImageGAN()
+    gan = ImageGAN(y_dim=7)
     gan.train(ds, val_ds)

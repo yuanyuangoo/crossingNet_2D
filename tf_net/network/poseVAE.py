@@ -16,9 +16,7 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 class PoseVAE(object):
     def __init__(
             self, dim_x=Num_of_Joints*3, batch_size=64, lr=1e-3, num_epochs=1000,
-            dim_z=46, label_dim=15, n_hidden=40, PRR=True, PRR_n_img_x=8, PRR_n_img_y=8, PRR_resize_factor=1.0,
-            PMLR=True, PMLR_n_img_x=20, PMLR_n_img_y=20, PMLR_resize_factor=1.0,
-            PMLR_z_range=2.0, PMLR_n_samples=5000, reuse=False):
+            dim_z=46, label_dim=15, n_hidden=40, reuse=False):
 
         checkpoint_dir = 'checkpoint'
         self.checkpoint_dir = os.path.join(
@@ -37,16 +35,7 @@ class PoseVAE(object):
         self.lr = lr
         self.num_epochs = num_epochs
         self.n_hidden = n_hidden
-        self.PRR = PRR
-        self.PRR_n_img_x = PRR_n_img_x
-        self.PRR_n_img_y = PRR_n_img_y
-        self.PRR_resize_factor = PRR_resize_factor
-        self.PMLR = PMLR
-        self.PMLR_n_img_x = PMLR_n_img_x
-        self.PMLR_n_img_y = PMLR_n_img_y
-        self.PMLR_resize_factor = PMLR_resize_factor
-        self.PMLR_z_range = PMLR_z_range
-        self.PMLR_n_samples = PMLR_n_samples
+
         #input_pose
         self.x_hat = tf.placeholder(
             tf.float32, shape=[None, dim_x], name='input_pose')
@@ -213,7 +202,7 @@ class PoseVAE(object):
                 images=np.ones((samples.shape[0], 128, 128, 3))
                 save_images(images, image_manifold_size(samples.shape[0]),
                             '{}/test_{:02d}.png'.format(self.sample_dir, epoch), skel=samples)
-
+                            
     def predict(self,valid_dataset):
         test_labels, test_skel, _, _, n_samples, total_batch = prep_data(
             valid_dataset, self.batch_size)
@@ -234,12 +223,7 @@ class PoseVAE(object):
                 spamwriter = csv.writer(csvfile, delimiter=' ',
                             quotechar='|', quoting=csv.QUOTE_MINIMAL)
                 spamwriter.writerows(samples)
-                # for item in samples:
-                #     spamwriter.writerow(item)
 
-            # with open('pose_sample.txt', 'w') as f:
-            #     for item in samples:
-            #         f.write("%s\n" % item)
 
     def train(self, train_dataset, valid_dataset):
         if not os.path.exists(self.checkpoint_dir):
@@ -247,9 +231,9 @@ class PoseVAE(object):
         if not os.path.exists(self.sample_dir):
             os.makedirs(self.sample_dir)
 
-        train_labels, train_skel, train_img, train_img_rgb, n_samples, total_batch = prep_data(
+        train_labels, train_skel, _, _, n_samples, total_batch = prep_data(
             train_dataset, self.batch_size)
-        test_labels, test_skel, test_img, test_img_rgb, _, _ = prep_data(
+        test_labels, test_skel, _, _, _, _ = prep_data(
             valid_dataset, self.batch_size)
 
         min_tot_loss = 1e6
@@ -344,7 +328,6 @@ class PoseVAE(object):
 
 if __name__ == '__main__':
     if globalConfig.dataset == 'H36M':
-        import data.h36m as h36m
         ds = Dataset()
         # for i in range(0, 20000, 20000):
         ds.loadH36M(1024, mode='train', tApp=True, replace=False)
@@ -352,10 +335,18 @@ if __name__ == '__main__':
         val_ds = Dataset()
         # for i in range(0, 20000, 20000):
         val_ds.loadH36M(2048, mode='valid', tApp=True, replace=False)
+    elif globalConfig.dataset == 'APE':
+        ds = Dataset()
+        # for i in range(0, 20000, 20000):
+        ds.loadApe(10240, mode='train', tApp=True, replace=False)
+
+        val_ds = Dataset()
+        # for i in range(0, 20000, 20000):
+        val_ds.loadApe(2048, mode='valid', tApp=True, replace=False)
     else:
         raise ValueError('unknown dataset %s' % globalConfig.dataset)
 
     vae = PoseVAE()
-    # vae.train(ds, val_ds)
+    vae.train(ds, val_ds)
     # vae.test(val_ds)
-    vae.predict(val_ds)
+    # vae.predict(val_ds)

@@ -1,8 +1,5 @@
 import os
-import cv2
 import time
-from numpy.random import RandomState
-import shutil
 from six.moves import xrange
 import tensorflow as tf
 
@@ -20,11 +17,10 @@ scalar_summary = tf.summary.scalar
 histogram_summary = tf.summary.histogram
 merge_summary = tf.summary.merge
 SummaryWriter = tf.summary.FileWriter
-NumofJoints = 17*3
 
 
 class p2igan(object):
-    def __init__(self, batch_size=64, output_height=128, output_width=128, label_dim=15, dim_z=NumofJoints, gf_dim=64, df_dim=64,
+    def __init__(self, batch_size=64, output_height=128, output_width=128, label_dim=15, dim_z=17*3, gf_dim=64, df_dim=64,
                  gfc_dim=1024, dfc_dim=1024, c_dim=1, dataset_name='H36M', checkpoint_dir="./checkpoint", sample_dir="samples",
                  learning_rate=0.0002, beta1=0.5, epoch=300, reuse=False):
         self.sample_dir = os.path.join(
@@ -263,9 +259,9 @@ class p2igan(object):
             self.writer = SummaryWriter(
                 os.path.join(globalConfig.p2i_pretrain_path, "logs"), graph=self.sess.graph, filename_suffix='.p2iGAN')
 
-            sample_inputs = test_img
-            sample_labels = test_labels
-            sample_pose = test_skel
+            sample_inputs = test_img[0:64]
+            sample_labels = test_labels[0:64]
+            sample_pose = test_skel[0:64]
 
             counter = 1
             start_time = time.time()
@@ -315,14 +311,14 @@ class p2igan(object):
                           % (epoch, self.epoch, idx, batch_idxs,
                              time.time() - start_time, errD, errG))
 
-                    if np.mod(counter, 150) == 1:
+                    if np.mod(counter, 160) == 1:
                         # show_all_variables()
                         samples = self.sess.run(
                             self.sample,
                             feed_dict={
                                 self.pose_input: sample_pose,
                                 self.image_target: sample_inputs,
-                                self.y: sample_labels,
+                                self.y: sample_labels
                             }
                         )
                         save_images(samples, image_manifold_size(samples.shape[0]),
@@ -375,9 +371,20 @@ if __name__ == '__main__':
 
         val_ds = Dataset()
         val_ds.loadH36M(64, mode='valid', tApp=True, replace=True)
+        gan = p2igan(dim_z=17*3)
+
+    elif globalConfig.dataset == 'APE':
+        ds = Dataset()
+        ds.loadApe(1024, mode='train', tApp=True, replace=False)
+
+        val_ds = Dataset()
+        val_ds.loadApe(64, mode='valid', tApp=True, replace=False)
+
+        gan = p2igan(dim_z=15*3, label_dim=7,
+                     output_height=ds.height, output_width=ds.width)
+
     else:
         raise ValueError('unknown dataset %s' % globalConfig.dataset)
 
-    gan = p2igan()
     gan.train(ds, val_ds)
     # gan.test(val_ds)

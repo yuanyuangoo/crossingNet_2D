@@ -385,7 +385,7 @@ if __name__ == '__main__':
     if globalConfig.dataset == 'H36M':
         import data.h36m as h36m
         ds = Dataset()
-        ds.loadH36M(256, mode='train', tApp=True, replace=False)
+        ds.loadH36M(40960, mode='train', tApp=True, replace=False)
 
         val_ds = Dataset()
         val_ds.loadH36M(64, mode='valid', tApp=True, replace=True)

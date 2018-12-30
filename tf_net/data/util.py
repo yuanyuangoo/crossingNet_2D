@@ -1,12 +1,7 @@
-import tensorflow.contrib.slim as slim
-
-from collections import namedtuple
 from numpy.matlib import repmat
 import numpy as np
-# import matplotlib.pyplot as plt
-# import matplotlib
+
 import cv2
-# import globalConfig
 from numpy.random import randn
 import math
 # import torch
@@ -14,10 +9,8 @@ import scipy.misc
 from six.moves import xrange
 import data.ref as ref
 import tensorflow as tf
-# CameraOption = namedtuple('CameraOption', [
-#                           'focal_x', 'focal_y', 'center_x', 'center_y', 'width', 'height', 'far_point'])
-# Frame = namedtuple('Frame', ['dm', 'skel', 'crop_dm', 'crop_skel', 'file_name'])
-# Frame.__new__.__defaults__ = (None,)*len(Frame._fields)
+import tensorflow.contrib.slim as slim
+
 
 figColor = [(19, 69, 139),
             (51, 51, 255),
@@ -214,27 +207,28 @@ def rotation_matrix(axis, theta):
 
 
 def drawImageCV(skel, img=None, axis=(0, 1, 0), theta=0):
-        if not skel.shape == (3, 17):
-            skel = np.reshape(skel, (3, 17))
-        skel = skel.T
-        skel = np.dot(skel, rotation_matrix(axis, theta))
-        skel = skel[:, 0:2]
-        skel = (skel*256)-128
-        # min_s = skel.min()
-        # max_s = skel.max()
-        # mid_s = (min_s+max_s)/2
-        # skel = (((skel-mid_s)/(max_s-min_s))+0.52)*125
-        if img is None:
-            img = 255*np.ones((128, 128, 3))
-        elif img.shape[2] == 1:
-            img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
-        for i, edge in enumerate(ref.edges):
-            pt1 = skel[edge[0]]
-            pt2 = skel[edge[1]]
+    numofJoint = 15
+    if not skel.shape == (3, numofJoint):
+        skel = np.reshape(skel, (3, numofJoint))
+    skel = skel.T
+    skel = np.dot(skel, rotation_matrix(axis, theta))
+    skel = skel[:, 0:2]
+    skel = (skel*256)-128
+    # min_s = skel.min()
+    # max_s = skel.max()
+    # mid_s = (min_s+max_s)/2
+    # skel = (((skel-mid_s)/(max_s-min_s))+0.52)*125
+    if img is None:
+        img = 255*np.ones((128, 128, 3))
+    elif img.shape[2] == 1:
+        img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
+    for i, edge in enumerate(ref.apeedges):
+        pt1 = skel[edge[0]]
+        pt2 = skel[edge[1]]
 
-            cv2.line(img, (int(pt1[0]), int(pt1[1])),
-                     (int(pt2[0]), int(pt2[1])), (np.asarray(ref.color[i])*255).tolist(), 4)
-        return img
+        cv2.line(img, (int(pt1[0]), int(pt1[1])),
+                 (int(pt2[0]), int(pt2[1])), (np.asarray(ref.color[i])*255).tolist(), 4)
+    return img
 
 
 def inverse_transform(images):
@@ -359,7 +353,8 @@ def prep_data(train_dataset, batch_size,skel=True):
         train_skel = []
         for frm in train_dataset.frmList:
             train_skel.append(frm.skel)
-        train_skel = (np.asarray(train_skel)+128)/256
+        # train_skel = (np.asarray(train_skel)+128)/256
+        train_skel=np.asarray(train_skel)
         train_skel = train_skel[idx]
         return train_labels, train_skel, train_img,train_img_RGB, n_samples, total_batch
 

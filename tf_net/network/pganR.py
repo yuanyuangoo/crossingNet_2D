@@ -162,6 +162,44 @@ class PganR(object):
 
             self.save(self.checkpoint_dir, counter)
 
+    def predict(self, csvfile):
+        if not os.path.exists(self.checkpoint_dir):
+            os.makedirs(self.checkpoint_dir)
+        if not os.path.exists(self.sample_dir):
+            os.makedirs(self.sample_dir)
+        test_skel = np.genfromtxt('adjusted_sample.csv', delimiter=',')
+        test_label = np.zeros((test_skel.shape[0], 15))
+        test_label[:, 1] = 1
+        with tf.Session() as self.sess:
+            tf.global_variables_initializer().run()
+            forward_gan_var = [
+                val for val in tf.global_variables() if 'p2p' not in val.name]
+            self.saver = tf.train.Saver(forward_gan_var)
+            _, _ = self.load(self.FR.checkpoint_dir)
+
+            p2p_gan_var = [val for val in tf.global_variables(
+            ) if 'p2p' in val.name]
+            self.saver = tf.train.Saver(p2p_gan_var)
+            could_load, checkpoint_counter = self.load(
+                self.p2p.checkpoint_dir)
+            batch_idxs = int(test_skel.shape[0]/self.batch_size)
+            for idx in range(0, int(batch_idxs)):
+                batch_labels = test_label[idx *
+                                          self.batch_size:(idx+1)*self.batch_size]
+                batch_skel = test_skel[idx *
+                                       self.batch_size:(idx+1)*self.batch_size]
+                sample_G, samples = self.sess.run([self.sample_G, self.sample], feed_dict={
+                    self.FR.pose_input: batch_skel,
+                    self.FR.y: batch_labels,
+                    self.p2p.label: batch_labels
+                })
+                save_images(sample_G, image_manifold_size(sample_G.shape[0]),
+                            '{}/test_G_{:04d}.png'.format(self.sample_dir, idx), skel=batch_skel)
+                save_images(samples, image_manifold_size(samples.shape[0]),
+                            '{}/test_S{:04d}.png'.format(self.sample_dir, idx), skel=batch_skel)
+                save_images(samples, image_manifold_size(samples.shape[0]),
+                            '{}/test_{:04d}.png'.format(self.sample_dir, idx), skel=None)
+
     def test(self, valid_dataset):
         if not os.path.exists(self.checkpoint_dir):
             os.makedirs(self.checkpoint_dir)
@@ -235,18 +273,19 @@ class PganR(object):
 
 
 if __name__ == '__main__':
-    if globalConfig.dataset == 'H36M':
-        import data.h36m as h36m
-        ds = Dataset()
-        # for i in range(0, 20000, 20000):
-        ds.loadH36M(1024, mode='train', tApp=True, replace=False)
+    # if globalConfig.dataset == 'H36M':
+    #     import data.h36m as h36m
+    #     ds = Dataset()
+    #     # for i in range(0, 20000, 20000):
+    #     ds.loadH36M(1024, mode='train', tApp=True, replace=False)
 
-        val_ds = Dataset()
-        # for i in range(0, 20000, 20000):
-        val_ds.loadH36M(64, mode='valid', tApp=True, replace=True)
-    else:
-        raise ValueError('unknown dataset %s' % globalConfig.dataset)
+    #     val_ds = Dataset()
+    #     # for i in range(0, 20000, 20000):
+    #     val_ds.loadH36M(64, mode='valid', tApp=True, replace=False)
+    # else:
+    #     raise ValueError('unknown dataset %s' % globalConfig.dataset)
 
     pganR = PganR()
-    pganR.test(val_ds)
+    # pganR.test(val_ds)
     # pganR.train(ds, val_ds)
+    pganR.predict('../adjusted_sample.csv')
