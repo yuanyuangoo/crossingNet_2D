@@ -29,6 +29,8 @@ class Dataset(object):
             self.centerPtIdx=2
             self.with_pose=True
             self.refPtIdx=[2]
+            self.width=147
+            self.height=110
 
 
         # self.h36m_base_path = globalConfig.h36m_base_path
@@ -57,8 +59,7 @@ class Dataset(object):
             (self.frmList) += pickle.load(f)
             t1 = time.time() - t1
             print('loaded with {}s'.format(t1))
-            self.width=img.size2[0]
-            self.height=img.size2[1]
+
             return self.frmList
 
         data=APE()

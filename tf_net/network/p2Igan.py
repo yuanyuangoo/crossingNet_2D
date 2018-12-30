@@ -375,7 +375,7 @@ if __name__ == '__main__':
 
     elif globalConfig.dataset == 'APE':
         ds = Dataset()
-        ds.loadApe(1024, mode='train', tApp=True, replace=False)
+        ds.loadApe(1024, mode='train', tApp=True, replace=True)
 
         val_ds = Dataset()
         val_ds.loadApe(64, mode='valid', tApp=True, replace=False)

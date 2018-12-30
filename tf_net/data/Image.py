@@ -67,7 +67,7 @@ class Image(object):
 
         w = img.shape[0]
         h = img.shape[1]
-        ratio = int((w*h)/(128*128))
+        ratio = np.sqrt((w*h)/(128*128))
         w=int(w/ratio)
         h=int(h/ratio)
         # if RGB:
