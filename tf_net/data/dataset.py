@@ -197,6 +197,7 @@ class Dataset(object):
                     128, 128, skel)
                 self.frmList.append(
                     Frame(img, img_RGB, skel, label, frmPath, heat_map, z_map))
+                a=1
             else:
                 img = Image('H36M', frmPath)
                 img_RGB = Image('H36M', frmPath_rgb, RGB=True)

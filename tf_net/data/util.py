@@ -108,25 +108,6 @@ class Frame(object):
         self.skel = (self.crop_skel + repmat(self.com3D, 1, jntNum))[0]
         self.skel = self.skel.astype(np.float32)
 
-
-def vis_pose(normed_vec):
-
-    vec = normed_vec.copy()
-    vec = normed_vec.copy()*50.0
-
-    vec.shape = (-1, 3)
-
-    img = np.ones((128, 128))*225
-    img = cv2.cvtColor(img.astype('uint8'), cv2.COLOR_GRAY2BGR)
-
-    for idx, pt3 in enumerate(vec):
-        # pt = Camera.to2D(pt3)
-        # pt = pt3[0:2]
-        # pt = (pt[0], pt[2])
-        cv2.circle(img, (int(pt3[0]), int(pt3[2])), 2, (255, 0, 0), -1)
-    return img
-
-
 def adjust_learning_rate(optimizer, epoch, dropLR, LR):
     lr = LR * (0.1 ** (epoch // dropLR))
     for param_group in optimizer.param_groups:
@@ -223,7 +204,7 @@ def drawImageCV(skel, img=None, axis=(0, 1, 0), theta=0):
     skel = skel.T
     skel = np.dot(skel, rotation_matrix(axis, theta))
     skel = skel[:, 0:2]
-    skel = (skel*256)-128
+    # skel = (skel*256)-128
     # min_s = skel.min()
     # max_s = skel.max()
     # mid_s = (min_s+max_s)/2
@@ -387,37 +368,43 @@ def prep_data(train_dataset, batch_size, skel=True, heat_map=False):
     return train_labels, train_skel, train_img, train_img_RGB, train_pose_heatmap, train_z_heatmap, n_samples, total_batch
 
 
-def CenterGaussianHeatMap(img_height, img_width, c_x, c_y, variance=21):
+def CenterGaussianHeatMap(img_height, img_width, c_x, c_y, variance=10):
     gaussian_map = np.zeros((img_height, img_width))
     for x_p in range(img_width):
         for y_p in range(img_height):
             dist_sq = (x_p - c_x) * (x_p - c_x) + \
                       (y_p - c_y) * (y_p - c_y)
             exponent = dist_sq / 2.0 / variance / variance
-            gaussian_map[y_p, x_p] = np.exp(-exponent)
-    cv2.resize(gaussian_map, (int(img_height/8), int(img_width/8)))
+            gaussian_map[x_p, y_p] = np.exp(-exponent)
+    # gaussian_map = cv2.resize(
+    #     gaussian_map, (int(img_height), int(img_width)))
+    cv2.imwrite('gaussian_map.jpg',gaussian_map*255)
     return gaussian_map
 
 
 def SkelGaussianHeatMap(img_height, img_width, skel):
     n_joints = int(len(skel)/3)
-    pose_heatmap = np.zeros((int(img_height/8), int(img_width/8), n_joints))
-    z_heatmap = np.zeros((int(img_height/8), int(img_width/8), n_joints))
+    pose_heatmap = np.zeros((int(img_height), int(img_width), n_joints))
+    z_heatmap = np.zeros((int(img_height), int(img_width), n_joints))
     skel = np.reshape(skel, (3, n_joints))
     for idx in range(n_joints):
         joint = skel[:, idx]
         pose_heatmap[:, :, idx] = CenterGaussianHeatMap(
-            int(img_height/8), int(img_width/8), joint[0], joint[1])
-        z_heatmap[:, :, idx] = joint[2]*np.ones((int(img_height/8), int(img_width/8)))
+            img_height, img_width, joint[0], joint[1])
+        z_heatmap[:, :, idx] = joint[2]*np.ones((int(img_height), int(img_width)))
     return pose_heatmap, z_heatmap
 
 
-def SkelFromOnemap(heatmap, z_map):
-    n_joints = heatmap.shape[2]
+def SkelFromOnemap(heat_map, z_map):
+    n_joints = heat_map.shape[2]
     skel = np.zeros(n_joints*3)
+
+    s = extract_2d_joint_from_heatmap(heat_map, 128)
+    # z_map = cv2.resize(z_map, (128, 128))
+
     for idx in range(n_joints):
-        maxindex = heatmap[:, :, idx].argmax()
-        x, y = np.unravel_index(maxindex, (128, 128))
+        x = int(s[idx, 0])
+        y = int(s[idx, 1])
         z = z_map[x, y, idx]
         skel[idx] = x
         skel[idx+n_joints] = y
@@ -434,3 +421,15 @@ def SkelFromHeatmap(heatmap, z_map):
         Z=z_map[idx]
         skel.append(SkelFromOnemap(H,Z))
     return np.asarray(skel)
+
+
+
+
+def extract_2d_joint_from_heatmap(heatmap, input_size):
+    heatmap_resized = cv2.resize(heatmap, (input_size, input_size))
+    joints_2d=np.zeros((17,2))
+    for joint_num in range(heatmap_resized.shape[2]):
+        joint_coord = np.unravel_index(np.argmax(heatmap_resized[:, :, joint_num]), (input_size, input_size))
+        joints_2d[joint_num, :] = joint_coord
+
+    return joints_2d

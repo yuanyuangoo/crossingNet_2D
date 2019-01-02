@@ -18,8 +18,9 @@ SummaryWriter = tf.summary.FileWriter
 
 
 class vnect():
-    def __init__(self, input_size=128, checkpoint_dir="./checkpoint", sample_dir="samples", batch_size=64, learning_rate=2e-3, beta1=0.5, epoch=200, conv_ratio=8):
+    def __init__(self, input_size=128, checkpoint_dir="./checkpoint", sample_dir="samples", batch_size=64, learning_rate=2e-3, beta1=0.5, epoch=20, conv_ratio=8):
         self.is_training = False
+        self.dataset_name=globalConfig.dataset
         self.checkpoint_dir = os.path.join(
             globalConfig.vnect_pretrain_path, checkpoint_dir)
         self.input_size = input_size
@@ -35,16 +36,19 @@ class vnect():
         self.image_input_sum = image_summary("image_input", self.image_input)
         self.n_joints = ref.nJoints
         self.pose_input_heat_map = tf.placeholder(
-            dtype=tf.float32, shape=(None, input_size/self.conv_ratio, input_size/self.conv_ratio, self.n_joints))
+            dtype=tf.float32, shape=(None, input_size, input_size, self.n_joints))
         self.z_heatmap_gt = tf.placeholder(dtype=tf.float32, shape=(
-            None, input_size/self.conv_ratio, input_size/self.conv_ratio, self.n_joints))
+            None, input_size, input_size, self.n_joints))
 
         self._create_network()
 
-        self.heatmap_loss = tf.nn.l2_loss(
-            self.heatmap-self.pose_input_heat_map)
-        self.z_loss = tf.nn.l2_loss(tf.multiply(
-            self.z_heatmap-self.z_heatmap_gt, self.pose_input_heat_map))
+        self.heatmap_loss = tf.reduce_mean(
+            tf.square(self.heatmap - self.pose_input_heat_map), name='heatmap_loss')
+
+        self.z_loss = tf.reduce_mean(
+            tf.square((tf.multiply(self.z_heatmap - self.z_heatmap_gt,
+                                   self.pose_input_heat_map)), name='z_loss'))
+
         self.loss = self.heatmap_loss+self.z_loss
         self.loss_sum = scalar_summary('loss', self.loss)
         self.heatmap_loss_sum = scalar_summary(
@@ -101,11 +105,11 @@ class vnect():
                                                      self.batch_size:(idx+1)*self.batch_size]
                     batch_z_heatmaps = train_z_heat_maps[idx *
                                                          self.batch_size:(idx+1)*self.batch_size]
-                    
-                    if epoch < 200:
+                    k=10
+                    if epoch < k:
                         # Update h network
-                        _, summary_str, heatmap_loss = self.sess.run([h_optim, self.h_sum, self.heatmap_loss],
-                                                                     feed_dict={
+                        _, summary_str, heatmap_loss, sample = self.sess.run([h_optim, self.h_sum, self.heatmap_loss, self.heatmap],
+                                                                             feed_dict={
                             self.image_input: batch_images,
                             self.pose_input_heat_map: batch_heatmaps,
                             self.z_heatmap_gt: batch_z_heatmaps
@@ -115,7 +119,7 @@ class vnect():
                         print("Epoch: [%2d/%2d] [%4d/%4d] time: %4.4f, heatmap_loss: %.8f"
                               % (epoch, self.epoch, idx, batch_idxs,
                                  time.time() - start_time, heatmap_loss))
-                    if epoch > 200:
+                    if epoch > k:
                         # Update all network
                         _, summary_str, heatmap_loss, z_loss, loss = self.sess.run([a_optim, self.all_sum, self.heatmap_loss, self.z_loss, self.loss],
                                                                                    feed_dict={
@@ -133,10 +137,13 @@ class vnect():
                                                                    feed_dict={
                     self.image_input: test_img_rgb
                 })
+
+                skel=SkelFromHeatmap(test_heat_maps, test_z_heat_maps)
                 
                 save_images(test_img_rgb, image_manifold_size(self.batch_size),
-                            '{}/train_{:02d}_{:04d}.png'.format(self.sample_dir, epoch, idx), skel=SkelFromHeatmap(heatmap_samples, z_heatmap_samples))
-
+                            '{}/train_{:02d}_{:04d}.png'.format(self.sample_dir, epoch, idx), skel=skel)
+                save_images(test_img_rgb, image_manifold_size(self.batch_size),
+                            '{}/train_{:02d}_{:04d}.png'.format(self.sample_dir, epoch, idx), skel=test_skel)
                 if np.mod(counter, 500) == 2:
                     self.save(self.checkpoint_dir, counter)
 
@@ -330,12 +337,28 @@ class vnect():
                                              axis=3, name='res5c_branch2a_feat')
 
         self.res5c_branch2b = tc.layers.conv2d(
-            self.res5c_branch2a_feat, kernel_size=3, num_outputs=128, scope='res5c_branch2b')
+            self.res5c_branch2a_feat, kernel_size=3, num_outputs=128, scope='res5c_branch2b',activation_fn=tf.nn.relu)
         self.res5c_branch2c = tf.layers.conv2d(
-            self.res5c_branch2b, kernel_size=1, filters=self.n_joints*4, activation=None, use_bias=False, name='res5c_branch2c')
-        self.heatmap, self.x_heatmap, self.y_heatmap, self.z_heatmap = tf.split(
-            self.res5c_branch2c, num_or_size_splits=4, axis=3)
+            self.res5c_branch2b, kernel_size=1, filters=self.n_joints*2, activation=None, use_bias=False, name='res5c_branch2c')
+        
+        self.heatmap, self.z_heatmap = tf.split(
+            self.res5c_branch2c, num_or_size_splits=2, axis=3)
 
+        self.heatmap = tf.layers.conv2d_transpose(
+            self.heatmap, kernel_size=4, filters=self.n_joints, activation=None, strides=2, padding='same', use_bias=False, name='res_heatmap1')
+        self.heatmap = tf.layers.conv2d_transpose(
+            self.heatmap, kernel_size=4, filters=self.n_joints, activation=None, strides=2, padding='same', use_bias=False, name='res_heatmap2')
+        self.heatmap = tf.layers.conv2d_transpose(
+            self.heatmap, kernel_size=4, filters=self.n_joints, activation=None, strides=2, padding='same', use_bias=False, name='res_heatmap3')
+
+        self.z_heatmap = tf.layers.conv2d_transpose(
+            self.z_heatmap, kernel_size=4, filters=self.n_joints, activation=None, strides=2, padding='same', use_bias=False, name='z_heatmap1')
+        self.z_heatmap = tf.layers.conv2d_transpose(
+            self.z_heatmap, kernel_size=4, filters=self.n_joints, activation=None, strides=2, padding='same', use_bias=False, name='z_heatmap2')
+        self.z_heatmap = tf.layers.conv2d_transpose(
+            self.z_heatmap, kernel_size=4, filters=self.n_joints, activation=None, strides=2, padding='same', use_bias=False, name='z_heatmap3')
+
+        a=1
     @property
     def model_dir(self):
         return "{}_{}".format(
@@ -375,7 +398,7 @@ if __name__ == '__main__':
     if globalConfig.dataset == 'H36M':
         import data.h36m as h36m
         ds = Dataset()
-        ds.loadH36M(64*50, mode='train', with_heatmap=True,
+        ds.loadH36M(64*1, mode='train', with_heatmap=True,
                     tApp=True, replace=False)
 
         val_ds = Dataset()
