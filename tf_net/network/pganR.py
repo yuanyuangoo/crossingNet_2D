@@ -16,7 +16,7 @@ import globalConfig
 from data.layers import *
 from data.dataset import *
 from data.util import *
-Num_of_Joints = 17
+Num_of_Joints = 15
 EPS = 1e-12
 gray2rgb = tf.image.grayscale_to_rgb
 
@@ -29,10 +29,10 @@ class PganR(object):
             globalConfig.pganR_pretrain_path, sample_dir)
         self.dim_x = dim_x
 
-        self.FR = p2igan()
+        self.FR = p2igan(dim_z=15*3, label_dim=7)
         self.sample_G = self.FR.sample
-        self.FR_G=self.FR.G
-        self.p2p = P2PGAN(mode='test')
+        self.FR_G = self.FR.G
+        self.p2p = P2PGAN(label_dim=7)
 
         with tf.variable_scope("p2p") as scope:
             scope.reuse_variables()
@@ -273,19 +273,24 @@ class PganR(object):
 
 
 if __name__ == '__main__':
-    # if globalConfig.dataset == 'H36M':
-    #     import data.h36m as h36m
-    #     ds = Dataset()
-    #     # for i in range(0, 20000, 20000):
-    #     ds.loadH36M(1024, mode='train', tApp=True, replace=False)
+    if globalConfig.dataset == 'H36M':
+        import data.h36m as h36m
+        ds = Dataset()
+        ds.loadH36M(40960, mode='train', tApp=True, replace=False)
 
-    #     val_ds = Dataset()
-    #     # for i in range(0, 20000, 20000):
-    #     val_ds.loadH36M(64, mode='valid', tApp=True, replace=False)
-    # else:
-    #     raise ValueError('unknown dataset %s' % globalConfig.dataset)
+        val_ds = Dataset()
+        val_ds.loadH36M(64, mode='valid', tApp=True, replace=True)
+    elif globalConfig.dataset == 'APE':
+        ds = Dataset()
+        ds.loadApe(64*300, mode='train', tApp=True, replace=False)
 
-    pganR = PganR()
+        val_ds = Dataset()
+        val_ds.loadApe(64, mode='valid', tApp=True, replace=False)
+
+        pganR = PganR(dim_x=15*3)
+    else:
+        raise ValueError('unknown dataset %s' % globalConfig.dataset)
+
     # pganR.test(val_ds)
-    # pganR.train(ds, val_ds)
-    pganR.predict('../adjusted_sample.csv')
+    pganR.train(ds, val_ds)
+    # pganR.predict('../adjusted_sample.csv')

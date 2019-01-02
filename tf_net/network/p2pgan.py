@@ -21,7 +21,7 @@ SummaryWriter = tf.summary.FileWriter
 gray2rgb = tf.image.grayscale_to_rgb
 class P2PGAN(object):
     def __init__(self, mode='train', sample_dir='samples', checkpoint_dir="./checkpoint",
-                 epoch=20000, aspect_ratio=1, batch_size=64, ngf=64, ndf=64, scale_size=286, train_size=4000, test_size=1000, flip=True, label_dim=15, learning_rate=0.0002,
+                 epoch=200, aspect_ratio=1, batch_size=64, ngf=64, ndf=64, scale_size=286, train_size=4000, test_size=1000, flip=True, label_dim=15, learning_rate=0.0002,
                  beta1=0.5, l1_weight=100, gan_weight=1, dataset_name='H36M', input_width=128, input_height=128):
         self.sample_dir = os.path.join(
             globalConfig.p2p_pretrain_path, sample_dir)
@@ -256,6 +256,10 @@ class P2PGAN(object):
             train_dataset, self.batch_size)
         test_labels, test_skel, test_img, test_img_rgb, _, _ = prep_data(
             valid_dataset, self.batch_size)
+        test_labels = test_labels[0:64]
+        test_skel = test_skel[0:64]
+        test_img = test_img[0:64]
+        test_img_rgb = test_img_rgb[0:64]
 
         with tf.Session() as self.sess:
             d_optim = tf.train.AdamOptimizer(self.learning_rate, beta1=self.beta1) \
@@ -389,9 +393,16 @@ if __name__ == '__main__':
 
         val_ds = Dataset()
         val_ds.loadH36M(64, mode='valid', tApp=True, replace=True)
+    elif globalConfig.dataset == 'APE':
+        ds = Dataset()
+        ds.loadApe(64*300, mode='train', tApp=True, replace=False)
+
+        val_ds = Dataset()
+        val_ds.loadApe(64, mode='valid', tApp=True, replace=False)
+
+        p2p = P2PGAN(label_dim=7)
     else:
         raise ValueError('unknown dataset %s' % globalConfig.dataset)
 
-    p2p = P2PGAN()
     p2p.train(ds,val_ds)
     # p2p.test(val_ds)

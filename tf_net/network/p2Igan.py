@@ -212,12 +212,12 @@ class p2igan(object):
 
             counter = 1
             start_time = time.time()
-            could_load, checkpoint_counter = self.load(self.checkpoint_dir)
-            if could_load:
-                counter = checkpoint_counter
-                print(" [*] Load SUCCESS")
-            else:
-                print(" [!] Load failed...")
+            # could_load, checkpoint_counter = self.load(self.checkpoint_dir)
+            # if could_load:
+            #     counter = checkpoint_counter
+            #     print(" [*] Load SUCCESS")
+            # else:
+            #     print(" [!] Load failed...")
 
             samples = self.sess.run(
                 self.sample,
@@ -266,13 +266,13 @@ class p2igan(object):
             counter = 1
             start_time = time.time()
 
-            could_load, checkpoint_counter = self.load(self.checkpoint_dir)
+            # could_load, checkpoint_counter = self.load(self.checkpoint_dir)
 
-            if could_load:
-                counter = checkpoint_counter
-                print(" [*] Load SUCCESS")
-            else:
-                print(" [!] Load failed...")
+            # if could_load:
+            #     counter = checkpoint_counter
+            #     print(" [*] Load SUCCESS")
+            # else:
+            #     print(" [!] Load failed...")
             errD = 1.1
             errG = 0.8
             for epoch in xrange(self.epoch):
@@ -311,18 +311,18 @@ class p2igan(object):
                           % (epoch, self.epoch, idx, batch_idxs,
                              time.time() - start_time, errD, errG))
 
-                    if np.mod(counter, 160) == 1:
+                    if np.mod(counter, 300) == 1:
                         # show_all_variables()
                         samples = self.sess.run(
                             self.sample,
                             feed_dict={
                                 self.pose_input: sample_pose,
-                                self.image_target: sample_inputs,
+                                # self.image_target: sample_inputs,
                                 self.y: sample_labels
                             }
                         )
                         save_images(samples, image_manifold_size(samples.shape[0]),
-                                    '{}/train_{:02d}_{:04d}.png'.format(self.sample_dir, epoch, idx), skel=test_skel)
+                                    '{}/train_{:02d}_{:04d}.png'.format(self.sample_dir, epoch, idx), skel=None)
 
                     if np.mod(counter, 5000) == 2:
                         self.save(self.checkpoint_dir, counter)
@@ -375,13 +375,12 @@ if __name__ == '__main__':
 
     elif globalConfig.dataset == 'APE':
         ds = Dataset()
-        ds.loadApe(1024, mode='train', tApp=True, replace=True)
+        ds.loadApe(64*300, mode='train', tApp=True, replace=False)
 
         val_ds = Dataset()
         val_ds.loadApe(64, mode='valid', tApp=True, replace=False)
 
-        gan = p2igan(dim_z=15*3, label_dim=7,
-                     output_height=ds.height, output_width=ds.width)
+        gan = p2igan(dim_z=15*3, label_dim=7)
 
     else:
         raise ValueError('unknown dataset %s' % globalConfig.dataset)

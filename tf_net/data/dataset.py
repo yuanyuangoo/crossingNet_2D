@@ -5,10 +5,9 @@ import numpy as np
 import time
 import sys
 sys.path.append('./')
-import util
 from Image import Image
 import globalConfig
-from data.util import Frame
+from data.util import *
 class Dataset(object):
     def __init__(self):
         self.dataset = globalConfig.dataset
@@ -62,13 +61,9 @@ class Dataset(object):
 
             return self.frmList
 
-        data=APE()
+        data=APE(mode)
         imagespath, depthspath, skels,labels = data.readallData()
-        if mode is "train":
-            frmEndNum = len(depthspath)-1000
-        else:
-            frmStartNum=len(depthspath)-1000
-            frmEndNum = len(depthspath)
+        frmEndNum = len(depthspath)
 
         for frmIdx in tqdm(range(frmStartNum, int(frmEndNum/Fsize)*Fsize, int((frmEndNum-frmStartNum)/Fsize))):
             img = Image('APE', depthspath[frmIdx])
@@ -148,7 +143,7 @@ class Dataset(object):
     interface to neural network, used for training
     '''
 
-    def loadH36M(self, Fsize, frmStartNum=0, mode='train', replace=False, tApp=False):
+    def loadH36M(self, Fsize, frmStartNum=0, mode='train', with_heatmap=False, replace=False, tApp=False):
         from h36m import H36M
         '''
            mode: if train, only save the cropped image
@@ -160,9 +155,13 @@ class Dataset(object):
         if not tApp:
             self.frmList = []
         # fileIdx = int(frmStartNum / self.h36m_frm_perfile)
-        pickleCachePath = '{}h36m_{}_{}.pkl'.format(
-            self.cache_base_path, mode, Fsize)
 
+        if with_heatmap:
+            pickleCachePath = '{}h36m_{}_{}_{}.pkl'.format(
+                self.cache_base_path, mode, "with_heatmap", Fsize)
+        else:
+            pickleCachePath = '{}h36m_{}_{}.pkl'.format(
+                self.cache_base_path, mode, Fsize)
         if os.path.isfile(pickleCachePath) and not replace:
             print('direct load from the cache')
             t1 = time.time()
@@ -191,10 +190,18 @@ class Dataset(object):
                 continue
             skel.shape = (-1)
 
-            img = Image('H36M', frmPath)
-            img_RGB = Image('H36M', frmPath_rgb, RGB=True)
+            if with_heatmap:
+                img_RGB = Image('H36M', frmPath_rgb, RGB=True)
+                img=[]
+                heat_map, z_map = SkelGaussianHeatMap(
+                    128, 128, skel)
+                self.frmList.append(
+                    Frame(img, img_RGB, skel, label, frmPath, heat_map, z_map))
+            else:
+                img = Image('H36M', frmPath)
+                img_RGB = Image('H36M', frmPath_rgb, RGB=True)
+                self.frmList.append(Frame(img, img_RGB, skel, label, frmPath))
 
-            self.frmList.append(Frame(img, img_RGB, skel, label, frmPath))
             # self.frmList[-1].saveOnlyForTrain()
 
         if not os.path.exists(self.cache_base_path):

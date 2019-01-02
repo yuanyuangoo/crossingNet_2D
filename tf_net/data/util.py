@@ -55,8 +55,7 @@ msraBones = flattenBones(
 class Frame(object):
     skel_norm_ratio = 50.0
 
-    def __init__(self, img=None, img_RGB=None, skel=None, label=None, path=None):
-        self.norm_img = img.Data
+    def __init__(self, img=None, img_RGB=None, skel=None, label=None, path=None, heatmap=None, z_map=None):
         self.norm_img_RGB = img_RGB.Data
         if isinstance(skel, np.ndarray):
             if len(skel) % 3 != 0:
@@ -64,7 +63,13 @@ class Frame(object):
             # jntNum = len(skel)/3
             self.label = label
             self.with_skel = True
-            self.skel = skel.astype(np.float32)
+            # self.skel = skel.astype(np.float32)
+            # skel=np.reshape(self.skel,(3,-1))
+            # skel = np.subtract(skel, np.expand_dims(
+            #     skel[:, ref.aperoot], axis=1))
+            # skel = skel.flatten()/2000.0
+            self.norm_skel = skel
+
             self.path = path
 
         else:
@@ -72,6 +77,11 @@ class Frame(object):
             self.crop_skel = None
             self.with_skel = False
             self.label = label
+        if isinstance(heatmap,np.ndarray):
+            self.heatmap = heatmap.astype(np.float32)
+            self.z_map = z_map.astype(np.float32)
+        else:
+            self.norm_img = img.Data
 
     # save only the norm_dm and norm_skel for training, clear all initial size data
 
@@ -207,7 +217,7 @@ def rotation_matrix(axis, theta):
 
 
 def drawImageCV(skel, img=None, axis=(0, 1, 0), theta=0):
-    numofJoint = 15
+    numofJoint = 17
     if not skel.shape == (3, numofJoint):
         skel = np.reshape(skel, (3, numofJoint))
     skel = skel.T
@@ -322,7 +332,7 @@ def merge(images, size, skel=None):
                          'must have dimensions: HxW or HxWx3 or HxWx4')
 
 
-def prep_data(train_dataset, batch_size,skel=True):
+def prep_data(train_dataset, batch_size, skel=True, heat_map=False):
 
 
     train_labels = []
@@ -330,14 +340,12 @@ def prep_data(train_dataset, batch_size,skel=True):
     train_img_RGB = []
     for frm in train_dataset.frmList:
         train_labels.append(frm.label)
-        train_img.append(frm.norm_img)
         train_img_RGB.append(frm.norm_img_RGB)
 
     train_labels = np.asarray(train_labels)
-    train_img = np.asarray(train_img)
     train_img_RGB = np.asarray(train_img_RGB)
 
-    n_samples = train_img.shape[0]
+    n_samples = train_img_RGB.shape[0]
     total_batch = int(n_samples / batch_size)
 
     seed = 547
@@ -346,16 +354,83 @@ def prep_data(train_dataset, batch_size,skel=True):
     np.random.shuffle(idx)
 
     train_labels = train_labels[idx]
-    train_img = train_img[idx]
     train_img_RGB = train_img_RGB[idx]
-    
+
     if skel:
         train_skel = []
         for frm in train_dataset.frmList:
-            train_skel.append(frm.skel)
+            train_skel.append(frm.norm_skel)
         # train_skel = (np.asarray(train_skel)+128)/256
-        train_skel=np.asarray(train_skel)
+        train_skel = np.asarray(train_skel)
         train_skel = train_skel[idx]
-        return train_labels, train_skel, train_img,train_img_RGB, n_samples, total_batch
+    else:
+        train_skel = 1
 
-    return train_labels, 1, train_img, train_img_RGB, n_samples, total_batch
+    if heat_map:
+        train_z_heatmap = []
+        train_pose_heatmap = []
+        for frm in train_dataset.frmList:
+            train_pose_heatmap.append(frm.heatmap)
+            train_z_heatmap.append(frm.z_map)
+        train_pose_heatmap = np.asarray(train_pose_heatmap)
+        train_pose_heatmap = train_pose_heatmap[idx]
+        train_z_heatmap = np.asarray(train_z_heatmap)
+        train_z_heatmap = train_z_heatmap[idx]
+    else:
+        train_z_heatmap = 1
+        train_pose_heatmap = 1
+        for frm in train_dataset.frmList:
+            train_img.append(frm.norm_img)
+        train_img = np.asarray(train_img)
+        train_img = train_img[idx]
+
+    return train_labels, train_skel, train_img, train_img_RGB, train_pose_heatmap, train_z_heatmap, n_samples, total_batch
+
+
+def CenterGaussianHeatMap(img_height, img_width, c_x, c_y, variance=21):
+    gaussian_map = np.zeros((img_height, img_width))
+    for x_p in range(img_width):
+        for y_p in range(img_height):
+            dist_sq = (x_p - c_x) * (x_p - c_x) + \
+                      (y_p - c_y) * (y_p - c_y)
+            exponent = dist_sq / 2.0 / variance / variance
+            gaussian_map[y_p, x_p] = np.exp(-exponent)
+    cv2.resize(gaussian_map, (int(img_height/8), int(img_width/8)))
+    return gaussian_map
+
+
+def SkelGaussianHeatMap(img_height, img_width, skel):
+    n_joints = int(len(skel)/3)
+    pose_heatmap = np.zeros((int(img_height/8), int(img_width/8), n_joints))
+    z_heatmap = np.zeros((int(img_height/8), int(img_width/8), n_joints))
+    skel = np.reshape(skel, (3, n_joints))
+    for idx in range(n_joints):
+        joint = skel[:, idx]
+        pose_heatmap[:, :, idx] = CenterGaussianHeatMap(
+            int(img_height/8), int(img_width/8), joint[0], joint[1])
+        z_heatmap[:, :, idx] = joint[2]*np.ones((int(img_height/8), int(img_width/8)))
+    return pose_heatmap, z_heatmap
+
+
+def SkelFromOnemap(heatmap, z_map):
+    n_joints = heatmap.shape[2]
+    skel = np.zeros(n_joints*3)
+    for idx in range(n_joints):
+        maxindex = heatmap[:, :, idx].argmax()
+        x, y = np.unravel_index(maxindex, (128, 128))
+        z = z_map[x, y, idx]
+        skel[idx] = x
+        skel[idx+n_joints] = y
+        skel[idx+2*n_joints] = z
+
+    return skel
+
+
+def SkelFromHeatmap(heatmap, z_map):
+    batch_size = heatmap.shape[0]
+    skel=[]
+    for idx in range(batch_size):
+        H=heatmap[idx]
+        Z=z_map[idx]
+        skel.append(SkelFromOnemap(H,Z))
+    return np.asarray(skel)

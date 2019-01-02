@@ -1,4 +1,73 @@
+import time
 import numpy as np
+import cv2
+import matplotlib.pyplot as plt
 
-a = [1, 1, 70.463570, 596.515442, 3070.402100, 1.000000, 0.993230, 0.045249, 0.106984, -0.035244, 0.994983, -0.093625, -0.110684, 0.089221, 0.989842, 1.000000, 57.064857, 301.887543, 3043.982422, 1.000000, 0.993230, 0.045249, 0.106984, -0.035244, 0.994983, -0.093625, -0.110684, 0.089221, 0.989842, 1.000000, 60.763859, 98.893951, 3042.468750, 1.000000, 0.993964, -0.018219, 0.108179, 0.018918, 0.999805, -0.005442, -0.108059, 0.007456, 0.994116, 1.000000, -101.833710, 298.863220, 3061.257080, 1.000000, 0.147913, -0.987431, -0.055697, 0.983211, 0.140729, 0.116155, -0.106857, -0.071942, 0.991668, 1.000000, -145.723557, 7.117950, 3092.964355, 1.000000, 0.094960, -0.987431, -0.126344, 0.892109, 0.140729, -0.429345, 0.441729, -0.071942, 0.894259, 1.000000, 215.963409, 304.911865, 3026.707764, 1.000000, 0.194698, 0.978828, 0.063153, -0.946274, 0.170496, 0.274765, 0.258180, -0.113256, 0.959435, 1.000000, 270.076477, 41.911041, 3098.464600, 1.000000, 0.114909, 0.978828, 0.169386, -0.915623, 0.170496, -0.364096, -0.385267, -0.113256, 0.915829, 1.000000, -47.011131, -106.221321, 3053.073975, 1.000000, 0.999877, 0.011249,
-     0.010911, -0.010564, 0.998087, -0.060919, -0.011575, 0.060796, 0.998083, 1.000000, -52.447964, -588.627747, 3023.689209, 1.000000, 0.994383, 0.105096, 0.012535, -0.105689, 0.979628, 0.170758, 0.005666, -0.171124, 0.985233, 1.000000, 175.936859, -101.977959, 3028.836182, 1.000000, 0.980530, -0.076685, 0.180775, 0.072001, 0.996880, 0.032342, -0.182692, -0.018696, 0.982993, 1.000000, 211.752808, -567.573181, 3037.568115, 1.000000, 0.981462, -0.094953, 0.166482, 0.063414, 0.980607, 0.185440, -0.180862, -0.171445, 0.968450, 1.000000, -173.955185, -258.105042, 2961.638916, 1.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 302.719757, -218.199066, 2989.017822, 1.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, -100.031685, -1032.167236, 3101.167725, 1.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 257.309662, -1038.053467, 3119.824951, 1.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000]
+
+def CenterLabelHeatMap(img_width, img_height, c_x, c_y, sigma):
+    X1 = np.linspace(1, img_width, img_width)
+    Y1 = np.linspace(1, img_height, img_height)
+    [X, Y] = np.meshgrid(X1, Y1)
+    X = X - c_x
+    Y = Y - c_y
+    D2 = X * X + Y * Y
+    E2 = 2.0 * sigma * sigma
+    Exponent = D2 / E2
+    heatmap = np.exp(-Exponent)
+    return heatmap
+
+
+# Compute gaussian kernel
+def CenterGaussianHeatMap(img_height, img_width, c_x, c_y, variance=21):
+    gaussian_map = np.zeros((img_height, img_width))
+    for x_p in range(img_width):
+        for y_p in range(img_height):
+            dist_sq = (x_p - c_x) * (x_p - c_x) + \
+                      (y_p - c_y) * (y_p - c_y)
+            exponent = dist_sq / 2.0 / variance / variance
+            gaussian_map[y_p, x_p] = np.exp(-exponent)
+    return gaussian_map
+
+def SkelGaussianHeatMap(img_height, img_width, skel):
+    n_joints = int(len(skel)/3)
+    pose_heatmap = np.zeros((img_height, img_width, n_joints))
+    z_heatmap = np.zeros((img_height, img_width, n_joints))
+    skel = np.reshape(skel, (3, n_joints))
+    for idx in range(n_joints):
+        joint = skel[:, idx]
+        pose_heatmap[:, :, idx] = CenterGaussianHeatMap(
+            img_height, img_width, joint[0], joint[1])
+        z_heatmap[:, :, idx] = joint[2]*np.ones((img_height, img_width))
+    return pose_heatmap, z_heatmap
+
+
+image_file = '1.jpg'
+img = cv2.imread(image_file)
+img = img[:, :, ::-1]
+
+height, width,_ = np.shape(img)
+cy, cx = height/2.0, width/2.0
+
+start = time.time()
+heatmap1 = CenterLabelHeatMap(width, height, cx, cy, 21)
+t1 = time.time() - start
+
+start = time.time()
+heatmap2 = CenterGaussianHeatMap(height, width, cx, cy, 21)
+t2 = time.time() - start
+
+skel = np.repeat(cy, 51)
+# skel = np.reshape(skel, (3, 17))
+heatmap,z_map = SkelGaussianHeatMap(height, width, skel)
+maxindex = heatmap[:, :, 0].argmax()
+index=np.unravel_index(maxindex, (128,128))
+print(index)
+print(t1, t2)
+
+plt.subplot(1,2,1)
+plt.imshow(heatmap[:,:,0])
+plt.subplot(1,2,2)
+plt.imshow(z_map[:,:,0])
+plt.show()
+
+print('End.')

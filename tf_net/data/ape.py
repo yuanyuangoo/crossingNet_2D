@@ -12,7 +12,7 @@ import ref
 import globalConfig
 
 class APE:
-    def __init__(self):
+    def __init__(self, mode):
         # print('==>initializing 3D data.')
         activityLabelPath = {}
 
@@ -23,6 +23,10 @@ class APE:
             labelfile = f.readlines()
             for i in range(len(labelfile)-1):
                 line = labelfile[i]
+                if mode is 'train' and '6' in line:
+                    break
+                if mode is 'valid' and '6' not in line:
+                    continue
                 self.folder.append(line[:6])
                 action.append(line[7:-1])
             values = np.array(action)
@@ -33,7 +37,7 @@ class APE:
             integer_encoded = integer_encoded.reshape(len(integer_encoded), 1)
             self.action = onehot_encoder.fit_transform(integer_encoded)
 
-        self.nFolder = len(labelfile)-1
+        self.nFolder = len(action)-1
 
     def readallData(self):
         images = []

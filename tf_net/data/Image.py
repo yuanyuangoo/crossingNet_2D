@@ -67,19 +67,19 @@ class Image(object):
 
         w = img.shape[0]
         h = img.shape[1]
-        ratio = np.sqrt((w*h)/(128*128))
-        w=int(w/ratio)
-        h=int(h/ratio)
-        # if RGB:
-        #     out = 255*np.ones((max(w, h), max(w, h), 3))
-        #     out[0:w, 0:h, :] = img
-        # else:
-        #     out = 255*np.ones((max(w, h), max(w, h)))
-        #     out[0:w, 0:h] = img
+        # ratio = np.sqrt((w*h)/(128*128))
+        # w=int(w/ratio)
+        # h=int(h/ratio)
+        if RGB:
+            out = 255*np.ones((max(w, h), max(w, h), 3))
+            out[0:w, 0:h, :] = img
+        else:
+            out = 255*np.ones((max(w, h), max(w, h)))
+            out[0:w, 0:h] = img
 
-        out = cv2.resize(img, (w, h))
-        # out = out.reshape(128, 128, -1)
+        out = cv2.resize(img, (128, 128))
+        out = out.reshape(128, 128, -1)
         
-        self.Data = np.asarray(img-127.5, np.float32)/127.5
-        self.size2 = self.Data.shape
+        self.Data = np.asarray(out-127.5, np.float32)/127.5
+        self.size = self.Data.shape
         return self.Data
