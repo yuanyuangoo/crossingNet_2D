@@ -213,7 +213,7 @@ def drawImageCV(skel, img=None, axis=(0, 1, 0), theta=0):
         img = 255*np.ones((128, 128, 3))
     elif img.shape[2] == 1:
         img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
-    for i, edge in enumerate(ref.apeedges):
+    for i, edge in enumerate(ref.h36medges):
         pt1 = skel[edge[0]]
         pt2 = skel[edge[1]]
 
@@ -368,7 +368,7 @@ def prep_data(train_dataset, batch_size, skel=True, heat_map=False):
     return train_labels, train_skel, train_img, train_img_RGB, train_pose_heatmap, train_z_heatmap, n_samples, total_batch
 
 
-def CenterGaussianHeatMap(img_height, img_width, c_x, c_y, variance=10):
+def CenterGaussianHeatMap(img_height, img_width, c_x, c_y, variance=21):
     gaussian_map = np.zeros((img_height, img_width))
     for x_p in range(img_width):
         for y_p in range(img_height):
@@ -376,23 +376,23 @@ def CenterGaussianHeatMap(img_height, img_width, c_x, c_y, variance=10):
                       (y_p - c_y) * (y_p - c_y)
             exponent = dist_sq / 2.0 / variance / variance
             gaussian_map[x_p, y_p] = np.exp(-exponent)
-    # gaussian_map = cv2.resize(
-    #     gaussian_map, (int(img_height), int(img_width)))
-    cv2.imwrite('gaussian_map.jpg',gaussian_map*255)
+    gaussian_map = cv2.resize(
+        gaussian_map, (img_height//8, img_width//8), interpolation=cv2.INTER_LINEAR)
     return gaussian_map
 
 
 def SkelGaussianHeatMap(img_height, img_width, skel):
     n_joints = int(len(skel)/3)
-    pose_heatmap = np.zeros((int(img_height), int(img_width), n_joints))
-    z_heatmap = np.zeros((int(img_height), int(img_width), n_joints))
+    pose_heatmap = np.zeros((img_height//8, img_width//8, n_joints))
+    z_heatmap = np.zeros((img_height//8, img_width//8, n_joints))
     skel = np.reshape(skel, (3, n_joints))
     for idx in range(n_joints):
         joint = skel[:, idx]
         pose_heatmap[:, :, idx] = CenterGaussianHeatMap(
             img_height, img_width, joint[0], joint[1])
-        z_heatmap[:, :, idx] = joint[2]*np.ones((int(img_height), int(img_width)))
-    return pose_heatmap, z_heatmap
+        z_heatmap[:, :, idx] = joint[2] * \
+            np.ones((img_height//8, img_width//8))
+    return pose_heatmap, z_heatmap/128
 
 
 def SkelFromOnemap(heat_map, z_map):
@@ -400,7 +400,7 @@ def SkelFromOnemap(heat_map, z_map):
     skel = np.zeros(n_joints*3)
 
     s = extract_2d_joint_from_heatmap(heat_map, 128)
-    # z_map = cv2.resize(z_map, (128, 128))
+    z_map = cv2.resize(z_map, (128, 128), interpolation=cv2.INTER_LINEAR)
 
     for idx in range(n_joints):
         x = int(s[idx, 0])
@@ -408,7 +408,7 @@ def SkelFromOnemap(heat_map, z_map):
         z = z_map[x, y, idx]
         skel[idx] = x
         skel[idx+n_joints] = y
-        skel[idx+2*n_joints] = z
+        skel[idx+2*n_joints] = z*128
 
     return skel
 
@@ -426,7 +426,7 @@ def SkelFromHeatmap(heatmap, z_map):
 
 
 def extract_2d_joint_from_heatmap(heatmap, input_size):
-    heatmap_resized = cv2.resize(heatmap, (input_size, input_size))
+    heatmap_resized = cv2.resize(heatmap, (input_size, input_size),interpolation=cv2.INTER_LINEAR)
     joints_2d=np.zeros((17,2))
     for joint_num in range(heatmap_resized.shape[2]):
         joint_coord = np.unravel_index(np.argmax(heatmap_resized[:, :, joint_num]), (input_size, input_size))

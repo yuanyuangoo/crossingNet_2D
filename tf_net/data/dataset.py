@@ -192,12 +192,11 @@ class Dataset(object):
 
             if with_heatmap:
                 img_RGB = Image('H36M', frmPath_rgb, RGB=True)
-                img=[]
-                heat_map, z_map = SkelGaussianHeatMap(
-                    128, 128, skel)
+                img = []
+                heat_map, z_map = SkelGaussianHeatMap(128, 128, skel)
                 self.frmList.append(
                     Frame(img, img_RGB, skel, label, frmPath, heat_map, z_map))
-                a=1
+                a = 1
             else:
                 img = Image('H36M', frmPath)
                 img_RGB = Image('H36M', frmPath_rgb, RGB=True)

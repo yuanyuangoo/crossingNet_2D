@@ -181,11 +181,3 @@ class H36M:
         print('loaded with {} frames'.format(num))
 
         return imgs.astype(np.int), labels.astype(np.int)
-
-
-# a = H36M('valid')
-# for i in range(a.nSamples):
-#     a.getSkel(i)
-#print(a.getRotation(1))
-#print(a.getPart3D(1))
-# print(a.getSkel(1412))

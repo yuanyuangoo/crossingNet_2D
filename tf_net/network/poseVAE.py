@@ -204,8 +204,8 @@ class PoseVAE(object):
                             '{}/test_{:02d}.png'.format(self.sample_dir, epoch), skel=samples)
                             
     def predict(self,valid_dataset):
-        test_labels, test_skel, _, _, n_samples, total_batch = prep_data(
-            valid_dataset, self.batch_size)
+        test_labels, test_skel, _, _, _, _, _, _ = prep_data(
+            valid_dataset, self.batch_size, heat_map=True)
         with tf.Session() as self.sess:
             tf.global_variables_initializer().run()
             counter = 1
@@ -330,11 +330,11 @@ if __name__ == '__main__':
     if globalConfig.dataset == 'H36M':
         ds = Dataset()
         # for i in range(0, 20000, 20000):
-        ds.loadH36M(1024, mode='train', tApp=True, replace=False)
+        ds.loadH36M(64*50, mode='train', tApp=True, replace=False)
 
         val_ds = Dataset()
         # for i in range(0, 20000, 20000):
-        val_ds.loadH36M(2048, mode='valid', tApp=True, replace=False)
+        val_ds.loadH36M(64, mode='valid', tApp=True, replace=False)
     elif globalConfig.dataset == 'APE':
         ds = Dataset()
         # for i in range(0, 20000, 20000):
@@ -347,6 +347,6 @@ if __name__ == '__main__':
         raise ValueError('unknown dataset %s' % globalConfig.dataset)
 
     vae = PoseVAE()
-    vae.train(ds, val_ds)
+    # vae.train(ds, val_ds)
     # vae.test(val_ds)
-    # vae.predict(val_ds)
+    vae.predict(ds)
