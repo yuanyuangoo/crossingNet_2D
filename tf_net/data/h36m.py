@@ -181,3 +181,9 @@ class H36M:
         print('loaded with {} frames'.format(num))
 
         return imgs.astype(np.int), labels.astype(np.int)
+
+
+# a=H36M('valid')
+# print(a.nSamples)
+# a=H36M('train')
+# print(a.nSamples)

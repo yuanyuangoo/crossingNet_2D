@@ -18,7 +18,7 @@ SummaryWriter = tf.summary.FileWriter
 
 
 class vnect():
-    def __init__(self, input_size=128, checkpoint_dir="./checkpoint", sample_dir="samples", batch_size=64, learning_rate=2e-3, beta1=0.5, epoch=200, conv_ratio=8):
+    def __init__(self, input_size=128, checkpoint_dir="./checkpoint", sample_dir="samples", batch_size=64, learning_rate=2e-5, beta1=0.5, epoch=200, conv_ratio=8):
         self.is_training = False
         self.dataset_name=globalConfig.dataset
         self.checkpoint_dir = os.path.join(
@@ -42,12 +42,15 @@ class vnect():
 
         self._create_network()
 
-        self.heatmap_loss = tf.reduce_sum(
-            tf.square(self.heatmap - self.pose_input_heat_map), name='heatmap_loss')
+        self.heatmap_loss = tf.nn.l2_loss(
+            self.heatmap - self.pose_input_heat_map, name='heatmap_loss')+tf.nn.l2_loss(
+            self.heatmap_intermidiate1 - self.pose_input_heat_map, name='heatmap_intermidiate1_loss')+tf.nn.l2_loss(
+            self.heatmap_intermidiate2 - self.pose_input_heat_map, name='heatmap_intermidiate2_loss')
 
-        self.z_loss = tf.reduce_sum(
-            tf.square((tf.multiply(self.z_heatmap - self.z_heatmap_gt,
-                                   self.pose_input_heat_map)), name='z_loss'))
+        self.z_loss = tf.nn.l2_loss(
+            tf.multiply(self.z_heatmap - self.z_heatmap_gt, self.pose_input_heat_map), name='z_loss')+tf.nn.l2_loss(
+            tf.multiply(self.z_heatmap_intermidiate1 - self.z_heatmap_gt, self.pose_input_heat_map), name='z_intermidiate1_loss')+tf.nn.l2_loss(
+            tf.multiply(self.z_heatmap_intermidiate2 - self.z_heatmap_gt, self.pose_input_heat_map), name='z_intermidiate2_loss')
 
         self.loss = self.heatmap_loss+self.z_loss
         self.loss_sum = scalar_summary('loss', self.loss)
@@ -56,13 +59,14 @@ class vnect():
         self.z_loss_sum = scalar_summary('z_loss', self.z_loss)
         self.t_vars = tf.global_variables()
         self.saver = tf.train.Saver(max_to_keep=20)
-    def predict(self,valid_dataset):
-        if not os.path.exists(self.checkpoint_dir):
-            os.makedirs(self.checkpoint_dir)
+
+    def predict(self, valid_dataset, train_total_batch):
+        self.total_batch = train_total_batch
         if not os.path.exists(self.sample_dir):
             os.makedirs(self.sample_dir)
         _, test_skel, _, test_img_rgb, test_heat_maps, test_z_heat_maps, _, _ = prep_data(
             valid_dataset, self.batch_size, heat_map=True)
+        result = np.zeros(test_skel.shape)
         with tf.Session() as self.sess:
             counter = 1
             start_time = time.time()
@@ -73,32 +77,33 @@ class vnect():
             else:
                 print(" [!] Load failed...")
             print(counter)
-            batch_idxs = test_skel.shape[0]
+            batch_idxs = test_skel.shape[0]//self.batch_size
+
             for idx in xrange(0, int(batch_idxs)):
                 heatmap_samples, z_heatmap_samples = self.sess.run([self.heatmap, self.z_heatmap],
                                                                    feed_dict={
-                    self.image_input: test_img_rgb
+                    self.image_input: test_img_rgb[idx *
+                                                   self.batch_size:(idx+1)*self.batch_size]
                 })
-                skel=SkelFromHeatmap(heatmap_samples, z_heatmap_samples)
-                
+                skel = SkelFromHeatmap(heatmap_samples, z_heatmap_samples)
+                result[idx * self.batch_size:(idx+1)*self.batch_size] = skel
                 save_images(test_img_rgb, image_manifold_size(self.batch_size),
                             '{}/test_{:02d}.png'.format(self.sample_dir, idx), skel=skel)
-
-
+            a = eval_pck(result, test_skel,1,1,1)
+            
 
     def train(self,train_dataset,valid_dataset):
         if not os.path.exists(self.checkpoint_dir):
             os.makedirs(self.checkpoint_dir)
         if not os.path.exists(self.sample_dir):
             os.makedirs(self.sample_dir)
-        _, train_skel, _, train_img_rgb, train_heat_maps, train_z_heat_maps, n_samples, total_batch = prep_data(
+            
+        _, train_skel, _, train_img_rgb, train_heat_maps, train_z_heat_maps, self.n_samples, self.total_batch = prep_data(
             train_dataset, self.batch_size, heat_map=True)
         _, test_skel, _, test_img_rgb, test_heat_maps, test_z_heat_maps, _, _ = prep_data(
             valid_dataset, self.batch_size, heat_map=True)
 
         with tf.Session() as self.sess:
-            h_optim = tf.train.AdamOptimizer(self.learning_rate, beta1=self.beta1) \
-                .minimize(self.heatmap_loss, var_list=self.t_vars)
             a_optim = tf.train.AdamOptimizer(self.learning_rate, beta1=self.beta1) \
                 .minimize(self.loss, var_list=self.t_vars)
             try:
@@ -129,37 +134,22 @@ class vnect():
 
                 for idx in xrange(0, int(batch_idxs)):
                     batch_images = train_img_rgb[idx *
-                                             self.batch_size:(idx+1)*self.batch_size]
+                                                 self.batch_size:(idx+1)*self.batch_size]
                     batch_heatmaps = train_heat_maps[idx *
                                                      self.batch_size:(idx+1)*self.batch_size]
                     batch_z_heatmaps = train_z_heat_maps[idx *
                                                          self.batch_size:(idx+1)*self.batch_size]
-                    k=0
-                    if epoch < k:
-                        # Update h network
-                        _, summary_str, heatmap_loss, sample = self.sess.run([h_optim, self.h_sum, self.heatmap_loss, self.heatmap],
-                                                                             feed_dict={
-                            self.image_input: batch_images,
-                            self.pose_input_heat_map: batch_heatmaps,
-                            self.z_heatmap_gt: batch_z_heatmaps
-
-                        })
-                        self.writer.add_summary(summary_str, counter)
-                        print("Epoch: [%2d/%2d] [%4d/%4d] time: %4.4f, heatmap_loss: %.8f"
-                              % (epoch, self.epoch, idx, batch_idxs,
-                                 time.time() - start_time, heatmap_loss))
-                    if epoch > k:
-                        # Update all network
-                        _, summary_str, heatmap_loss, z_loss, loss = self.sess.run([a_optim, self.all_sum, self.heatmap_loss, self.z_loss, self.loss],
-                                                                                   feed_dict={
-                            self.image_input: batch_images,
-                            self.pose_input_heat_map: batch_heatmaps,
-                            self.z_heatmap_gt: batch_z_heatmaps
-                        })
-                        self.writer.add_summary(summary_str, counter)
-                        print("Epoch: [%2d/%2d] [%4d/%4d] time: %4.4f, heatmap_loss: %.8f, z_loss: %.8f, loss: %.8f "
-                              % (epoch, self.epoch, idx, batch_idxs,
-                                 time.time() - start_time, heatmap_loss, z_loss, loss))
+                    # Update network
+                    _, summary_str, heatmap_loss, z_loss, loss = self.sess.run([a_optim, self.all_sum, self.heatmap_loss, self.z_loss, self.loss],
+                                                                               feed_dict={
+                        self.image_input: batch_images,
+                        self.pose_input_heat_map: batch_heatmaps,
+                        self.z_heatmap_gt: batch_z_heatmaps
+                    })
+                    self.writer.add_summary(summary_str, counter)
+                    print("Epoch: [%2d/%2d] [%4d/%4d] time: %4.4f, heatmap_loss: %.8f, z_loss: %.8f, loss: %.8f "
+                          % (epoch, self.epoch, idx, batch_idxs,
+                             time.time() - start_time, heatmap_loss, z_loss, loss))
                     counter += 1
 
                 heatmap_samples, z_heatmap_samples = self.sess.run([self.heatmap, self.z_heatmap],
@@ -300,6 +290,12 @@ class vnect():
             self.res4d_branch2b, kernel_size=1, num_outputs=1024, activation_fn=None, scope='res4d_branch2c')
         self.res4d = tf.add(self.res4d_branch2c, self.res4c, name='res4d_add')
         self.res4d = tf.nn.relu(self.res4d, name='res4d')
+        self.res4d_heatmap1a = tf.layers.conv2d_transpose(
+            self.res4d, kernel_size=4, filters=self.n_joints*2, activation=None, strides=2, padding='same', use_bias=False, name='res4f_heatmap1a')
+        self.res4d_heatmap_bn = tc.layers.batch_norm(
+            self.res4d_heatmap1a, scale=True, is_training=self.is_training, scope='res4d_heatmap_bn')
+        self.heatmap_intermidiate1, self.z_heatmap_intermidiate1 = tf.split(tf.nn.relu(
+            self.res4d_heatmap_bn, name='intermidiate1'), num_or_size_splits=2, axis=3)
 
         # Residual block 4e
         self.res4e_branch2a = tc.layers.conv2d(
@@ -321,6 +317,8 @@ class vnect():
         self.res4f = tf.add(self.res4f_branch2c, self.res4e, name='res4f_add')
         self.res4f = tf.nn.relu(self.res4f, name='res4f')
 
+
+
         # Residual block 5a
         self.res5a_branch2a_new = tc.layers.conv2d(
             self.res4f, kernel_size=1, num_outputs=512, scope='res5a_branch2a_new')
@@ -333,6 +331,14 @@ class vnect():
         self.res5a = tf.add(self.res5a_branch2c_new,
                             self.res5a_branch1_new, name='res5a_add')
         self.res5a = tf.nn.relu(self.res5a, name='res5a')
+        self.res5a_heatmap1a = tf.layers.conv2d_transpose(
+            self.res5a, kernel_size=4, filters=self.n_joints*2, activation=None, strides=2, padding='same', use_bias=False, name='res5a_heatmap1a')
+        self.res5a_heatmap_bn = tc.layers.batch_norm(
+            self.res5a_heatmap1a, scale=True, is_training=self.is_training, scope='res5a_heatmap_bn')
+        self.heatmap_intermidiate2, self.z_heatmap_intermidiate2 = tf.split(tf.nn.relu(
+            self.res5a_heatmap_bn, name='intermidiate2'), num_or_size_splits=2, axis=3)
+
+
 
         # Residual block 5b
         self.res5b_branch2a_new = tc.layers.conv2d(
@@ -375,7 +381,7 @@ class vnect():
     @property
     def model_dir(self):
         return "{}_{}".format(
-            self.dataset_name, self.batch_size)
+            self.dataset_name, self.total_batch)
 
     def save(self, checkpoint_dir, step):
         model_name = "vnect.model"
@@ -411,12 +417,12 @@ if __name__ == '__main__':
     if globalConfig.dataset == 'H36M':
         import data.h36m as h36m
         ds = Dataset()
-        ds.loadH36M(64, mode='train', with_heatmap=True,
-                    tApp=True, replace=True)
+        ds.loadH36M(64*50, mode='train', with_heatmap=True,
+                    tApp=True, replace=False)
 
         val_ds = Dataset()
-        val_ds.loadH36M(64, mode='valid', with_heatmap=True,
-                        tApp=True, replace=True)
+        val_ds.loadH36M(109867, mode='valid', with_heatmap=False,
+                        tApp=True, replace=False)
         Vnect = vnect()
 
     elif globalConfig.dataset == 'APE':
@@ -431,5 +437,6 @@ if __name__ == '__main__':
     else:
         raise ValueError('unknown dataset %s' % globalConfig.dataset)
 
-    Vnect.train(ds, val_ds)
-    # Vnect.predict(val_ds)
+    # Vnect.train(ds, val_ds)
+    train_total_batch = 109867//64
+    Vnect.predict(val_ds, train_total_batch)

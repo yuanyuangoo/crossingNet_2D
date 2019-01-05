@@ -77,7 +77,7 @@ class Frame(object):
             self.crop_skel = None
             self.with_skel = False
             self.label = label
-        if isinstance(heatmap,np.ndarray):
+        if isinstance(heatmap, np.ndarray):
             self.heatmap = heatmap.astype(np.float32)
             self.z_map = z_map.astype(np.float32)
         else:
@@ -107,6 +107,7 @@ class Frame(object):
         self.com3D[2] = 200
         self.skel = (self.crop_skel + repmat(self.com3D, 1, jntNum))[0]
         self.skel = self.skel.astype(np.float32)
+
 
 def adjust_learning_rate(optimizer, epoch, dropLR, LR):
     lr = LR * (0.1 ** (epoch // dropLR))
@@ -315,7 +316,6 @@ def merge(images, size, skel=None):
 
 def prep_data(train_dataset, batch_size, skel=True, heat_map=False):
 
-
     train_labels = []
     train_img = []
     train_img_RGB = []
@@ -381,6 +381,10 @@ def CenterGaussianHeatMap(img_height, img_width, c_x, c_y, variance=21):
     return gaussian_map
 
 
+def calculateAccuracy(result, ground_truth):
+    a = 1
+
+
 def SkelGaussianHeatMap(img_height, img_width, skel):
     n_joints = int(len(skel)/3)
     pose_heatmap = np.zeros((img_height//8, img_width//8, n_joints))
@@ -415,21 +419,57 @@ def SkelFromOnemap(heat_map, z_map):
 
 def SkelFromHeatmap(heatmap, z_map):
     batch_size = heatmap.shape[0]
-    skel=[]
+    skel = []
     for idx in range(batch_size):
-        H=heatmap[idx]
-        Z=z_map[idx]
-        skel.append(SkelFromOnemap(H,Z))
+        H = heatmap[idx]
+        Z = z_map[idx]
+        skel.append(SkelFromOnemap(H, Z))
     return np.asarray(skel)
 
 
-
-
 def extract_2d_joint_from_heatmap(heatmap, input_size):
-    heatmap_resized = cv2.resize(heatmap, (input_size, input_size),interpolation=cv2.INTER_LINEAR)
-    joints_2d=np.zeros((17,2))
+    heatmap_resized = cv2.resize(
+        heatmap, (input_size, input_size), interpolation=cv2.INTER_LINEAR)
+    joints_2d = np.zeros((17, 2))
     for joint_num in range(heatmap_resized.shape[2]):
-        joint_coord = np.unravel_index(np.argmax(heatmap_resized[:, :, joint_num]), (input_size, input_size))
+        joint_coord = np.unravel_index(
+            np.argmax(heatmap_resized[:, :, joint_num]), (input_size, input_size))
         joints_2d[joint_num, :] = joint_coord
 
     return joints_2d
+
+
+def get_dist_pck(pred, gt):
+    dist_ratio = np.zeros((1, pred.shape[0], pred.shape[2]))
+    for imgidx in range(64):
+        refDist = np.linalg.norm(gt[imgidx, :, 12]-gt[imgidx, :, 5])
+
+        dist_ratio[0, imgidx, :] = np.sqrt(
+            sum(
+                np.square(
+                    pred[imgidx, :, :]-gt[imgidx, :, :]
+                ), 0
+            )
+        )/refDist
+
+    return dist_ratio
+
+
+def compute_pck(dist_ratio, threshold):
+    pck = np.zeros((len(threshold), dist_ratio.shape[2]+1))
+    for jidx in range(dist_ratio.shape[2]):
+        for i, t in enumerate(threshold):
+            pck[i, jidx] = 100*np.mean(np.squeeze(dist_ratio[0, :, jidx]) <= t)
+    for i, t in enumerate(threshold):
+            pck[i, -1] = 100*np.mean(np.reshape(np.squeeze(dist_ratio[0, :, :]),
+                                                (dist_ratio.shape[1]*dist_ratio.shape[2], 1)) <= t)
+    return pck
+
+
+def eval_pck(pred, gt, symmetry_joint_id, joint_name, name):
+    pred = np.reshape(pred, (pred.shape[0], 3, 17))
+    gt = np.reshape(gt, (gt.shape[0], 3, 17))
+
+    dist = get_dist_pck(pred, gt)
+    pck_all = compute_pck(dist, [0.5, 0.2])
+    return pck_all
