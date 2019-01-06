@@ -432,36 +432,56 @@ def extract_2d_joint_from_heatmap(heatmap, input_size):
 
 
 def get_dist_pck(pred, gt):
-    dist_ratio = np.zeros((1, pred.shape[0], pred.shape[2]))
+    dist_ratio = np.zeros((pred.shape[0], pred.shape[2]))
     for imgidx in range(64):
         refDist = np.linalg.norm(gt[imgidx, :, 12]-gt[imgidx, :, 5])
 
-        dist_ratio[0, imgidx, :] = np.sqrt(
+        dist_ratio[imgidx, :] = np.sqrt(
             sum(
                 np.square(
                     pred[imgidx, :, :]-gt[imgidx, :, :]
-                ), 0
-            )
+                ), 0)
         )/refDist
 
     return dist_ratio
 
 
-def compute_pck(dist_ratio, threshold):
-    pck = np.zeros((len(threshold), dist_ratio.shape[2]+1))
-    for jidx in range(dist_ratio.shape[2]):
+def compute_pck(dist_ratio, label, threshold):
+    pck = np.zeros((len(threshold),label.shape[1]+1, dist_ratio.shape[1]+1))
+    for jidx in range(dist_ratio.shape[1]):
+        for i_label in range(label.shape[1]):
+            idx_of_label = np.where(label[:, i_label] == 1)[0]
+            if len(idx_of_label) == 0:
+                continue
+            for i, t in enumerate(threshold):
+                pck[i, i_label, jidx] = 100 * \
+                    np.mean(dist_ratio[idx_of_label[0], jidx] <= t)
+    for i_label in range(label.shape[1]):
+        idx_of_label = np.where(label[:, i_label] == 1)[0]
+        if len(idx_of_label) == 0:
+                continue
         for i, t in enumerate(threshold):
-            pck[i, jidx] = 100*np.mean(np.squeeze(dist_ratio[0, :, jidx]) <= t)
+                pck[i, i_label, -1] = 100 * \
+                    np.mean(dist_ratio[idx_of_label[0], :] <= t)
+
+    for jidx in range(dist_ratio.shape[1]):
+        for i, t in enumerate(threshold):
+            pck[i, -1, jidx] = 100 * \
+                np.mean(dist_ratio[:, jidx] <= t)
+
     for i, t in enumerate(threshold):
-            pck[i, -1] = 100*np.mean(np.reshape(np.squeeze(dist_ratio[0, :, :]),
-                                                (dist_ratio.shape[1]*dist_ratio.shape[2], 1)) <= t)
+        pck[i, -1, -1] = 100 * \
+            np.mean(dist_ratio[:, :] <= t)
     return pck
 
 
-def eval_pck(pred, gt, symmetry_joint_id, joint_name, name):
+def eval_pck(pred, gt, label, symmetry_joint_id, joint_name, name):
     pred = np.reshape(pred, (pred.shape[0], 3, 17))
     gt = np.reshape(gt, (gt.shape[0], 3, 17))
 
-    dist = get_dist_pck(pred, gt)
-    pck_all = compute_pck(dist, [0.5, 0.2])
-    return pck_all
+    dist_3d = get_dist_pck(pred, gt)
+    pck_all_3d = compute_pck(dist_3d, label, [0.5, 0.2])
+
+    dist_2d = get_dist_pck(pred, gt)
+    pck_all_2d = compute_pck(dist_2d, label, [0.5, 0.2])
+    return pck_all_3d, pck_all_2d

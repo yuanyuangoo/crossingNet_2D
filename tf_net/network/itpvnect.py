@@ -62,13 +62,13 @@ class vnect():
         self.saver = tf.train.Saver(max_to_keep=20)
 
     def predict(self, valid_dataset, train_total_batch):
-        self.total_batch = train_total_batch
         if not os.path.exists(self.sample_dir):
             os.makedirs(self.sample_dir)
         _, test_skel, _, test_img_rgb, _, _ = prep_data(
             valid_dataset, self.batch_size,with_background=False)
+        self.total_batch = test_skel.shape[0]//self.batch_size
         result = np.zeros(test_skel.shape)
-        with tf.Session(config=tf.ConfigProto(log_device_placement=True,device_count={'gpu':0})) as self.sess:
+        with tf.Session(config=tf.ConfigProto(log_device_placement=True, device_count={'gpu': 0})) as self.sess:
             counter = 1
             start_time = time.time()
             could_load, checkpoint_counter = self.load(self.checkpoint_dir)
@@ -91,7 +91,7 @@ class vnect():
                             '{}/test_{:02d}.png'.format(self.sample_dir, idx), skel=(result+128)/256)
 
             np.save('result_{}.out'.format(train_total_batch), result)
-            a = eval_pck((result+128)/256, test_skel, 1, 1, 1)
+            a = eval_pck((result+128)/256, test_skel)
             
 
     def train(self,train_dataset,valid_dataset):
@@ -428,9 +428,9 @@ class vnect():
 if __name__ == '__main__':
     if globalConfig.dataset == 'H36M':
         import data.h36m as h36m
-        ds = Dataset()
-        ds.loadH36M_expended(64*50, mode='train',
-                             tApp=True, replace=False)
+        # ds = Dataset()
+        # ds.loadH36M_expended(64*50, mode='train',
+        #                      tApp=True, replace=False)
 
         val_ds = Dataset()
         val_ds.loadH36M(64, mode='valid',
@@ -450,6 +450,6 @@ if __name__ == '__main__':
     else:
         raise ValueError('unknown dataset %s' % globalConfig.dataset)
 
-    Vnect.train(ds, val_ds)
+    # Vnect.train(ds, val_ds)
     # train_total_batch = 1
-    # Vnect.predict(val_ds, train_total_batch)
+    Vnect.predict(val_ds, 'all')

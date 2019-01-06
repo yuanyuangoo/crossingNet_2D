@@ -231,7 +231,7 @@ class Dataset(object):
                 t1 = time.time() - t1
                 print('loaded with {}s'.format(t1))
                 continue
-
+            self.frmList = []
             frmStartNum = batch_idx*nums_in_onebatch
             frmEndNum = min((batch_idx+1)*nums_in_onebatch, nSamples)
 
@@ -259,8 +259,6 @@ class Dataset(object):
             pickle.dump((self.frmList), f, protocol=pickle.HIGHEST_PROTOCOL)
             f.close()
             print('loaded with {} frames'.format(len(self.frmList)))
-
-
 
     def loadH36M(self, Fsize, frmStartNum=0, mode='train', replace=False, tApp=False,with_background=False):
         from h36m import H36M
@@ -337,7 +335,7 @@ if __name__ == '__main__':
         #             tApp=True, replace=True)
 
         val_ds = Dataset()
-        val_ds.loadH36M_all('all', mode='valid',
+        val_ds.loadH36M(64, mode='valid',
                         tApp=True, replace=False, with_background=False)
         
     elif globalConfig.dataset == 'APE':
