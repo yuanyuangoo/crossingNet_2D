@@ -475,7 +475,7 @@ def compute_pck(dist_ratio, label, threshold):
     return pck
 
 
-def eval_pck(pred, gt, label, symmetry_joint_id, joint_name, name):
+def eval_pck(pred, gt, label):
     pred = np.reshape(pred, (pred.shape[0], 3, 17))
     gt = np.reshape(gt, (gt.shape[0], 3, 17))
 

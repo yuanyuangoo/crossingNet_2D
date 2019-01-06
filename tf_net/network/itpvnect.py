@@ -10,7 +10,7 @@ from data.dataset import *
 import globalConfig
 from six.moves import xrange
 
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 image_summary = tf.summary.image
 scalar_summary = tf.summary.scalar
 histogram_summary = tf.summary.histogram
@@ -61,14 +61,14 @@ class vnect():
         self.t_vars = tf.global_variables()
         self.saver = tf.train.Saver(max_to_keep=20)
 
-    def predict(self, valid_dataset, train_total_batch):
+    def predict(self, valid_dataset, model):
         if not os.path.exists(self.sample_dir):
             os.makedirs(self.sample_dir)
-        _, test_skel, _, test_img_rgb, _, _ = prep_data(
-            valid_dataset, self.batch_size,with_background=False)
-        self.total_batch = test_skel.shape[0]//self.batch_size
+        test_label, test_skel, _, test_img_rgb, _, _ = prep_data(
+            valid_dataset, self.batch_size, with_background=False)
+        self.total_batch = 49
         result = np.zeros(test_skel.shape)
-        with tf.Session(config=tf.ConfigProto(log_device_placement=True, device_count={'gpu': 0})) as self.sess:
+        with tf.Session() as self.sess:
             counter = 1
             start_time = time.time()
             could_load, checkpoint_counter = self.load(self.checkpoint_dir)
@@ -79,7 +79,7 @@ class vnect():
                 print(" [!] Load failed...")
             batch_idxs = test_skel.shape[0]//self.batch_size
 
-            for idx in xrange(0, int(batch_idxs)):
+            for idx in tqdm(xrange(0, int(batch_idxs))):
                 heatmap_samples, z_heatmap_samples = self.sess.run([self.heatmap, self.z_heatmap],
                                                                    feed_dict={
                     self.image_input: test_img_rgb[idx *
@@ -88,11 +88,11 @@ class vnect():
                 skel = SkelFromHeatmap(heatmap_samples, z_heatmap_samples)
                 result[idx * self.batch_size:(idx+1)*self.batch_size] = skel
                 save_images(test_img_rgb, image_manifold_size(self.batch_size),
-                            '{}/test_{:02d}.png'.format(self.sample_dir, idx), skel=(result+128)/256)
+                            '{}/test_{:02d}_{}.png'.format(self.sample_dir, idx, model), skel=(result+128)/256)
 
-            np.save('result_{}.out'.format(train_total_batch), result)
-            a = eval_pck((result+128)/256, test_skel)
-            
+            np.save('result_{}.out'.format(model), result)
+            pck = eval_pck((result+128)/256, test_skel, test_label)
+            np.save('result_pck_{}.out'.format(model), pck)
 
     def train(self,train_dataset,valid_dataset):
         if not os.path.exists(self.checkpoint_dir):
@@ -433,9 +433,10 @@ if __name__ == '__main__':
         #                      tApp=True, replace=False)
 
         val_ds = Dataset()
-        val_ds.loadH36M(64, mode='valid',
-                        tApp=True, replace=False)
-
+        val_ds.loadH36M_all('all', mode='valid',
+                            tApp=True, replace=False)
+        # val_ds.loadH36M(64, mode='valid',
+        #                     tApp=True, replace=False)
         Vnect = vnect()
 
     elif globalConfig.dataset == 'APE':
@@ -452,4 +453,5 @@ if __name__ == '__main__':
 
     # Vnect.train(ds, val_ds)
     # train_total_batch = 1
-    Vnect.predict(val_ds, 'all')
+    Vnect.predict(val_ds, 499)
+    Vnect.predict(val_ds, 49)
