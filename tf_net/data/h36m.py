@@ -184,6 +184,7 @@ class H36M:
 
 
 # a=H36M('valid')
-# print(a.nSamples)
+# b=a.getSkel(10)
+# print(b)
 # a=H36M('train')
 # print(a.nSamples)

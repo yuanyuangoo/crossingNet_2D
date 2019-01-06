@@ -16,23 +16,22 @@ import globalConfig
 from data.layers import *
 from data.dataset import *
 from data.util import *
-Num_of_Joints = 15
 EPS = 1e-12
 gray2rgb = tf.image.grayscale_to_rgb
 
 
 class PganR(object):
-    def __init__(self, dim_x=Num_of_Joints*3,sample_dir="samples",checkpoint_dir="./checkpoint"):
+    def __init__(self, dim_x=17*3, label_dim=15, sample_dir="samples", checkpoint_dir="./checkpoint"):
         self.checkpoint_dir = os.path.join(
             globalConfig.pganR_pretrain_path, checkpoint_dir)
         self.sample_dir = os.path.join(
             globalConfig.pganR_pretrain_path, sample_dir)
         self.dim_x = dim_x
 
-        self.FR = p2igan(dim_z=15*3, label_dim=7)
+        self.FR = p2igan(dim_z=self.dim_x, label_dim=label_dim)
         self.sample_G = self.FR.sample
         self.FR_G = self.FR.G
-        self.p2p = P2PGAN(label_dim=7)
+        self.p2p = P2PGAN(label_dim=label_dim)
 
         with tf.variable_scope("p2p") as scope:
             scope.reuse_variables()
@@ -162,14 +161,14 @@ class PganR(object):
 
             self.save(self.checkpoint_dir, counter)
 
-    def predict(self, csvfile):
+    def predict(self):
         if not os.path.exists(self.checkpoint_dir):
             os.makedirs(self.checkpoint_dir)
         if not os.path.exists(self.sample_dir):
             os.makedirs(self.sample_dir)
-        test_skel = np.genfromtxt('adjusted_sample.csv', delimiter=',')
-        test_label = np.zeros((test_skel.shape[0], 15))
-        test_label[:, 1] = 1
+        test_skel = np.load('samples_skel.out.npy')
+        test_label = np.load('samples_label.out.npy')
+        print("Samples loaded...")
         with tf.Session() as self.sess:
             tf.global_variables_initializer().run()
             forward_gan_var = [
@@ -182,24 +181,25 @@ class PganR(object):
             self.saver = tf.train.Saver(p2p_gan_var)
             could_load, checkpoint_counter = self.load(
                 self.p2p.checkpoint_dir)
-            batch_idxs = int(test_skel.shape[0]/self.batch_size)
-            for idx in range(0, int(batch_idxs)):
+            batch_idxs = test_skel.shape[0]//self.batch_size
+            for idx in tqdm(range(0, int(batch_idxs))):
                 batch_labels = test_label[idx *
                                           self.batch_size:(idx+1)*self.batch_size]
                 batch_skel = test_skel[idx *
                                        self.batch_size:(idx+1)*self.batch_size]
-                sample_G, samples = self.sess.run([self.sample_G, self.sample], feed_dict={
+                samples = self.sess.run(self.sample, feed_dict={
                     self.FR.pose_input: batch_skel,
                     self.FR.y: batch_labels,
                     self.p2p.label: batch_labels
                 })
-                save_images(sample_G, image_manifold_size(sample_G.shape[0]),
-                            '{}/test_G_{:04d}.png'.format(self.sample_dir, idx), skel=batch_skel)
-                save_images(samples, image_manifold_size(samples.shape[0]),
-                            '{}/test_S{:04d}.png'.format(self.sample_dir, idx), skel=batch_skel)
-                save_images(samples, image_manifold_size(samples.shape[0]),
-                            '{}/test_{:04d}.png'.format(self.sample_dir, idx), skel=None)
-
+                # save_images(sample_G, image_manifold_size(sample_G.shape[0]),
+                #             '{}/test_G_{:04d}.png'.format(self.sample_dir, idx), skel=batch_skel)
+                # save_images(samples, image_manifold_size(samples.shape[0]),
+                #             '{}/test_S{:04d}.png'.format(self.sample_dir, idx), skel=batch_skel)
+                # save_images(samples, image_manifold_size(samples.shape[0]),
+                #             '{}/test_{:04d}.png'.format(self.sample_dir, idx), skel=None)
+                save_images_one_by_one(
+                    samples, self.sample_dir+'_predicted', idx)
     def test(self, valid_dataset):
         if not os.path.exists(self.checkpoint_dir):
             os.makedirs(self.checkpoint_dir)
@@ -257,7 +257,7 @@ class PganR(object):
             print(" [*] Success to read {}".format(ckpt_name))
             return True, counter
         else:
-            print(" [*] Failed to find a ch10240kpoint")
+            print(" [*] Failed to find a checkpoint")
             return False, 0
 
     def save(self, checkpoint_dir, step):
@@ -274,12 +274,13 @@ class PganR(object):
 
 if __name__ == '__main__':
     if globalConfig.dataset == 'H36M':
-        import data.h36m as h36m
-        ds = Dataset()
-        ds.loadH36M(40960, mode='train', tApp=True, replace=False)
+        # import data.h36m as h36m
+        # ds = Dataset()
+        # ds.loadH36M(40960, mode='train', tApp=True, replace=False)
 
-        val_ds = Dataset()
-        val_ds.loadH36M(64, mode='valid', tApp=True, replace=True)
+        # val_ds = Dataset()
+        # val_ds.loadH36M(64, mode='valid', tApp=True, replace=True)
+        pganR = PganR(dim_x=17*3)
     elif globalConfig.dataset == 'APE':
         ds = Dataset()
         ds.loadApe(64*300, mode='train', tApp=True, replace=False)
@@ -292,5 +293,5 @@ if __name__ == '__main__':
         raise ValueError('unknown dataset %s' % globalConfig.dataset)
 
     # pganR.test(val_ds)
-    pganR.train(ds, val_ds)
-    # pganR.predict('../adjusted_sample.csv')
+    # pganR.train(ds, val_ds)
+    pganR.predict()

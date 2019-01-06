@@ -18,6 +18,7 @@ class Image(object):
 
     def loadSKATE(self, path, RGB=False):
         if os.path.exists(path) == False:
+            print(path)
             raise IOError('Can''t find the image {}'.format(path))
 
         if RGB:

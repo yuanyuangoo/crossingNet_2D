@@ -3,13 +3,14 @@ import tensorflow.contrib as tc
 import numpy as np
 import sys
 import os
+import time
 sys.path.append('./')
 from data.util import *
 from data.dataset import *
 import globalConfig
 from six.moves import xrange
 
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 image_summary = tf.summary.image
 scalar_summary = tf.summary.scalar
 histogram_summary = tf.summary.histogram
@@ -18,7 +19,7 @@ SummaryWriter = tf.summary.FileWriter
 
 
 class vnect():
-    def __init__(self, input_size=128, checkpoint_dir="./checkpoint", sample_dir="samples", batch_size=64, learning_rate=2e-5, beta1=0.5, epoch=200, conv_ratio=8):
+    def __init__(self, input_size=128, checkpoint_dir="./checkpoint", sample_dir="samples", batch_size=64, learning_rate=2e-5, beta1=0.5, epoch=20, conv_ratio=8):
         self.is_training = False
         self.dataset_name=globalConfig.dataset
         self.checkpoint_dir = os.path.join(
@@ -64,10 +65,10 @@ class vnect():
         self.total_batch = train_total_batch
         if not os.path.exists(self.sample_dir):
             os.makedirs(self.sample_dir)
-        _, test_skel, _, test_img_rgb, test_heat_maps, test_z_heat_maps, _, _ = prep_data(
-            valid_dataset, self.batch_size, heat_map=True)
+        _, test_skel, _, test_img_rgb, _, _ = prep_data(
+            valid_dataset, self.batch_size,with_background=False)
         result = np.zeros(test_skel.shape)
-        with tf.Session() as self.sess:
+        with tf.Session(config=tf.ConfigProto(log_device_placement=True,device_count={'gpu':0})) as self.sess:
             counter = 1
             start_time = time.time()
             could_load, checkpoint_counter = self.load(self.checkpoint_dir)
@@ -76,7 +77,6 @@ class vnect():
                 print(" [*] Load SUCCESS")
             else:
                 print(" [!] Load failed...")
-            print(counter)
             batch_idxs = test_skel.shape[0]//self.batch_size
 
             for idx in xrange(0, int(batch_idxs)):
@@ -88,8 +88,10 @@ class vnect():
                 skel = SkelFromHeatmap(heatmap_samples, z_heatmap_samples)
                 result[idx * self.batch_size:(idx+1)*self.batch_size] = skel
                 save_images(test_img_rgb, image_manifold_size(self.batch_size),
-                            '{}/test_{:02d}.png'.format(self.sample_dir, idx), skel=skel)
-            a = eval_pck(result, test_skel,1,1,1)
+                            '{}/test_{:02d}.png'.format(self.sample_dir, idx), skel=(result+128)/256)
+
+            np.save('result_{}.out'.format(train_total_batch), result)
+            a = eval_pck((result+128)/256, test_skel, 1, 1, 1)
             
 
     def train(self,train_dataset,valid_dataset):
@@ -98,12 +100,22 @@ class vnect():
         if not os.path.exists(self.sample_dir):
             os.makedirs(self.sample_dir)
             
-        _, train_skel, _, train_img_rgb, train_heat_maps, train_z_heat_maps, self.n_samples, self.total_batch = prep_data(
-            train_dataset, self.batch_size, heat_map=True)
-        _, test_skel, _, test_img_rgb, test_heat_maps, test_z_heat_maps, _, _ = prep_data(
-            valid_dataset, self.batch_size, heat_map=True)
+        _, train_skel, _, train_img_rgb, self.n_samples, self.total_batch = prep_data(
+            train_dataset, self.batch_size)
+        _, test_skel, _, test_img_rgb, _, _ = prep_data(
+            valid_dataset, self.batch_size)
+        print("Preparing heatmap!")
+        train_heat_maps = np.zeros(
+            (self.n_samples, self.input_size//8, self.input_size//8, self.n_joints))
+        train_z_heat_maps = np.zeros(
+            (self.n_samples, self.input_size//8, self.input_size//8, self.n_joints))
 
-        with tf.Session() as self.sess:
+        for idx in tqdm(range(self.n_samples)):
+            train_heat_maps[idx], train_z_heat_maps[idx] = SkelGaussianHeatMap(
+                self.input_size, self.input_size, train_skel[idx]*256-128)
+        print("Prepare heatmap completed!")
+
+        with tf.Session(config=tf.ConfigProto(log_device_placement=True)) as self.sess:
             a_optim = tf.train.AdamOptimizer(self.learning_rate, beta1=self.beta1) \
                 .minimize(self.loss, var_list=self.t_vars)
             try:
@@ -115,17 +127,17 @@ class vnect():
             self.all_sum = merge_summary([
                                           self.z_loss_sum, self.loss_sum, self.heatmap_loss_sum, self.image_input_sum])
             self.writer = SummaryWriter(
-                os.path.join(globalConfig.vnect_pretrain_path, "logs"), graph=self.sess.graph, filename_suffix='.ivtvnect')
+                os.path.join(globalConfig.vnect_pretrain_path, "logs"), graph=self.sess.graph, filename_suffix='.iptvnect')
 
             counter = 0
             start_time = time.time()
 
-            # could_load, checkpoint_counter = self.load(self.checkpoint_dir)
-            # if could_load:
-            #     counter = checkpoint_counter
-            #     print(" [*] Load SUCCESS")
-            # else:
-            #     print(" [!] Load failed...")
+            could_load, checkpoint_counter = self.load(self.checkpoint_dir)
+            if could_load:
+                counter = checkpoint_counter
+                print(" [*] Load SUCCESS")
+            else:
+                print(" [!] Load failed...")
 
             self.train_size = np.inf
             for epoch in xrange(self.epoch):
@@ -160,7 +172,7 @@ class vnect():
                 skel=SkelFromHeatmap(heatmap_samples, z_heatmap_samples)
                 
                 save_images(test_img_rgb, image_manifold_size(self.batch_size),
-                            '{}/train_{:02d}_{:04d}.png'.format(self.sample_dir, epoch, idx), skel=skel)
+                            '{}/train_{:02d}_{:04d}.png'.format(self.sample_dir, epoch, idx), skel=(skel+128)/256)
                 if np.mod(epoch,50)==0:
                     self.save(self.checkpoint_dir, counter)
             self.save(self.checkpoint_dir, counter)
@@ -417,12 +429,13 @@ if __name__ == '__main__':
     if globalConfig.dataset == 'H36M':
         import data.h36m as h36m
         ds = Dataset()
-        ds.loadH36M(64*50, mode='train', with_heatmap=True,
-                    tApp=True, replace=False)
+        ds.loadH36M_expended(64*50, mode='train',
+                             tApp=True, replace=False)
 
         val_ds = Dataset()
-        val_ds.loadH36M(109867, mode='valid', with_heatmap=False,
+        val_ds.loadH36M(64, mode='valid',
                         tApp=True, replace=False)
+
         Vnect = vnect()
 
     elif globalConfig.dataset == 'APE':
@@ -437,6 +450,6 @@ if __name__ == '__main__':
     else:
         raise ValueError('unknown dataset %s' % globalConfig.dataset)
 
-    # Vnect.train(ds, val_ds)
-    train_total_batch = 109867//64
-    Vnect.predict(val_ds, train_total_batch)
+    Vnect.train(ds, val_ds)
+    # train_total_batch = 1
+    # Vnect.predict(val_ds, train_total_batch)

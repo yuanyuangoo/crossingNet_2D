@@ -142,8 +142,127 @@ class Dataset(object):
     '''
     interface to neural network, used for training
     '''
+    def loadH36M_expended(self, Fsize, frmStartNum=0, mode='train', replace=False, tApp=False):
+        from h36m import H36M
+        '''
+           mode: if train, only save the cropped image
+           replace: replace the previous cache file if exists
+           tApp: append to previous loaded file if True
+        '''
+        if not hasattr(self, 'frmList'):
+            self.frmList = []
+        if not tApp:
+            self.frmList = []
+        pickleCachePath_expanded = '{}h36m_{}_{}_{}.pkl'.format(
+            self.cache_base_path, mode, "with_expanded", Fsize)
 
-    def loadH36M(self, Fsize, frmStartNum=0, mode='train', with_heatmap=False, replace=False, tApp=False):
+        if os.path.isfile(pickleCachePath_expanded) and not replace:
+            print('direct load from the cache')
+            t1 = time.time()
+            f = open(pickleCachePath_expanded, 'rb')
+            # (self.frmList) += pickle.load(f)
+            (self.frmList) += pickle.load(f)
+            t1 = time.time() - t1
+            print('loaded with {}s'.format(t1))
+            return self.frmList
+
+
+        pickleCachePath = '{}h36m_{}_{}.pkl'.format(
+            self.cache_base_path, mode, Fsize)
+
+        if os.path.isfile(pickleCachePath):
+            print('direct load from the cache')
+            t1 = time.time()
+            f = open(pickleCachePath, 'rb')
+            # (self.frmList) += pickle.load(f)
+            (self.frmList) += pickle.load(f)
+            t1 = time.time() - t1
+            print('loaded with {}s'.format(t1))
+            # return self.frmList
+        
+        test_skel = np.load('samples_skel.out.npy')
+        test_label = np.load('samples_label.out.npy')
+        n_samples = len(self.frmList)
+        img_path = '/media/hsh65/Portable/h36m/cache/model/pganR/H36M_dummy/params/samples_predicted/'
+
+        for idx in tqdm(range(len(test_label))):
+            label = test_label[idx]
+            skel = test_skel[idx]
+            frmPath_rgb = '{}/predict_{:04d}.png'.format(img_path, idx)
+
+            img_RGB = Image('H36M', frmPath_rgb, RGB=True)
+            img = []
+            self.frmList.append(
+                Frame(img, img_RGB, skel, label, frmPath_rgb))
+
+        if not os.path.exists(self.cache_base_path):
+            os.makedirs(self.cache_base_path)
+
+        f = open(pickleCachePath_expanded, 'wb')
+        pickle.dump((self.frmList), f, protocol=pickle.HIGHEST_PROTOCOL)
+        f.close()
+        print("{}_writing completed".format(len(self.frmList)))
+
+    def loadH36M_all(self, Fsize, frmStartNum=0, mode='train', replace=False, tApp=False,with_background=False):
+        if not hasattr(self, 'frmList'):
+            self.frmList = []
+        if not tApp:
+            self.frmList = []
+        with_back = ''
+        if with_background:
+            with_back = 'with_back'
+
+        from h36m import H36M
+        data = H36M(mode)
+        if Fsize == 'all':
+            nSamples = data.nSamples
+        nums_in_onebatch = (64*200)
+        nbatch = nSamples//nums_in_onebatch
+        for batch_idx in range(nbatch):
+            print('Processing batch {} in {}'.format(batch_idx, nbatch))
+            pickleCachePath = '{}h36m_{}_{}_{}_{}.pkl'.format(
+                self.cache_base_path, mode, Fsize, with_back, batch_idx)
+            if os.path.isfile(pickleCachePath) and not replace:
+                print('direct load from the cache')
+                t1 = time.time()
+                f = open(pickleCachePath, 'rb')
+                # (self.frmList) += pickle.load(f)
+                (self.frmList) += pickle.load(f)
+                t1 = time.time() - t1
+                print('loaded with {}s'.format(t1))
+                continue
+
+            frmStartNum = batch_idx*nums_in_onebatch
+            frmEndNum = min((batch_idx+1)*nums_in_onebatch, nSamples)
+
+            for frmIdx in tqdm(range(frmStartNum, frmEndNum)):
+                while True:
+                    [frmPath, label] = data.getImgName_onehotLabel(frmIdx)
+                    frmPath_rgb = data.getImgName_RGB(frmIdx)
+                    if os.path.exists(frmPath) and os.path.exists(frmPath_rgb):
+                        break
+                    else:
+                        frmIdx = frmIdx+1
+                
+                skel = np.asarray(data.getSkel(frmIdx))
+                if skel.shape == ():
+                    continue
+                skel.shape = (-1)
+                img=[]
+                if with_background:
+                    img = Image('H36M', frmPath)
+                img_RGB = Image('H36M', frmPath_rgb, RGB=True)
+                self.frmList.append(Frame(img, img_RGB, skel, label, frmPath))
+            if not os.path.exists(self.cache_base_path):
+                os.makedirs(self.cache_base_path)
+            f = open(pickleCachePath, 'wb')
+            pickle.dump((self.frmList), f, protocol=pickle.HIGHEST_PROTOCOL)
+            f.close()
+            print('loaded with {} frames'.format(len(self.frmList)))
+
+
+
+    def loadH36M(self, Fsize, frmStartNum=0, mode='train', replace=False, tApp=False,with_background=False):
         from h36m import H36M
         '''
            mode: if train, only save the cropped image
@@ -156,12 +275,12 @@ class Dataset(object):
             self.frmList = []
         # fileIdx = int(frmStartNum / self.h36m_frm_perfile)
 
-        if with_heatmap:
-            pickleCachePath = '{}h36m_{}_{}_{}.pkl'.format(
-                self.cache_base_path, mode, "with_heatmap", Fsize)
-        else:
-            pickleCachePath = '{}h36m_{}_{}.pkl'.format(
-                self.cache_base_path, mode, Fsize)
+        with_back = ''
+        if with_background:
+            with_back = 'with_back'
+        pickleCachePath = '{}h36m_{}_{}_{}.pkl'.format(
+                self.cache_base_path, mode, Fsize,with_back)
+
         if os.path.isfile(pickleCachePath) and not replace:
             print('direct load from the cache')
             t1 = time.time()
@@ -189,18 +308,11 @@ class Dataset(object):
             if skel.shape == ():
                 continue
             skel.shape = (-1)
-
-            if with_heatmap:
-                img_RGB = Image('H36M', frmPath_rgb, RGB=True)
-                img = []
-                heat_map, z_map = SkelGaussianHeatMap(128, 128, skel)
-                self.frmList.append(
-                    Frame(img, img_RGB, skel, label, frmPath, heat_map, z_map))
-                a = 1
-            else:
+            img=[]
+            if with_background:
                 img = Image('H36M', frmPath)
-                img_RGB = Image('H36M', frmPath_rgb, RGB=True)
-                self.frmList.append(Frame(img, img_RGB, skel, label, frmPath))
+            img_RGB = Image('H36M', frmPath_rgb, RGB=True)
+            self.frmList.append(Frame(img, img_RGB, skel, label, frmPath))
 
             # self.frmList[-1].saveOnlyForTrain()
 
@@ -216,23 +328,24 @@ class Dataset(object):
     '''
 
 
+
 if __name__ == '__main__':
     if globalConfig.dataset == 'H36M':
         import data.h36m as h36m
-        ds = Dataset()
-        # for i in range(0, 20000, 20000):
-        ds.loadH36M(1024, mode='train', tApp=True, replace=True)
+        # ds = Dataset()
+        # ds.loadH36M_expended(64*50, mode='train',
+        #             tApp=True, replace=True)
 
         val_ds = Dataset()
-        # for i in range(0, 20000, 20000):
-        val_ds.loadH36M(64, mode='valid', tApp=True, replace=True)
-
-    elif globalConfig.dataset == 'Skate':
-        val_ds = Dataset()
-        val_ds.loadSkate(64, mode='valid', tApp=True, replace=True)
-
+        val_ds.loadH36M_all('all', mode='valid',
+                        tApp=True, replace=False, with_background=False)
+        
     elif globalConfig.dataset == 'APE':
+        ds = Dataset()
+        ds.loadApe(64*300, mode='train', tApp=True, replace=False)
+
         val_ds = Dataset()
-        val_ds.loadApe(1024, mode='train', tApp=True, replace=False)
+        val_ds.loadApe(64, mode='valid', tApp=True, replace=False)
+
     else:
         raise ValueError('unknown dataset %s' % globalConfig.dataset)

@@ -203,9 +203,11 @@ class PoseVAE(object):
                 save_images(images, image_manifold_size(samples.shape[0]),
                             '{}/test_{:02d}.png'.format(self.sample_dir, epoch), skel=samples)
                             
-    def predict(self,valid_dataset):
-        test_labels, test_skel, _, _, _, _, _, _ = prep_data(
-            valid_dataset, self.batch_size, heat_map=True)
+    def predict(self, valid_dataset, amplify_ratio=9):
+        test_labels, test_skel, _, _, _, _, = prep_data(
+            valid_dataset, self.batch_size)
+        n_samples = test_skel.shape[0]
+
         with tf.Session() as self.sess:
             tf.global_variables_initializer().run()
             counter = 1
@@ -216,13 +218,31 @@ class PoseVAE(object):
                 print(" [*] Load SUCCESS")
             else:
                 print(" [!] Load failed...")
-            samples = self.sess.run(
-                self.y, feed_dict={self.x_hat: test_skel, self.label_hat: test_labels})
-            import csv
-            with open('samples.csv', 'w',newline='') as csvfile:
-                spamwriter = csv.writer(csvfile, delimiter=' ',
-                            quotechar='|', quoting=csv.QUOTE_MINIMAL)
-                spamwriter.writerows(samples)
+
+            samples_label = np.zeros((
+                n_samples*amplify_ratio, test_labels.shape[1]))
+            samples_skel = np.zeros((
+                n_samples*amplify_ratio, test_skel.shape[1]))
+
+            for i in range(amplify_ratio):
+                for idx in range(n_samples//self.batch_size):
+                    offset = idx*self.batch_size
+                    start_idx = offset
+                    stop_idx = min(offset+self.batch_size, n_samples)
+                    batch_skel = test_skel[start_idx:stop_idx]
+                    batch_label = test_labels[start_idx:stop_idx]
+                    predicted = ((self.sess.run(
+                        self.y, feed_dict={self.x_hat: batch_skel, self.label_hat: batch_label}))*256-128)
+                    samples_skel[i*n_samples+start_idx:i *
+                                 n_samples+stop_idx, :] = predicted
+                    samples_label[i*n_samples+start_idx:i *
+                                  n_samples+stop_idx, :] = batch_label
+
+            samples_label = np.asarray(samples_label, dtype=np.uint8)
+            samples_skel = np.asarray(samples_skel, dtype=np.float32)
+
+            np.save('samples_skel.out', samples_skel)
+            np.save('samples_label.out', samples_label)
 
 
     def train(self, train_dataset, valid_dataset):
@@ -271,7 +291,6 @@ class PoseVAE(object):
                          self.neg_marginal_likelihood, self.KL_divergence, self.sum),
                         feed_dict={self.x_hat: batch_xs_input, self.label_hat: batch_label_input,
                                    self.x: batch_xs_target})
-
                     self.writer.add_summary(summary_str, counter)
                     # print cost every epoch
                     counter += 1
@@ -329,19 +348,15 @@ class PoseVAE(object):
 if __name__ == '__main__':
     if globalConfig.dataset == 'H36M':
         ds = Dataset()
-        # for i in range(0, 20000, 20000):
         ds.loadH36M(64*50, mode='train', tApp=True, replace=False)
 
-        val_ds = Dataset()
-        # for i in range(0, 20000, 20000):
-        val_ds.loadH36M(64, mode='valid', tApp=True, replace=False)
+        # val_ds = Dataset()
+        # val_ds.loadH36M(64, mode='valid', tApp=True, replace=False)
     elif globalConfig.dataset == 'APE':
         ds = Dataset()
-        # for i in range(0, 20000, 20000):
         ds.loadApe(10240, mode='train', tApp=True, replace=False)
 
         val_ds = Dataset()
-        # for i in range(0, 20000, 20000):
         val_ds.loadApe(2048, mode='valid', tApp=True, replace=False)
     else:
         raise ValueError('unknown dataset %s' % globalConfig.dataset)
