@@ -12,3 +12,4 @@ events*
 tf_net/logs/
 tf_net/results/
 tf_net/samples/
+*.npy

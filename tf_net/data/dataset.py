@@ -203,7 +203,7 @@ class Dataset(object):
         f.close()
         print("{}_writing completed".format(len(self.frmList)))
 
-    def loadH36M_all(self, Fsize, frmStartNum=0, mode='train', replace=False, tApp=False,with_background=False):
+    def loadH36M_all(self, batch_idx, frmStartNum=0, mode='train', replace=False, tApp=False,with_background=False):
         if not hasattr(self, 'frmList'):
             self.frmList = []
         if not tApp:
@@ -211,54 +211,53 @@ class Dataset(object):
         with_back = ''
         if with_background:
             with_back = 'with_back'
-
+        self.frmList = []
         from h36m import H36M
         data = H36M(mode)
-        if Fsize == 'all':
-            nSamples = data.nSamples
+        nSamples = data.nSamples
         nums_in_onebatch = (64*200)
         nbatch = nSamples//nums_in_onebatch
-        for batch_idx in range(nbatch):
-            print('Processing batch {} in {}'.format(batch_idx, nbatch))
-            pickleCachePath = '{}h36m_{}_{}_{}_{}.pkl'.format(
-                self.cache_base_path, mode, Fsize, with_back, batch_idx)
-            if os.path.isfile(pickleCachePath) and not replace:
-                print('direct load from the cache')
-                t1 = time.time()
-                f = open(pickleCachePath, 'rb')
-                # (self.frmList) += pickle.load(f)
-                (self.frmList) += pickle.load(f)
-                t1 = time.time() - t1
-                print('loaded with {}s'.format(t1))
-                continue
-            self.frmList = []
-            frmStartNum = batch_idx*nums_in_onebatch
-            frmEndNum = min((batch_idx+1)*nums_in_onebatch, nSamples)
+        print('Processing batch {} in {}'.format(batch_idx, nbatch))
+        pickleCachePath = '{}h36m_{}_{}_{}_{}.pkl'.format(
+            self.cache_base_path, mode, 'all', with_back, batch_idx)
+        if os.path.isfile(pickleCachePath) and not replace:
+            print('direct load from the cache')
+            t1 = time.time()
+            f = open(pickleCachePath, 'rb')
+            # (self.frmList) += pickle.load(f)
+            (self.frmList) += pickle.load(f)
+            t1 = time.time() - t1
+            print('loaded with {}s'.format(t1))
+            return self.frmList
 
-            for frmIdx in tqdm(range(frmStartNum, frmEndNum)):
-                while True:
-                    [frmPath, label] = data.getImgName_onehotLabel(frmIdx)
-                    frmPath_rgb = data.getImgName_RGB(frmIdx)
-                    if os.path.exists(frmPath) and os.path.exists(frmPath_rgb):
-                        break
-                    else:
-                        frmIdx = frmIdx+1
-                
-                skel = np.asarray(data.getSkel(frmIdx))
-                if skel.shape == ():
-                    continue
-                skel.shape = (-1)
-                img=[]
-                if with_background:
-                    img = Image('H36M', frmPath)
-                img_RGB = Image('H36M', frmPath_rgb, RGB=True)
-                self.frmList.append(Frame(img, img_RGB, skel, label, frmPath))
-            if not os.path.exists(self.cache_base_path):
-                os.makedirs(self.cache_base_path)
-            f = open(pickleCachePath, 'wb')
-            pickle.dump((self.frmList), f, protocol=pickle.HIGHEST_PROTOCOL)
-            f.close()
-            print('loaded with {} frames'.format(len(self.frmList)))
+        self.frmList = []
+        frmStartNum = batch_idx*nums_in_onebatch
+        frmEndNum = min((batch_idx+1)*nums_in_onebatch, nSamples)
+
+        for frmIdx in tqdm(range(frmStartNum, frmEndNum)):
+            while True:
+                [frmPath, label] = data.getImgName_onehotLabel(frmIdx)
+                frmPath_rgb = data.getImgName_RGB(frmIdx)
+                if os.path.exists(frmPath) and os.path.exists(frmPath_rgb):
+                    break
+                else:
+                    frmIdx = frmIdx+1
+            
+            skel = np.asarray(data.getSkel(frmIdx))
+            if skel.shape == ():
+                continue
+            skel.shape = (-1)
+            img=[]
+            if with_background:
+                img = Image('H36M', frmPath)
+            img_RGB = Image('H36M', frmPath_rgb, RGB=True)
+            self.frmList.append(Frame(img, img_RGB, skel, label, frmPath))
+        if not os.path.exists(self.cache_base_path):
+            os.makedirs(self.cache_base_path)
+        f = open(pickleCachePath, 'wb')
+        pickle.dump((self.frmList), f, protocol=pickle.HIGHEST_PROTOCOL)
+        f.close()
+        print('loaded with {} frames'.format(len(self.frmList)))
 
     def loadH36M(self, Fsize, frmStartNum=0, mode='train', replace=False, tApp=False,with_background=False):
         from h36m import H36M

@@ -61,38 +61,90 @@ class vnect():
         self.t_vars = tf.global_variables()
         self.saver = tf.train.Saver(max_to_keep=20)
 
-    def predict(self, valid_dataset, model):
+    def predict(self, valid_dataset):
         if not os.path.exists(self.sample_dir):
             os.makedirs(self.sample_dir)
-        test_label, test_skel, _, test_img_rgb, _, _ = prep_data(
-            valid_dataset, self.batch_size, with_background=False)
-        self.total_batch = 49
-        result = np.zeros(test_skel.shape)
-        with tf.Session() as self.sess:
-            counter = 1
-            start_time = time.time()
-            could_load, checkpoint_counter = self.load(self.checkpoint_dir)
-            if could_load:
-                counter = checkpoint_counter
-                print(" [*] Load SUCCESS")
-            else:
-                print(" [!] Load failed...")
-            batch_idxs = test_skel.shape[0]//self.batch_size
 
-            for idx in tqdm(xrange(0, int(batch_idxs))):
-                heatmap_samples, z_heatmap_samples = self.sess.run([self.heatmap, self.z_heatmap],
-                                                                   feed_dict={
-                    self.image_input: test_img_rgb[idx *
-                                                   self.batch_size:(idx+1)*self.batch_size]
-                })
-                skel = SkelFromHeatmap(heatmap_samples, z_heatmap_samples)
-                result[idx * self.batch_size:(idx+1)*self.batch_size] = skel
-                save_images(test_img_rgb, image_manifold_size(self.batch_size),
-                            '{}/test_{:02d}_{}.png'.format(self.sample_dir, idx, model), skel=(result+128)/256)
+        for i in range(8):
+            result_1 = []
+            result_2 = []
+            test_label_ = []
+            test_skel_ = []
+            valid_dataset.loadH36M_all(
+                i, mode='valid', tApp=True, replace=False)
+            test_label, test_skel, _, test_img_rgb, _, _ = prep_data(
+                valid_dataset, self.batch_size, with_background=False)
+            result = []
+            with tf.Session() as self.sess:
+                counter = 1
 
-            np.save('result_{}.out'.format(model), result)
-            pck = eval_pck((result+128)/256, test_skel, test_label)
-            np.save('result_pck_{}.out'.format(model), pck)
+                model=49
+                self.total_batch = int(model)
+                start_time = time.time()
+                could_load, checkpoint_counter = self.load(self.checkpoint_dir)
+                if could_load:
+                    counter = checkpoint_counter
+                    print(" [*] Load SUCCESS")
+                else:
+                    print(" [!] Load failed...")
+                batch_idxs = test_skel.shape[0]//self.batch_size
+
+                for idx in tqdm(xrange(0, int(batch_idxs))):
+                    heatmap_samples, z_heatmap_samples = self.sess.run([self.heatmap, self.z_heatmap],
+                                                                       feed_dict={
+                        self.image_input: test_img_rgb[idx *
+                                                       self.batch_size:(idx+1)*self.batch_size]
+                    })
+                    skel = SkelFromHeatmap(heatmap_samples, z_heatmap_samples)
+                    result.append(skel)
+                    # save_images(test_img_rgb, image_manifold_size(self.batch_size),
+                    #             '{}/test_{:02d}_{}.png'.format(self.sample_dir, idx, model), skel=(result+128)/256)
+
+                result_1.append(np.asarray(result))
+
+                model = 499
+                self.total_batch = int(model)
+                could_load, checkpoint_counter = self.load(self.checkpoint_dir)
+                if could_load:
+                    counter = checkpoint_counter
+                    print(" [*] Load SUCCESS")
+                else:
+                    print(" [!] Load failed...")
+                batch_idxs = test_skel.shape[0]//self.batch_size
+
+                for idx in tqdm(xrange(0, int(batch_idxs))):
+                    heatmap_samples, z_heatmap_samples = self.sess.run([self.heatmap, self.z_heatmap],
+                                                                       feed_dict={
+                        self.image_input: test_img_rgb[idx *
+                                                       self.batch_size:(idx+1)*self.batch_size]
+                    })
+
+                    skel = SkelFromHeatmap(heatmap_samples, z_heatmap_samples)
+                    result.append(skel)
+
+                    # save_images(test_img_rgb, image_manifold_size(self.batch_size),
+                    #             '{}/test_{:02d}_{}.png'.format(self.sample_dir, idx, model), skel=(result+128)/256)
+
+                result_2.append(np.asarray(result))
+
+            test_label_.append(test_label[:(idx+1)*self.batch_size])
+            test_skel_.append(test_skel[:(idx+1)*self.batch_size])
+
+            result_1 = np.asarray(result_1)
+            result_2 = np.asarray(result_2)
+            test_label_ = np.asarray(test_label_)
+            test_skel_ = np.asarray(test_skel_)
+
+            np.save('result_{}_{}.out'.format(49, i), result_1)
+            np.save('result_{}_{}.out'.format(499, i), result_2)
+            np.save('test_label_{}.out'.format(i), test_label_)
+            np.save('test_skel_{}.out'.format(i), test_skel_)
+
+            # pck = eval_pck((result_1+128)/256, test_skel_, test_label_)
+            # np.save('result_pck_{}.out'.format(49), pck)
+
+            # pck = eval_pck((result_2+128)/256, test_skel_, test_label_)
+            # np.save('result_pck_{}.out'.format(499), pck)
 
     def train(self,train_dataset,valid_dataset):
         if not os.path.exists(self.checkpoint_dir):
@@ -433,8 +485,8 @@ if __name__ == '__main__':
         #                      tApp=True, replace=False)
 
         val_ds = Dataset()
-        val_ds.loadH36M_all('all', mode='valid',
-                            tApp=True, replace=False)
+        # val_ds.loadH36M_all('all', mode='valid',
+        #                     tApp=True, replace=False)
         # val_ds.loadH36M(64, mode='valid',
         #                     tApp=True, replace=False)
         Vnect = vnect()
@@ -453,5 +505,5 @@ if __name__ == '__main__':
 
     # Vnect.train(ds, val_ds)
     # train_total_batch = 1
-    Vnect.predict(val_ds, 499)
-    Vnect.predict(val_ds, 49)
+    Vnect.predict(val_ds)
+    # Vnect.predict(val_ds, 49)
