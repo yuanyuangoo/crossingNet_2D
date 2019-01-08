@@ -19,7 +19,7 @@ SummaryWriter = tf.summary.FileWriter
 
 
 class vnect():
-    def __init__(self, input_size=128, checkpoint_dir="./checkpoint", sample_dir="samples", batch_size=64, learning_rate=2e-5, beta1=0.5, epoch=20, conv_ratio=8):
+    def __init__(self, input_size=128, checkpoint_dir="./checkpoint", sample_dir="samples", batch_size=64, learning_rate=2e-5, beta1=0.5, epoch_counter=10000, conv_ratio=8):
         self.is_training = False
         self.dataset_name=globalConfig.dataset
         self.checkpoint_dir = os.path.join(
@@ -28,7 +28,7 @@ class vnect():
         self.beta1 = beta1
         self.batch_size = batch_size
         self.learning_rate = learning_rate
-        self.epoch = epoch
+        self.epoch_counter = epoch_counter
         self.sample_dir = os.path.join(
             globalConfig.vnect_pretrain_path, sample_dir)
         self.conv_ratio = conv_ratio
@@ -74,10 +74,8 @@ class vnect():
                 i, mode='valid', tApp=True, replace=False)
             test_label, test_skel, _, test_img_rgb, _, _ = prep_data(
                 valid_dataset, self.batch_size, with_background=False)
-            result = []
             with tf.Session() as self.sess:
                 counter = 1
-
                 model=49
                 self.total_batch = int(model)
                 start_time = time.time()
@@ -95,13 +93,13 @@ class vnect():
                         self.image_input: test_img_rgb[idx *
                                                        self.batch_size:(idx+1)*self.batch_size]
                     })
-                    skel = SkelFromHeatmap(heatmap_samples, z_heatmap_samples)
-                    result.append(skel)
+                    skel1 = SkelFromHeatmap(heatmap_samples, z_heatmap_samples)
+                    result_1.append(skel1)
                     # save_images(test_img_rgb, image_manifold_size(self.batch_size),
                     #             '{}/test_{:02d}_{}.png'.format(self.sample_dir, idx, model), skel=(result+128)/256)
 
-                result_1.append(np.asarray(result))
 
+            with tf.Session() as self.sess:
                 model = 499
                 self.total_batch = int(model)
                 could_load, checkpoint_counter = self.load(self.checkpoint_dir)
@@ -119,32 +117,18 @@ class vnect():
                                                        self.batch_size:(idx+1)*self.batch_size]
                     })
 
-                    skel = SkelFromHeatmap(heatmap_samples, z_heatmap_samples)
-                    result.append(skel)
+                    skel2 = SkelFromHeatmap(heatmap_samples, z_heatmap_samples)
+                    result_2.append(skel2)
 
                     # save_images(test_img_rgb, image_manifold_size(self.batch_size),
                     #             '{}/test_{:02d}_{}.png'.format(self.sample_dir, idx, model), skel=(result+128)/256)
 
-                result_2.append(np.asarray(result))
-
-            test_label_.append(test_label[:(idx+1)*self.batch_size])
-            test_skel_.append(test_skel[:(idx+1)*self.batch_size])
 
             result_1 = np.asarray(result_1)
             result_2 = np.asarray(result_2)
-            test_label_ = np.asarray(test_label_)
-            test_skel_ = np.asarray(test_skel_)
 
-            np.save('result_{}_{}.out'.format(49, i), result_1)
-            np.save('result_{}_{}.out'.format(499, i), result_2)
-            np.save('test_label_{}.out'.format(i), test_label_)
-            np.save('test_skel_{}.out'.format(i), test_skel_)
-
-            # pck = eval_pck((result_1+128)/256, test_skel_, test_label_)
-            # np.save('result_pck_{}.out'.format(49), pck)
-
-            # pck = eval_pck((result_2+128)/256, test_skel_, test_label_)
-            # np.save('result_pck_{}.out'.format(499), pck)
+            np.save('result_{}_{}'.format(49, i), result_1)
+            np.save('result_{}_{}'.format(499, i), result_2)
 
     def train(self,train_dataset,valid_dataset):
         if not os.path.exists(self.checkpoint_dir):
@@ -156,6 +140,7 @@ class vnect():
             train_dataset, self.batch_size)
         _, test_skel, _, test_img_rgb, _, _ = prep_data(
             valid_dataset, self.batch_size)
+        self.total_batch =499
         print("Preparing heatmap!")
         train_heat_maps = np.zeros(
             (self.n_samples, self.input_size//8, self.input_size//8, self.n_joints))
@@ -167,7 +152,7 @@ class vnect():
                 self.input_size, self.input_size, train_skel[idx]*256-128)
         print("Prepare heatmap completed!")
 
-        with tf.Session(config=tf.ConfigProto(log_device_placement=True)) as self.sess:
+        with tf.Session() as self.sess:
             a_optim = tf.train.AdamOptimizer(self.learning_rate, beta1=self.beta1) \
                 .minimize(self.loss, var_list=self.t_vars)
             try:
@@ -192,10 +177,10 @@ class vnect():
                 print(" [!] Load failed...")
 
             self.train_size = np.inf
-            for epoch in xrange(self.epoch):
-                batch_idxs = min(
-                    len(train_img_rgb), self.train_size) // self.batch_size
-
+            batch_idxs = min(
+                len(train_img_rgb), self.train_size) // self.batch_size
+            while(counter<=self.epoch_counter):
+                epoch = counter//batch_idxs
                 for idx in xrange(0, int(batch_idxs)):
                     batch_images = train_img_rgb[idx *
                                                  self.batch_size:(idx+1)*self.batch_size]
@@ -212,10 +197,11 @@ class vnect():
                     })
                     self.writer.add_summary(summary_str, counter)
                     print("Epoch: [%2d/%2d] [%4d/%4d] time: %4.4f, heatmap_loss: %.8f, z_loss: %.8f, loss: %.8f "
-                          % (epoch, self.epoch, idx, batch_idxs,
+                          % (epoch, (self.epoch_counter//batch_idxs), idx, batch_idxs,
                              time.time() - start_time, heatmap_loss, z_loss, loss))
                     counter += 1
-
+                    if np.mod(counter, 2000) == 0:
+                        self.save(self.checkpoint_dir, counter)
                 heatmap_samples, z_heatmap_samples = self.sess.run([self.heatmap, self.z_heatmap],
                                                                    feed_dict={
                     self.image_input: test_img_rgb
@@ -225,8 +211,7 @@ class vnect():
                 
                 save_images(test_img_rgb, image_manifold_size(self.batch_size),
                             '{}/train_{:02d}_{:04d}.png'.format(self.sample_dir, epoch, idx), skel=(skel+128)/256)
-                if np.mod(epoch,50)==0:
-                    self.save(self.checkpoint_dir, counter)
+
             self.save(self.checkpoint_dir, counter)
 
     def _create_network(self):
@@ -480,15 +465,16 @@ class vnect():
 if __name__ == '__main__':
     if globalConfig.dataset == 'H36M':
         import data.h36m as h36m
-        # ds = Dataset()
-        # ds.loadH36M_expended(64*50, mode='train',
+        ds = Dataset()
+        # ds.loadH36M_expended(64*10, mode='train',
         #                      tApp=True, replace=False)
-
+        ds.loadH36M(64*10, mode='train',
+                    tApp=True, replace=False)
         val_ds = Dataset()
         # val_ds.loadH36M_all('all', mode='valid',
         #                     tApp=True, replace=False)
-        # val_ds.loadH36M(64, mode='valid',
-        #                     tApp=True, replace=False)
+        val_ds.loadH36M(64, mode='valid',
+                            tApp=True, replace=False)
         Vnect = vnect()
 
     elif globalConfig.dataset == 'APE':
@@ -503,7 +489,8 @@ if __name__ == '__main__':
     else:
         raise ValueError('unknown dataset %s' % globalConfig.dataset)
 
-    # Vnect.train(ds, val_ds)
+    Vnect.train(ds, val_ds)
     # train_total_batch = 1
-    Vnect.predict(val_ds)
+    # prd_ds=Dataset()
+    # Vnect.predict(val_ds)
     # Vnect.predict(val_ds, 49)

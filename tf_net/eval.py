@@ -13,22 +13,39 @@ def load_data():
     result_1 = []
     result_2 = []
     for i in range(8):
-        skel = np.load('test_skel_{}.out.npy'.format(i))
-        label = np.load('test_label_{}.out.npy'.format(i))
+        if not os.path.exists('result_{}_{}.out.npy'.format(499, i)):
+            print('result_{}_{}.out.npy donot exist'.format(499, i))
+            continue
+        skel = np.load('result_for_9000/test_skel_{}.out.npy'.format(i))[0]
+        label = np.load('result_for_9000/test_label_{}.out.npy'.format(i))[0]
         result_1_ = np.load('result_{}_{}.out.npy'.format(49, i))
         result_2_ = np.load('result_{}_{}.out.npy'.format(499, i))
 
-        test_skel.append(np.asarray(skel))
-        test_label.append(np.asarray(label))
-        result_1.append(np.asarray(result_1_))
-        result_2.append(np.asarray(result_2_))
+        result_1_=result_1_.reshape((-1,result_1_.shape[2]))
+        result_2_=result_2_.reshape((-1,result_2_.shape[2]))
+
+        for idx in range(len(skel)):
+            test_skel.append(np.asarray(skel[idx]))
+            test_label.append(np.asarray(label[idx]))
+            result_1.append(np.asarray(result_1_[idx]))
+            result_2.append(np.asarray(result_2_[idx]))
 
     return np.asarray(test_skel), np.asarray(test_label), np.asarray(result_1), np.asarray(result_2)
-
+pck=[]
 test_skel, test_label, result_1, result_2 = load_data()
-pck = eval_pck((result_1+128)/256, test_skel, test_label)
-np.save('result_pck_{}.out'.format(49), pck)
-print(pck[:, :, :-1, :-1])
-pck = eval_pck((result_2+128)/256, test_skel, test_label)
-np.save('result_pck_{}.out'.format(499), pck)
-print(pck[:, :, :-1, :-1])
+
+pck1_3d,pck1_2d = eval_pck(result_1, test_skel*256-128, test_label)
+
+pck2_3d,pck2_2d = eval_pck((result_2+128)/256, test_skel, test_label)
+
+pck.append(pck1_3d)
+pck.append(pck1_2d)
+pck.append(pck2_3d)
+pck.append(pck2_2d)
+pck=pck
+np.save('result_pck',pck)
+
+
+pck=np.load('result_pck.npy')
+from pprint import pprint as pp
+pp(pck[:,:,-1,-1])

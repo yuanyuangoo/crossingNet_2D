@@ -427,7 +427,7 @@ def extract_2d_joint_from_heatmap(heatmap, input_size):
 
 def get_dist_pck(pred, gt):
     dist_ratio = np.zeros((pred.shape[0], pred.shape[2]))
-    for imgidx in range(64):
+    for imgidx in range(len(dist_ratio)):
         refDist = np.linalg.norm(gt[imgidx, :, 12]-gt[imgidx, :, 5])
 
         dist_ratio[imgidx, :] = np.sqrt(
@@ -472,10 +472,10 @@ def compute_pck(dist_ratio, label, threshold):
 def eval_pck(pred, gt, label):
     pred = np.reshape(pred, (pred.shape[0], 3, 17))
     gt = np.reshape(gt, (gt.shape[0], 3, 17))
-
+    threhold = np.arange(0.1, 0.6, 0.1)
     dist_3d = get_dist_pck(pred, gt)
-    pck_all_3d = compute_pck(dist_3d, label, [0.5, 0.2])
+    pck_all_3d = compute_pck(dist_3d, label, threhold)
 
-    dist_2d = get_dist_pck(pred, gt)
-    pck_all_2d = compute_pck(dist_2d, label, [0.5, 0.2])
+    dist_2d = get_dist_pck(pred[:,0:2,:], gt[:,0:2,:])
+    pck_all_2d = compute_pck(dist_2d, label, threhold)
     return pck_all_3d, pck_all_2d

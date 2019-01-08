@@ -180,10 +180,10 @@ class Dataset(object):
             print('loaded with {}s'.format(t1))
             # return self.frmList
         
-        test_skel = np.load('samples_skel.out.npy')
-        test_label = np.load('samples_label.out.npy')
+        test_skel = np.load('expanded_skel_from_637.npy')
+        test_label = np.load('expanded_label_from_637.npy')
         n_samples = len(self.frmList)
-        img_path = '/media/hsh65/Portable/h36m/cache/model/pganR/H36M_dummy/params/samples_predicted/'
+        img_path = '/media/hsh65/Portable/h36m/cache/model/pganR/H36M_dummy/params/samples_predicted_637/'
 
         for idx in tqdm(range(len(test_label))):
             label = test_label[idx]
@@ -329,13 +329,14 @@ class Dataset(object):
 if __name__ == '__main__':
     if globalConfig.dataset == 'H36M':
         import data.h36m as h36m
-        # ds = Dataset()
-        # ds.loadH36M_expended(64*50, mode='train',
-        #             tApp=True, replace=True)
-
-        val_ds = Dataset()
-        val_ds.loadH36M(64, mode='valid',
-                        tApp=True, replace=False, with_background=False)
+        ds = Dataset()
+        ds.loadH36M_expended(64*10, mode='train',
+                    tApp=True, replace=True)
+        # ds.loadH36M(64*10, mode='train',
+        #                 tApp=True, replace=False, with_background=False)
+        # val_ds = Dataset()
+        # val_ds.loadH36M(64, mode='valid',
+        #                 tApp=True, replace=False, with_background=False)
         
     elif globalConfig.dataset == 'APE':
         ds = Dataset()

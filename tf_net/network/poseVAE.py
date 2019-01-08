@@ -203,7 +203,7 @@ class PoseVAE(object):
                 save_images(images, image_manifold_size(samples.shape[0]),
                             '{}/test_{:02d}.png'.format(self.sample_dir, epoch), skel=samples)
                             
-    def predict(self, valid_dataset, amplify_ratio=9):
+    def predict(self, valid_dataset, amplify_ratio=19):
         test_labels, test_skel, _, _, _, _, = prep_data(
             valid_dataset, self.batch_size)
         n_samples = test_skel.shape[0]
@@ -237,12 +237,14 @@ class PoseVAE(object):
                                  n_samples+stop_idx, :] = predicted
                     samples_label[i*n_samples+start_idx:i *
                                   n_samples+stop_idx, :] = batch_label
-
+            images=np.ones((predicted.shape[0], 128, 128, 3))
+            save_images(images, image_manifold_size(predicted.shape[0]),
+                        '{}/test.png'.format(self.sample_dir), skel=(predicted+128)/256)
             samples_label = np.asarray(samples_label, dtype=np.uint8)
             samples_skel = np.asarray(samples_skel, dtype=np.float32)
 
-            np.save('samples_skel.out', samples_skel)
-            np.save('samples_label.out', samples_label)
+            np.save('expanded_skel_from_{}'.format(n_samples), samples_skel)
+            np.save('expanded_label_from_{}'.format(n_samples), samples_label)
 
 
     def train(self, train_dataset, valid_dataset):
@@ -348,7 +350,7 @@ class PoseVAE(object):
 if __name__ == '__main__':
     if globalConfig.dataset == 'H36M':
         ds = Dataset()
-        ds.loadH36M(64*50, mode='train', tApp=True, replace=False)
+        ds.loadH36M(64*10, mode='train', tApp=True, replace=False)
 
         # val_ds = Dataset()
         # val_ds.loadH36M(64, mode='valid', tApp=True, replace=False)

@@ -166,8 +166,8 @@ class PganR(object):
             os.makedirs(self.checkpoint_dir)
         if not os.path.exists(self.sample_dir):
             os.makedirs(self.sample_dir)
-        test_skel = np.load('samples_skel.out.npy')
-        test_label = np.load('samples_label.out.npy')
+        test_skel = (np.load('expanded_skel_from_637.npy')+128)/256
+        test_label = np.load('expanded_label_from_637.npy')
         print("Samples loaded...")
         with tf.Session() as self.sess:
             tf.global_variables_initializer().run()
@@ -182,24 +182,44 @@ class PganR(object):
             could_load, checkpoint_counter = self.load(
                 self.p2p.checkpoint_dir)
             batch_idxs = test_skel.shape[0]//self.batch_size
-            for idx in tqdm(range(0, int(batch_idxs))):
-                batch_labels = test_label[idx *
-                                          self.batch_size:(idx+1)*self.batch_size]
-                batch_skel = test_skel[idx *
-                                       self.batch_size:(idx+1)*self.batch_size]
-                samples = self.sess.run(self.sample, feed_dict={
-                    self.FR.pose_input: batch_skel,
-                    self.FR.y: batch_labels,
-                    self.p2p.label: batch_labels
-                })
-                # save_images(sample_G, image_manifold_size(sample_G.shape[0]),
-                #             '{}/test_G_{:04d}.png'.format(self.sample_dir, idx), skel=batch_skel)
-                # save_images(samples, image_manifold_size(samples.shape[0]),
-                #             '{}/test_S{:04d}.png'.format(self.sample_dir, idx), skel=batch_skel)
-                # save_images(samples, image_manifold_size(samples.shape[0]),
-                #             '{}/test_{:04d}.png'.format(self.sample_dir, idx), skel=None)
-                save_images_one_by_one(
-                    samples, self.sample_dir+'_predicted', idx)
+            # for idx in tqdm(range(0, int(batch_idxs))):
+            #     batch_labels = test_label[idx *
+            #                               self.batch_size:(idx+1)*self.batch_size]
+            #     batch_skel = test_skel[idx *
+            #                            self.batch_size:(idx+1)*self.batch_size]
+            #     samples = self.sess.run(self.sample, feed_dict={
+            #         self.FR.pose_input: batch_skel,
+            #         self.FR.y: batch_labels,
+            #         self.p2p.label: batch_labels
+            #     })
+            #     # save_images(sample_G, image_manifold_size(sample_G.shape[0]),
+            #     #             '{}/test_G_{:04d}.png'.format(self.sample_dir, idx), skel=batch_skel)
+            #     # save_images(samples, image_manifold_size(samples.shape[0]),
+            #     #             '{}/test_S{:04d}.png'.format(self.sample_dir, idx), skel=batch_skel)
+            #     # save_images(samples, image_manifold_size(samples.shape[0]),
+            #     #             '{}/test_{:04d}.png'.format(self.sample_dir, idx), skel=None)
+            #     save_images_one_by_one(
+            #         samples, self.sample_dir+'_predicted_{}'.format(637), idx)
+
+            remain=test_skel.shape[0]-batch_idxs*self.batch_size
+
+            batch_labels = test_label[test_skel.shape[0]-64:test_skel.shape[0]]
+            batch_skel = test_skel[test_skel.shape[0]-64:test_skel.shape[0]]
+            samples = self.sess.run(self.sample, feed_dict={
+                self.FR.pose_input: batch_skel,
+                self.FR.y: batch_labels,
+                self.p2p.label: batch_labels
+            })
+            # save_images(sample_G, image_manifold_size(sample_G.shape[0]),
+            #             '{}/test_G_{:04d}.png'.format(self.sample_dir, idx), skel=batch_skel)
+            # save_images(samples, image_manifold_size(samples.shape[0]),
+            #             '{}/test_S{:04d}.png'.format(self.sample_dir, idx), skel=batch_skel)
+            # save_images(samples, image_manifold_size(samples.shape[0]),
+            #             '{}/test_{:04d}.png'.format(self.sample_dir, idx), skel=None)
+            save_images_one_by_one(
+                samples, self.sample_dir+'_predicted_{}'.format(637), test_skel.shape[0]//self.batch_size)
+
+
     def test(self, valid_dataset):
         if not os.path.exists(self.checkpoint_dir):
             os.makedirs(self.checkpoint_dir)
