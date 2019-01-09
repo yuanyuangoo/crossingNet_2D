@@ -58,7 +58,7 @@ class Frame(object):
             self.label = label
             self.with_skel = True
             self.norm_skel = skel
-
+            self.norm_img = img.Data
             self.path = path
 
         else:

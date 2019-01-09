@@ -236,9 +236,13 @@ class Dataset(object):
 
         for frmIdx in tqdm(range(frmStartNum, frmEndNum)):
             while True:
+                if frmIdx==frmEndNum:
+                    break
                 [frmPath, label] = data.getImgName_onehotLabel(frmIdx)
                 frmPath_rgb = data.getImgName_RGB(frmIdx)
-                if os.path.exists(frmPath) and os.path.exists(frmPath_rgb):
+                skel = np.asarray(data.getSkel(frmIdx))
+
+                if os.path.exists(frmPath) and os.path.exists(frmPath_rgb) and skel.shape != ():
                     break
                 else:
                     frmIdx = frmIdx+1
@@ -294,20 +298,23 @@ class Dataset(object):
 
         for frmIdx in tqdm(range(frmStartNum, int(frmEndNum/Fsize)*Fsize, int(frmEndNum/Fsize))):
             while True:
+                if frmIdx==frmEndNum:
+                    break
                 [frmPath, label] = data.getImgName_onehotLabel(frmIdx)
                 frmPath_rgb = data.getImgName_RGB(frmIdx)
-                if os.path.exists(frmPath) and os.path.exists(frmPath_rgb):
+                skel = np.asarray(data.getSkel(frmIdx))
+
+                if os.path.exists(frmPath) and os.path.exists(frmPath_rgb) and skel.shape != ():
                     break
                 else:
                     frmIdx = frmIdx+1
+
             
-            skel = np.asarray(data.getSkel(frmIdx))
-            if skel.shape == ():
-                continue
             skel.shape = (-1)
-            img=[]
             if with_background:
                 img = Image('H36M', frmPath)
+            else:
+                img=[]
             img_RGB = Image('H36M', frmPath_rgb, RGB=True)
             self.frmList.append(Frame(img, img_RGB, skel, label, frmPath))
 

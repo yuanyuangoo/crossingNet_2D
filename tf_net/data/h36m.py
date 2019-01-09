@@ -18,7 +18,7 @@ class H36M:
         annot = {}
 
         annotPath = os.path.join(
-            globalConfig.h36m_base_path, 'annot', split+'.mat')
+            globalConfig.h36m_base_path, 'annot', split+'_no_Sitting.mat')
         from scipy.io import loadmat
         annot = loadmat(annotPath)['annot']
         self.nSamples = len(annot['imgname'][0][0])

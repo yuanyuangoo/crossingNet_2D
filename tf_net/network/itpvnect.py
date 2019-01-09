@@ -19,7 +19,7 @@ SummaryWriter = tf.summary.FileWriter
 
 
 class vnect():
-    def __init__(self, input_size=128, checkpoint_dir="./checkpoint", sample_dir="samples", batch_size=64, learning_rate=2e-5, beta1=0.5, epoch_counter=10000, conv_ratio=8):
+    def __init__(self, input_size=128, checkpoint_dir="./checkpoint", sample_dir="samples", batch_size=64, learning_rate=2e-5, beta1=0.5, epoch_counter=30000, conv_ratio=8):
         self.is_training = False
         self.dataset_name=globalConfig.dataset
         self.checkpoint_dir = os.path.join(
@@ -74,33 +74,9 @@ class vnect():
                 i, mode='valid', tApp=True, replace=False)
             test_label, test_skel, _, test_img_rgb, _, _ = prep_data(
                 valid_dataset, self.batch_size, with_background=False)
-            # with tf.Session() as self.sess:
-            #     counter = 1
-            #     model=49
-            #     self.total_batch = int(model)
-            #     start_time = time.time()
-            #     could_load, checkpoint_counter = self.load(self.checkpoint_dir)
-            #     if could_load:
-            #         counter = checkpoint_counter
-            #         print(" [*] Load SUCCESS")
-            #     else:
-            #         print(" [!] Load failed...")
-            #     batch_idxs = test_skel.shape[0]//self.batch_size
-
-            #     for idx in tqdm(xrange(0, int(batch_idxs))):
-            #         heatmap_samples, z_heatmap_samples = self.sess.run([self.heatmap, self.z_heatmap],
-            #                                                            feed_dict={
-            #             self.image_input: test_img_rgb[idx *
-            #                                            self.batch_size:(idx+1)*self.batch_size]
-            #         })
-            #         skel1 = SkelFromHeatmap(heatmap_samples, z_heatmap_samples)
-            #         result_1.append(skel1)
-            #         # save_images(test_img_rgb, image_manifold_size(self.batch_size),
-            #         #             '{}/test_{:02d}_{}.png'.format(self.sample_dir, idx, model), skel=(result+128)/256)
-
 
             with tf.Session() as self.sess:
-                model = 9
+                model = 189
                 self.total_batch = int(model)
                 could_load, checkpoint_counter = self.load(self.checkpoint_dir)
                 if could_load:
@@ -124,11 +100,9 @@ class vnect():
                     #             '{}/test_{:02d}_{}.png'.format(self.sample_dir, idx, model), skel=(result+128)/256)
 
 
-            # result_1 = np.asarray(result_1)
             result_2 = np.asarray(result_2)
 
-            # np.save('result_{}_{}'.format(49, i), result_1)
-            np.save('result_{}_{}'.format(499, i), result_2)
+            np.save('result_{}_{}'.format(model, i), result_2)
 
     def train(self,train_dataset,valid_dataset):
         if not os.path.exists(self.checkpoint_dir):
@@ -466,8 +440,8 @@ if __name__ == '__main__':
     if globalConfig.dataset == 'H36M':
         import data.h36m as h36m
         ds = Dataset()
-        # ds.loadH36M_expended(64*10, mode='train',
-        #                      tApp=True, replace=False)
+        ds.loadH36M_expended(64*10, mode='train',
+                             tApp=True, replace=False)
         # ds.loadH36M(64*10, mode='train',
         #             tApp=True, replace=False)
         val_ds = Dataset()
@@ -491,5 +465,5 @@ if __name__ == '__main__':
 
     Vnect.train(ds, val_ds)
     # train_total_batch = 1
-    # prd_ds=Dataset()
-    # Vnect.predict(val_ds)
+    prd_ds=Dataset()
+    Vnect.predict(prd_ds)

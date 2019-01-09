@@ -13,13 +13,13 @@ def load_data():
     result_1 = []
     result_2 = []
     for i in range(8):
-        if not os.path.exists('result_{}_{}.out.npy'.format(499, i)):
-            print('result_{}_{}.out.npy donot exist'.format(499, i))
+        if not os.path.exists('result_{}_{}.npy'.format(189, i)):
+            print('result_{}_{}.out.npy donot exist'.format(189, i))
             continue
-        skel = np.load('result_for_9000/test_skel_{}.out.npy'.format(i))[0]
-        label = np.load('result_for_9000/test_label_{}.out.npy'.format(i))[0]
-        result_1_ = np.load('result_{}_{}.out.npy'.format(49, i))
-        result_2_ = np.load('result_{}_{}.out.npy'.format(499, i))
+        skel = np.load('test_skel_{}.out.npy'.format(i))[0]
+        label = np.load('test_label_{}.out.npy'.format(i))[0]
+        result_1_ = np.load('result_{}_{}.npy'.format(9, i))
+        result_2_ = np.load('result_{}_{}.npy'.format(189, i))
 
         result_1_=result_1_.reshape((-1,result_1_.shape[2]))
         result_2_=result_2_.reshape((-1,result_2_.shape[2]))
