@@ -465,16 +465,16 @@ class vnect():
 if __name__ == '__main__':
     if globalConfig.dataset == 'H36M':
         import data.h36m as h36m
-        # ds = Dataset()
-        # # ds.loadH36M_expended(64*10, mode='train',
-        # #                      tApp=True, replace=False)
+        ds = Dataset()
+        # ds.loadH36M_expended(64*10, mode='train',
+        #                      tApp=True, replace=False)
         # ds.loadH36M(64*10, mode='train',
         #             tApp=True, replace=False)
         val_ds = Dataset()
         # val_ds.loadH36M_all('all', mode='valid',
         #                     tApp=True, replace=False)
-        # val_ds.loadH36M(64, mode='valid',
-        #                     tApp=True, replace=False)
+        val_ds.loadH36M(64, mode='valid',
+                            tApp=True, replace=False)
         Vnect = vnect()
 
     elif globalConfig.dataset == 'APE':
@@ -489,7 +489,7 @@ if __name__ == '__main__':
     else:
         raise ValueError('unknown dataset %s' % globalConfig.dataset)
 
-    # Vnect.train(ds, val_ds)
+    Vnect.train(ds, val_ds)
     # train_total_batch = 1
     # prd_ds=Dataset()
-    Vnect.predict(val_ds)
+    # Vnect.predict(val_ds)
