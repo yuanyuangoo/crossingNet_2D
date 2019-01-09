@@ -471,10 +471,10 @@ if __name__ == '__main__':
         # ds.loadH36M(64*10, mode='train',
         #             tApp=True, replace=False)
         val_ds = Dataset()
-        val_ds.loadH36M_all('all', mode='valid',
-                            tApp=True, replace=False)
-        val_ds.loadH36M(64, mode='valid',
-                            tApp=True, replace=False)
+        # val_ds.loadH36M_all('all', mode='valid',
+        #                     tApp=True, replace=False)
+        # val_ds.loadH36M(64, mode='valid',
+        #                     tApp=True, replace=False)
         Vnect = vnect()
 
     elif globalConfig.dataset == 'APE':

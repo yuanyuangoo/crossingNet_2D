@@ -221,7 +221,7 @@ class rP2PGAN(object):
     def predict(self):
         if not os.path.exists(self.sample_dir):
             os.makedirs(self.sample_dir)
-        pickleCachePath = "/media/hsh65/Portable/skate/"+'skate_{}.pkl'.format(2168)
+        pickleCachePath = "/media/a/Portable/skate/"+'skate_{}.pkl'.format(2168)
         if os.path.isfile(pickleCachePath):
             print('direct load from the cache')
             t1 = time.time()

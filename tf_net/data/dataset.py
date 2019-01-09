@@ -183,7 +183,7 @@ class Dataset(object):
         test_skel = np.load('expanded_skel_from_637.npy')
         test_label = np.load('expanded_label_from_637.npy')
         n_samples = len(self.frmList)
-        img_path = '/media/hsh65/Portable/h36m/cache/model/pganR/H36M_dummy/params/samples_predicted_637/'
+        img_path = '/media/a/Portable/h36m/cache/model/pganR/H36M_dummy/params/samples_predicted_637/'
 
         for idx in tqdm(range(len(test_label))):
             label = test_label[idx]

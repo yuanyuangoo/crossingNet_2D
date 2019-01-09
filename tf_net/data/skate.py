@@ -14,7 +14,7 @@ sys.path.append('../data/')
 
 class SKATE:
     def __init__(self, split):
-        self.root = '/media/hsh65/Portable/skate/'
+        self.root = '/media/a/Portable/skate/'
         self.imgdir_origin = self.root+'input/'
         self.bacimgdir = self.root + 'binary/'
         self.bacimg_list = os.listdir(self.bacimgdir)
