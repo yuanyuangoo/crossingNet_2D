@@ -71,6 +71,7 @@ class imagegan(object):
         # self.build_metric()
         self.G_sum = image_summary("G", self.G)
 
+        self.g_loss_l1 = tf.reduce_mean(tf.abs(self.image_target - self.G))*50
         self.g_loss_l2 = tf.nn.l2_loss(self.image_target - self.G)
 
         self.D_real = self.build_discriminator(
@@ -93,10 +94,10 @@ class imagegan(object):
         self.d_loss_fake_sum = scalar_summary(
             "d_loss_fake", self.d_loss_fake)
         self.d_loss = self.d_loss_real + self.d_loss_fake
-        self.g_loss = self.g_loss_cross
+        self.g_loss = self.g_loss_cross+self.g_loss_l1
         self.g_loss_cross_sum = scalar_summary(
             "g_loss_cross", self.g_loss_cross)
-
+        self.g_loss_l1_sum = scalar_summary("g_loss_l1", self.g_loss_l1)
         self.g_loss_sum = scalar_summary("g_loss", self.g_loss)
         self.d_loss_sum = scalar_summary("d_loss", self.d_loss)
 
@@ -108,7 +109,7 @@ class imagegan(object):
         self.saver = tf.train.Saver()
 
         self.g_sum = merge_summary(
-            [self.G_sum, self.g_loss_sum, self.g_loss_cross_sum])
+            [self.G_sum, self.g_loss_sum, self.g_loss_l1_sum, self.g_loss_cross_sum])
         self.d_sum = merge_summary(
             [self.d_loss_real_sum, self.d_loss_fake_sum, self.d_loss_sum])
 
