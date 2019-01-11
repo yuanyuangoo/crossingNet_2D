@@ -366,9 +366,10 @@ def CenterGaussianHeatMap(input_size, output_size, c_x, c_y, variance=21):
 def calculateAccuracy(result, ground_truth):
     a = 1
 
-origin = CenterGaussianHeatMap(128*2, 128*2, 128, 128)
+origin = CenterGaussianHeatMap(224*2, 224*2, 224, 224)
 def getoneHeatmap(input_size, output_size, c_x, c_y, variance=21):
-    gaussian_map = origin[int(128-c_x):int(256-c_x), int(128-c_y):int(256-c_y)]
+    gaussian_map = origin[int(input_size-c_x):int(input_size*2-c_x),
+                          int(input_size-c_y):int(input_size*2-c_y)]
     gaussian_map = cv2.resize(
         gaussian_map, (output_size, output_size), interpolation=cv2.INTER_LINEAR)
     return gaussian_map

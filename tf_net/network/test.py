@@ -28,9 +28,9 @@ def vnect(train_dataset, valid_dataset):
         (n_samples, input_size, input_size, n_joints))
     for idx in tqdm(range(n_samples)):
         train_heat_maps[0, idx], train_z_heat_maps[idx] = SkelGaussianHeatMap(
-            input_size, output_size, 128*(train_skel[idx]*2-1))
+            input_size, output_size, 224*(train_skel[idx]*2-1))
         train_heat_maps[1, idx], train_z_heat_maps[idx] = SkelGaussianHeatMap(
-            input_size, output_size, 128*(train_skel[idx]*2-1))
+            input_size, output_size, 224*(train_skel[idx]*2-1))
 
     print("Prepare heatmap completed!")
     #load ResNet50 without dense layer and with theano dim ordering
