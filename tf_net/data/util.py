@@ -58,7 +58,8 @@ class Frame(object):
             self.label = label
             self.with_skel = True
             self.norm_skel = skel
-            self.norm_img = img.Data
+            if isinstance(img, np.ndarray):
+                self.norm_img = img.Data
             self.path = path
 
         else:
@@ -349,16 +350,16 @@ def prep_data(dataset, batch_size, skel=True, with_background=False):
     return labels, skel, img, img_RGB, n_samples, total_batch
 
 
-def CenterGaussianHeatMap(img_height, img_width, c_x, c_y, variance=21):
-    gaussian_map = np.zeros((img_height, img_width))
-    for x_p in range(img_width):
-        for y_p in range(img_height):
+def CenterGaussianHeatMap(input_size, output_size, c_x, c_y, variance=21):
+    gaussian_map = np.zeros((input_size, input_size))
+    for x_p in range(input_size):
+        for y_p in range(input_size):
             dist_sq = (x_p - c_x) * (x_p - c_x) + \
                       (y_p - c_y) * (y_p - c_y)
             exponent = dist_sq / 2.0 / variance / variance
             gaussian_map[x_p, y_p] = np.exp(-exponent)
-    # gaussian_map = cv2.resize(
-    #     gaussian_map, (img_height//8, img_width//8), interpolation=cv2.INTER_LINEAR)
+    gaussian_map = cv2.resize(
+        gaussian_map, (output_size, output_size), interpolation=cv2.INTER_LINEAR)
     return gaussian_map
 
 
@@ -366,22 +367,23 @@ def calculateAccuracy(result, ground_truth):
     a = 1
 
 origin = CenterGaussianHeatMap(128*2, 128*2, 128, 128)
-def getoneHeatmap(img_height, img_width, c_x, c_y, variance=21):
+def getoneHeatmap(input_size, output_size, c_x, c_y, variance=21):
     gaussian_map = origin[int(128-c_x):int(256-c_x), int(128-c_y):int(256-c_y)]
-    gaussian_map = cv2.resize(gaussian_map, (img_height//8, img_width//8), interpolation=cv2.INTER_LINEAR)
+    gaussian_map = cv2.resize(
+        gaussian_map, (output_size, output_size), interpolation=cv2.INTER_LINEAR)
     return gaussian_map
     
-def SkelGaussianHeatMap(img_height, img_width, skel):
+def SkelGaussianHeatMap(input_size, output_size, skel):
     n_joints = int(len(skel)/3)
-    pose_heatmap = np.zeros((img_height//8, img_width//8, n_joints))
-    z_heatmap = np.zeros((img_height//8, img_width//8, n_joints))
+    pose_heatmap = np.zeros((output_size, output_size, n_joints))
+    z_heatmap = np.zeros((output_size, output_size, n_joints))
     skel = np.reshape(skel, (3, n_joints))
     for idx in range(n_joints):
         joint = skel[:, idx]
         pose_heatmap[:, :, idx] = getoneHeatmap(
-            img_height, img_width, joint[0], joint[1])
+            input_size, input_size, joint[0], joint[1])
         z_heatmap[:, :, idx] = joint[2] * \
-            np.ones((img_height//8, img_width//8))
+            np.ones((output_size, output_size))
     return pose_heatmap, z_heatmap/128
 
 

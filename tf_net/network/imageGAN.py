@@ -71,7 +71,7 @@ class imagegan(object):
         # self.build_metric()
         self.G_sum = image_summary("G", self.G)
 
-        self.g_loss_l1 = tf.reduce_mean(tf.abs(self.image_target - self.G))*50
+        self.g_loss_l1 = tf.reduce_mean(tf.abs(self.image_target - self.G))*10
         self.g_loss_l2 = tf.nn.l2_loss(self.image_target - self.G)
 
         self.D_real = self.build_discriminator(
@@ -210,12 +210,12 @@ class imagegan(object):
 
             counter = 1
             start_time = time.time()
-            # could_load, checkpoint_counter = self.load(self.checkpoint_dir)
-            # if could_load:
-            #     counter = checkpoint_counter
-            #     print(" [*] Load SUCCESS")
-            # else:
-            #     print(" [!] Load failed...")
+            could_load, checkpoint_counter = self.load(self.checkpoint_dir)
+            if could_load:
+                counter = checkpoint_counter
+                print(" [*] Load SUCCESS")
+            else:
+                print(" [!] Load failed...")
 
             samples = self.sess.run(
                 self.sample,
@@ -267,19 +267,23 @@ class imagegan(object):
             counter = 1
             start_time = time.time()
 
-            # could_load, checkpoint_counter = self.load(self.checkpoint_dir)
+            could_load, checkpoint_counter = self.load(self.checkpoint_dir)
 
-            # if could_load:
-            #     counter = checkpoint_counter
-            #     print(" [*] Load SUCCESS")
-            # else:
-            #     print(" [!] Load failed...")
-            # errD = 1.1
-            # errG = 0.8
-            for epoch in xrange(self.epoch):
+            if could_load:
+                counter = checkpoint_counter
+                print(" [*] Load SUCCESS")
+            else:
+                print(" [!] Load failed...")
+
+            errD = 1.1
+            errG = 0.8
+            
+
+            epoch_last=counter//total_batch
+            for epoch in range(epoch_last,self.epoch):
                 batch_idxs = len(train_img) // self.batch_size
 
-                for idx in xrange(int(batch_idxs)):
+                for idx in range(int(batch_idxs)):
                     batch_images = train_img[idx *
                                              self.batch_size:(idx+1)*self.batch_size]
                     batch_labels = train_labels[idx *
@@ -287,14 +291,15 @@ class imagegan(object):
 
                     batch_pose = train_skel[idx *
                                             self.batch_size:(idx+1)*self.batch_size]
-                    # Update D network
-                    _, summary_str, errD, errG = self.sess.run([d_optim,  self.d_sum,  self.d_loss, self.g_loss],
-                                                               feed_dict={
-                        self.pose_input: batch_pose,
-                        self.y: batch_labels,
-                        self.image_target: batch_images
-                    })
-                    self.writer.add_summary(summary_str, counter)
+                    if errD > 1:
+                        # Update D network
+                        _, summary_str, errD, errG = self.sess.run([d_optim,  self.d_sum,  self.d_loss, self.g_loss],
+                                                                feed_dict={
+                            self.pose_input: batch_pose,
+                            self.y: batch_labels,
+                            self.image_target: batch_images
+                        })
+                        self.writer.add_summary(summary_str, counter)
 
                     # Update G network
                     _, summary_str, errD, errG = self.sess.run([g_optim, self.g_sum, self.d_loss, self.g_loss],
@@ -310,7 +315,7 @@ class imagegan(object):
                           % (epoch, self.epoch, idx, batch_idxs,
                              time.time() - start_time, errD, errG))
 
-                    if np.mod(counter, 300) == 1:
+                    if np.mod(counter, total_batch) == 1:
                         samples = self.sess.run(
                             self.sample,
                             feed_dict={
@@ -322,7 +327,7 @@ class imagegan(object):
                         save_images(samples, image_manifold_size(samples.shape[0]),
                                     '{}/train_{:02d}_{:04d}.png'.format(self.sample_dir, epoch, idx), skel=None)
 
-                    if np.mod(counter, 5000) == 2:
+                    if np.mod(counter, total_batch*10) == 2:
                         self.save(self.checkpoint_dir, counter)
 
             self.save(self.checkpoint_dir, counter)
