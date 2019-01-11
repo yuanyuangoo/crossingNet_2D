@@ -7,28 +7,30 @@ from keras.applications.resnet50 import ResNet50
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 sys.path.append('./')
-import globalConfig
-from data.dataset import *
 from data.util import *
+from data.dataset import *
+import globalConfig
 
 def vnect(train_dataset, valid_dataset):
     epochs = 10
-    batch_size=64
+    batch_size = 64
     _, train_skel, _, train_img_rgb, n_samples, total_batch = prep_data(
         train_dataset, batch_size)
     _, test_skel, _, test_img_rgb, _, _ = prep_data(
         valid_dataset, batch_size)
     print("Preparing heatmap!")
     input_size = 224
-    output_size=224
-    n_joints=17
+    output_size = 224
+    n_joints = 17
     train_heat_maps = np.zeros(
-        (n_samples, input_size, input_size, n_joints))
+        (2,n_samples, input_size, input_size, n_joints))
     train_z_heat_maps = np.zeros(
         (n_samples, input_size, input_size, n_joints))
     for idx in tqdm(range(n_samples)):
-        train_heat_maps[idx], train_z_heat_maps[idx] = SkelGaussianHeatMap(
-            input_size, output_size, train_skel[idx]*256-128)
+        train_heat_maps[0, idx], train_z_heat_maps[idx] = SkelGaussianHeatMap(
+            input_size, output_size, 128*(train_skel[idx]*2-1))
+        train_heat_maps[1, idx], train_z_heat_maps[idx] = SkelGaussianHeatMap(
+            input_size, output_size, 128*(train_skel[idx]*2-1))
 
     print("Prepare heatmap completed!")
     #load ResNet50 without dense layer and with theano dim ordering
@@ -67,6 +69,8 @@ def vnect(train_dataset, valid_dataset):
                    shuffle=True, class_weight=None, sample_weight=None, initial_epoch=0, steps_per_epoch=None, validation_steps=None)
 
     return 1
+
+
 if __name__ == '__main__':
     if globalConfig.dataset == 'H36M':
         import data.h36m as h36m

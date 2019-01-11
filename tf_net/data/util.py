@@ -315,7 +315,7 @@ def prep_data(dataset, batch_size, skel=True, with_background=False):
     img_RGB = []
     for frm in dataset.frmList:
         labels.append(frm.label)
-        img_RGB.append(frm.norm_img_RGB)
+        img_RGB.append(cv2.resize(frm.norm_img_RGB,(224,224)))
 
     labels = np.asarray(labels)
     img_RGB = np.asarray(img_RGB)
@@ -343,7 +343,7 @@ def prep_data(dataset, batch_size, skel=True, with_background=False):
 
     if with_background:
         for frm in dataset.frmList:
-            img.append(frm.norm_img)
+            img.append(cv2.resize(frm.norm_img,(224,224)))
         img = np.asarray(img)
         img = img[idx]
 
