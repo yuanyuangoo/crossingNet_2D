@@ -191,13 +191,14 @@ def drawImageCV(skel, img=None, axis=(0, 1, 0), theta=0):
     skel = skel.T
     skel = np.dot(skel, rotation_matrix(axis, theta))
     skel = skel[:, 0:2]
-    skel = (skel*256)-128
+    size=img.shape[0]
+    skel = (skel*size*2)-size
     # min_s = skel.min()
     # max_s = skel.max()
     # mid_s = (min_s+max_s)/2
     # skel = (((skel-mid_s)/(max_s-min_s))+0.52)*125
     if img is None:
-        img = 255*np.ones((128, 128, 3))
+        img = 255*np.ones((size, size, 3))
     elif img.shape[2] == 1:
         img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
     for i, edge in enumerate(ref.h36medges):
@@ -382,18 +383,18 @@ def SkelGaussianHeatMap(input_size, output_size, skel):
     for idx in range(n_joints):
         joint = skel[:, idx]
         pose_heatmap[:, :, idx] = getoneHeatmap(
-            input_size, input_size, joint[0], joint[1])
+            input_size, output_size, joint[0], joint[1])
         z_heatmap[:, :, idx] = joint[2] * \
             np.ones((output_size, output_size))
     return pose_heatmap, z_heatmap/128
 
 
-def SkelFromOnemap(heat_map, z_map):
+def SkelFromOnemap(heat_map, z_map,output_size):
     n_joints = heat_map.shape[2]
     skel = np.zeros(n_joints*3)
 
-    s = extract_2d_joint_from_heatmap(heat_map, 128)
-    z_map = cv2.resize(z_map, (128, 128), interpolation=cv2.INTER_LINEAR)
+    s = extract_2d_joint_from_heatmap(heat_map, output_size)
+    z_map = cv2.resize(z_map, (output_size, output_size), interpolation=cv2.INTER_LINEAR)
 
     for idx in range(n_joints):
         x = int(s[idx, 0])
@@ -401,28 +402,28 @@ def SkelFromOnemap(heat_map, z_map):
         z = z_map[x, y, idx]
         skel[idx] = x
         skel[idx+n_joints] = y
-        skel[idx+2*n_joints] = z*128
+        skel[idx+2*n_joints] = z*output_size
 
     return skel
 
 
-def SkelFromHeatmap(heatmap, z_map):
+def SkelFromHeatmap(heatmap, z_map, output_size):
     batch_size = heatmap.shape[0]
     skel = []
     for idx in range(batch_size):
         H = heatmap[idx]
         Z = z_map[idx]
-        skel.append(SkelFromOnemap(H, Z))
+        skel.append(SkelFromOnemap(H, Z, output_size))
     return np.asarray(skel)
 
 
-def extract_2d_joint_from_heatmap(heatmap, input_size):
+def extract_2d_joint_from_heatmap(heatmap, output_size):
     heatmap_resized = cv2.resize(
-        heatmap, (input_size, input_size), interpolation=cv2.INTER_LINEAR)
+        heatmap, (output_size, output_size), interpolation=cv2.INTER_LINEAR)
     joints_2d = np.zeros((17, 2))
     for joint_num in range(heatmap_resized.shape[2]):
         joint_coord = np.unravel_index(
-            np.argmax(heatmap_resized[:, :, joint_num]), (input_size, input_size))
+            np.argmax(heatmap_resized[:, :, joint_num]), (output_size, output_size))
         joints_2d[joint_num, :] = joint_coord
 
     return joints_2d

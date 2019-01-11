@@ -12,7 +12,7 @@ from data.dataset import *
 import globalConfig
 
 def vnect(train_dataset, valid_dataset):
-    epochs = 10
+    epochs = 1
     batch_size = 64
     _, train_skel, _, train_img_rgb, n_samples, total_batch = prep_data(
         train_dataset, batch_size)
@@ -20,17 +20,19 @@ def vnect(train_dataset, valid_dataset):
         valid_dataset, batch_size)
     print("Preparing heatmap!")
     input_size = 224
-    output_size = 224
+    output_size = 28
     n_joints = 17
-    train_heat_maps = np.zeros(
-        (2,n_samples, input_size, input_size, n_joints))
+    train_heat_map = np.zeros(
+        (n_samples, output_size, output_size, n_joints))
     train_z_heat_maps = np.zeros(
-        (n_samples, input_size, input_size, n_joints))
+        (n_samples, output_size, output_size, n_joints))
     for idx in tqdm(range(n_samples)):
-        train_heat_maps[0, idx], train_z_heat_maps[idx] = SkelGaussianHeatMap(
+        train_heat_map[idx], train_z_heat_maps[idx] = SkelGaussianHeatMap(
             input_size, output_size, 224*(train_skel[idx]*2-1))
-        train_heat_maps[1, idx], train_z_heat_maps[idx] = SkelGaussianHeatMap(
-            input_size, output_size, 224*(train_skel[idx]*2-1))
+
+    train_heat_maps=[]
+    train_heat_maps.append(train_heat_map)
+    train_heat_maps.append(train_heat_map)
 
     print("Prepare heatmap completed!")
     #load ResNet50 without dense layer and with theano dim ordering
@@ -64,11 +66,14 @@ def vnect(train_dataset, valid_dataset):
     #compile the model
     head_model.compile(optimizer='rmsprop',
                        loss='mean_squared_error', metrics=['accuracy'])
-
-    head_model.fit(x=train_img_rgb, y=train_heat_maps, batch_size=64, epochs=epochs, verbose=1, callbacks=None, validation_split=0.0, validation_data=None,
-                   shuffle=True, class_weight=None, sample_weight=None, initial_epoch=0, steps_per_epoch=None, validation_steps=None)
-
+    head_model.fit(x=train_img_rgb, y=train_heat_maps, batch_size=64, epochs=epochs)
+    predict = head_model.predict(test_img_rgb)
+    skel = SkelFromHeatmap(predict[0], predict[1], output_size)
+    sample_dir = './'
+    save_images(test_img_rgb, image_manifold_size(batch_size),
+                '{}/train_{:02d}_{:04d}.png'.format(sample_dir, epochs, idx), skel=(skel+224)/224*2)
     return 1
+
 
 
 if __name__ == '__main__':
@@ -77,7 +82,7 @@ if __name__ == '__main__':
         ds = Dataset()
         # ds.loadH36M_expended(64*10, mode='train',
         #                      tApp=True, replace=False)
-        ds.loadH36M(64*10, mode='train',
+        ds.loadH36M(64*1, mode='train',
                     tApp=True, replace=False)
         val_ds = Dataset()
         # val_ds.loadH36M_all('all', mode='valid',
