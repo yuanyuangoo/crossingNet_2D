@@ -2,8 +2,10 @@ import time
 import sys
 from keras.layers import Flatten, Dense, Dropout, Conv2DTranspose
 from keras.layers.normalization import BatchNormalization
-from keras.models import Model
+from keras.models import Model,model_from_json
 from keras.applications.resnet50 import ResNet50
+
+
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 sys.path.append('./')
@@ -12,7 +14,7 @@ from data.dataset import *
 import globalConfig
 
 def vnect(train_dataset, valid_dataset):
-    epochs = 1
+    epochs = 100
     batch_size = 64
     _, train_skel, _, train_img_rgb, n_samples, total_batch = prep_data(
         train_dataset, batch_size)
@@ -67,11 +69,31 @@ def vnect(train_dataset, valid_dataset):
     head_model.compile(optimizer='rmsprop',
                        loss='mean_squared_error', metrics=['accuracy'])
     head_model.fit(x=train_img_rgb, y=train_heat_maps, batch_size=64, epochs=epochs)
+    scores = head_model.evaluate(train_img_rgb, train_heat_maps, verbose=0)
+    print("%s: %.2f%%" % (head_model.metrics_names[1], scores[1]*100))
+    # serialize model to JSON
+    model_json = head_model.to_json()
+    with open("model.json", "w") as json_file:
+        json_file.write(model_json)
+    # serialize weights to HDF5
+    head_model.save_weights("model.h5")
+    print("Saved model to disk")
+
+    # # load json and create model
+    # json_file = open('model.json', 'r')
+    # loaded_model_json = json_file.read()
+    # json_file.close()
+    # head_model = model_from_json(loaded_model_json)
+    # # load weights into new model
+    # head_model.load_weights("model.h5")
+    # print("Loaded model from disk")
+
+    head_model.compile(loss='mean_squared_error', optimizer='rmsprop', metrics=['accuracy'])
     predict = head_model.predict(test_img_rgb)
-    skel = SkelFromHeatmap(predict[0], predict[1], output_size)
+    skel = SkelFromHeatmap(predict[0], predict[1], input_size)
     sample_dir = './'
     save_images(test_img_rgb, image_manifold_size(batch_size),
-                '{}/train_{:02d}_{:04d}.png'.format(sample_dir, epochs, idx), skel=(skel+224)/224*2)
+                '{}/test_{:02d}_{:04d}.png'.format(sample_dir, epochs, idx), skel=(skel+input_size)/(input_size*2))
     return 1
 
 
@@ -82,7 +104,7 @@ if __name__ == '__main__':
         ds = Dataset()
         # ds.loadH36M_expended(64*10, mode='train',
         #                      tApp=True, replace=False)
-        ds.loadH36M(64*1, mode='train',
+        ds.loadH36M(64*100, mode='train',
                     tApp=True, replace=False)
         val_ds = Dataset()
         # val_ds.loadH36M_all('all', mode='valid',
