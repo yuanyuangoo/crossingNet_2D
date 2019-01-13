@@ -2,19 +2,20 @@ import time
 import sys
 from keras.layers import Flatten, Dense, Dropout, Conv2DTranspose
 from keras.layers.normalization import BatchNormalization
-from keras.models import Model,model_from_json
+from keras.models import Model, model_from_json
 from keras.applications.resnet50 import ResNet50
+from keras.activations import hard_sigmoid
 
 
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 sys.path.append('./')
-from data.util import *
-from data.dataset import *
 import globalConfig
+from data.dataset import *
+from data.util import *
 
 def vnect(train_dataset, valid_dataset):
-    epochs = 100
+    epochs = 400
     batch_size = 64
     _, train_skel, _, train_img_rgb, n_samples, total_batch = prep_data(
         train_dataset, batch_size)
@@ -26,13 +27,13 @@ def vnect(train_dataset, valid_dataset):
     n_joints = 17
     train_heat_map = np.zeros(
         (n_samples, output_size, output_size, n_joints))
-    train_z_heat_maps = np.zeros(
-        (n_samples, output_size, output_size, n_joints))
+    # train_z_heat_maps = np.zeros(
+    #     (n_samples, output_size, output_size, n_joints))
     for idx in tqdm(range(n_samples)):
-        train_heat_map[idx], train_z_heat_maps[idx] = SkelGaussianHeatMap(
+        train_heat_map[idx], _ = SkelGaussianHeatMap(
             input_size, output_size, 224*(train_skel[idx]*2-1))
 
-    train_heat_maps=[]
+    train_heat_maps = []
     train_heat_maps.append(train_heat_map)
     train_heat_maps.append(train_heat_map)
 
@@ -50,14 +51,12 @@ def vnect(train_dataset, valid_dataset):
 
     outputs = []
 
-    res4d_heatmap1a = Conv2DTranspose(17, 4, strides=2, padding='same',
-                                      name='res4d_heatmap1a')(res4d.output)
+    res4d_heatmap1a = Conv2DTranspose(17, 4, strides=2, padding='same', activation='sigmoid', name='res4d_heatmap1a')(res4d.output)
     res4d_heatmap_bn = BatchNormalization(
         name='res4d_heatmap_bn')(res4d_heatmap1a)
     outputs.append(res4d_heatmap_bn)
 
-    res5a_heatmap1a = Conv2DTranspose(17, 4, strides=4, padding='same',
-                                      name='res5a_heatmap1a')(res5a.output)
+    res5a_heatmap1a = Conv2DTranspose(17, 4, strides=4, padding='same', activation='sigmoid', name='res5a_heatmap1a')(res5a.output)
     res5a_heatmap_bn = BatchNormalization(
         name='res5a_heatmap_bn')(res5a_heatmap1a)
     outputs.append(res5a_heatmap_bn)
@@ -68,7 +67,8 @@ def vnect(train_dataset, valid_dataset):
     #compile the model
     head_model.compile(optimizer='rmsprop',
                        loss='mean_squared_error', metrics=['accuracy'])
-    head_model.fit(x=train_img_rgb, y=train_heat_maps, batch_size=64, epochs=epochs)
+    head_model.fit(x=train_img_rgb, y=train_heat_maps,
+                   batch_size=64, epochs=epochs)
     scores = head_model.evaluate(train_img_rgb, train_heat_maps, verbose=0)
     print("%s: %.2f%%" % (head_model.metrics_names[1], scores[1]*100))
     # serialize model to JSON
@@ -88,14 +88,14 @@ def vnect(train_dataset, valid_dataset):
     # head_model.load_weights("model.h5")
     # print("Loaded model from disk")
 
-    head_model.compile(loss='mean_squared_error', optimizer='rmsprop', metrics=['accuracy'])
+    head_model.compile(loss='mean_squared_error',
+                       optimizer='rmsprop', metrics=['accuracy'])
     predict = head_model.predict(test_img_rgb)
-    skel = SkelFromHeatmap(predict[0], predict[1], input_size)
+    skel = SkelFromHeatmap(predict[1], predict[1], input_size)
     sample_dir = './'
     save_images(test_img_rgb, image_manifold_size(batch_size),
                 '{}/test_{:02d}_{:04d}.png'.format(sample_dir, epochs, idx), skel=(skel+input_size)/(input_size*2))
     return 1
-
 
 
 if __name__ == '__main__':
