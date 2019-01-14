@@ -1,6 +1,6 @@
 import time
 import sys
-from keras.layers import Flatten, Dense, Dropout, Conv2DTranspose, Reshape
+from keras.layers import Flatten, Dense, Dropout, Conv2DTranspose, Reshape, Lambda
 from keras.layers.normalization import BatchNormalization
 from keras.models import Model, model_from_json
 from keras.applications.resnet50 import ResNet50
@@ -17,7 +17,7 @@ input_size = 224
 output_size = 28
 batch_size = 64
 epochs = 100
-
+input_scalar=100
 def getData(train_dataset, valid_dataset, batch_size):
     _, train_skel, _, train_img_rgb, n_samples, total_batch = prep_data(
         train_dataset, batch_size)
@@ -60,7 +60,7 @@ def load_model():
 
 
 def build_model():
-    #load ResNet50 without dense layer and with theano dim ordering
+    #load ResNet50 without dense lainput_scalaryer and with theano dim ordering
     base_model = ResNet50(weights='imagenet', include_top=False,
                           input_shape=(224, 224, 3))
 
@@ -78,7 +78,8 @@ def build_model():
         17, 4, strides=2, padding='same', activation='sigmoid', name='res4d_heatmap1a')(res4d.output)
     res4d_heatmap_bn = BatchNormalization(
         name='res4d_heatmap_bn')(res4d_heatmap1a)
-    outputs.append(res4d_heatmap_bn)
+    sc_mult1 = Lambda(lambda x: x * input_scalar)(res4d_heatmap_bn)
+    outputs.append(sc_mult2)
 
     res5a_heatmap1a = Conv2DTranspose(
         17, 4, strides=4, padding='same', activation='sigmoid', name='res5a_heatmap1a')(res5a.output)
@@ -86,9 +87,10 @@ def build_model():
     #     28*28*17, activation='sigmoid')(Flatten()(res5a_heatmap1a)))
 
     res5a_heatmap_bn = BatchNormalization(
-        name='res5a_heatmap_bn')(res5a_heatmap1a)
-    outputs.append(res5a_heatmap_bn)
-
+        name='res5a_heatmap_bn')(res5a_heatmap1a)*100
+    sc_mult2 = Lambda(lambda x: x * input_scalar)(res5a_heatmap_bn)
+    outputs.append(sc_mult2)
+    
     #create graph of your new model
     head_model = Model(input=base_model.input, output=outputs)
     return head_model
@@ -107,7 +109,7 @@ def train(head_model,train_img_rgb,train_heat_maps):
     #compile the model
     head_model.compile(optimizer='rmsprop',
                        loss='mean_absolute_error', metrics=['accuracy'])
-    head_model.fit(x=train_img_rgb, y=train_heat_maps,
+    head_model.fit(x=train_img_rgb, y=train_heat_maps*100,
                    batch_size=batch_size, epochs=epochs)
 
     save_model(head_model)
@@ -143,13 +145,13 @@ if __name__ == '__main__':
         ds = Dataset()
         # ds.loadH36M_expended(64*10, mode='train',
         #                      tApp=True, replace=False)
-        ds.loadH36M(64*100, mode='train',
-                    tApp=True, replace=False)
+        # ds.loadH36M(64*100, mode='train',
+        #             tApp=True, replace=False)
         val_ds = Dataset()
         # val_ds.loadH36M_all('all', mode='valid',
         #                     tApp=True, replace=False)
-        val_ds.loadH36M(64, mode='valid',
-                        tApp=True, replace=False)
+        # val_ds.loadH36M(64, mode='valid',
+        #                 tApp=True, replace=False)
         Vnect = vnect(ds, val_ds)
 
     elif globalConfig.dataset == 'APE':
