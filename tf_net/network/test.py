@@ -1,6 +1,6 @@
 import time
 import sys
-from keras.layers import Flatten, Dense, Dropout, Conv2DTranspose, Reshape, Lambda
+from keras.layers import Flatten, Dense, Dropout, Conv2DTranspose, Reshape, Lambda, Multiply
 from keras.layers.normalization import BatchNormalization
 from keras.models import Model, model_from_json
 from keras.applications.resnet50 import ResNet50
@@ -79,7 +79,8 @@ def build_model():
     res4d_heatmap_bn = BatchNormalization(
         name='res4d_heatmap_bn')(res4d_heatmap1a)
     sc_mult1 = Lambda(lambda x: x * input_scalar)(res4d_heatmap_bn)
-    outputs.append(sc_mult2)
+    # sc_mult1=Multiply()([res4d_heatmap_bn,100])
+    outputs.append(sc_mult1)
 
     res5a_heatmap1a = Conv2DTranspose(
         17, 4, strides=4, padding='same', activation='sigmoid', name='res5a_heatmap1a')(res5a.output)
@@ -87,8 +88,10 @@ def build_model():
     #     28*28*17, activation='sigmoid')(Flatten()(res5a_heatmap1a)))
 
     res5a_heatmap_bn = BatchNormalization(
-        name='res5a_heatmap_bn')(res5a_heatmap1a)*100
+        name='res5a_heatmap_bn')(res5a_heatmap1a)
     sc_mult2 = Lambda(lambda x: x * input_scalar)(res5a_heatmap_bn)
+    # sc_mult2 = Multiply()([res5a_heatmap_bn, 100])
+
     outputs.append(sc_mult2)
     
     #create graph of your new model
@@ -145,13 +148,13 @@ if __name__ == '__main__':
         ds = Dataset()
         # ds.loadH36M_expended(64*10, mode='train',
         #                      tApp=True, replace=False)
-        # ds.loadH36M(64*100, mode='train',
-        #             tApp=True, replace=False)
+        ds.loadH36M(64*100, mode='train',
+                    tApp=True, replace=False)
         val_ds = Dataset()
         # val_ds.loadH36M_all('all', mode='valid',
-        #                     tApp=True, replace=False)
-        # val_ds.loadH36M(64, mode='valid',
-        #                 tApp=True, replace=False)
+                            # tApp=True, replace=False)
+        val_ds.loadH36M(64, mode='valid',
+                        tApp=True, replace=False)
         Vnect = vnect(ds, val_ds)
 
     elif globalConfig.dataset == 'APE':
