@@ -15,7 +15,8 @@ import globalConfig
 
 input_size = 224
 output_size = 28
-
+batch_size = 64
+epochs = 200
 
 def getData(train_dataset, valid_dataset, batch_size):
     _, train_skel, _, train_img_rgb, n_samples, total_batch = prep_data(
@@ -101,9 +102,6 @@ def save_model(head_model):
 
 
 def vnect(train_dataset, valid_dataset, resume_train=True):
-    epochs = 1
-    batch_size = 64
-
     train_heat_maps, train_img_rgb, test_img_rgb, train_skel, test_skel, n_samples, total_batch = getData(
         train_dataset, valid_dataset, batch_size)
     if resume_train:
@@ -111,21 +109,27 @@ def vnect(train_dataset, valid_dataset, resume_train=True):
     else:
         head_model = build_model()
 
+    head_model = train(head_model, train_img_rgb, train_heat_maps)
+    predict(head_model, test_img_rgb, total_batch)
+    return 1
+
+def train(head_model,train_img_rgb,train_heat_maps):
     #compile the model
     head_model.compile(optimizer='rmsprop',
                        loss='mean_absolute_error', metrics=['accuracy'])
     head_model.fit(x=train_img_rgb, y=train_heat_maps,
-                   batch_size=64, epochs=epochs)
+                   batch_size=batch_size, epochs=epochs)
 
     save_model(head_model)
+    return head_model
 
+def predict(head_model, test_img_rgb, total_batch):
     predict = head_model.predict(test_img_rgb)
     skel = SkelFromHeatmap(predict[1], predict[1], input_size)
     sample_dir = './'
     save_images(test_img_rgb, image_manifold_size(batch_size), '{}/test_{:02d}_{:04d}.png'.format(
         sample_dir, epochs, total_batch), skel=(skel+input_size)/(input_size*2))
-    return 1
-
+    print("saved prediction")
 
 if __name__ == '__main__':
     if globalConfig.dataset == 'H36M':
@@ -133,7 +137,7 @@ if __name__ == '__main__':
         ds = Dataset()
         # ds.loadH36M_expended(64*10, mode='train',
         #                      tApp=True, replace=False)
-        ds.loadH36M(64*1, mode='train',
+        ds.loadH36M(64*100, mode='train',
                     tApp=True, replace=False)
         val_ds = Dataset()
         # val_ds.loadH36M_all('all', mode='valid',
