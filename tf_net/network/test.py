@@ -1,6 +1,6 @@
 import time
 import sys
-from keras.layers import Flatten, Dense, Dropout, Conv2DTranspose
+from keras.layers import Flatten, Dense, Dropout, Conv2DTranspose, Reshape
 from keras.layers.normalization import BatchNormalization
 from keras.models import Model, model_from_json
 from keras.applications.resnet50 import ResNet50
@@ -81,8 +81,11 @@ def build_model():
 
     res5a_heatmap1a = Conv2DTranspose(
         17, 4, strides=4, padding='same', activation='sigmoid', name='res5a_heatmap1a')(res5a.output)
+    res5a_heatmap_fc = Reshape((28, 28, 17))(Dense(
+        28*28*17, activation='sigmoid')(Flatten()(res5a_heatmap1a)))
+    
     res5a_heatmap_bn = BatchNormalization(
-        name='res5a_heatmap_bn')(res5a_heatmap1a)
+        name='res5a_heatmap_bn')(res5a_heatmap_fc)
     outputs.append(res5a_heatmap_bn)
 
     #create graph of your new model
@@ -99,19 +102,6 @@ def save_model(head_model):
     # serialize weights to HDF5
     head_model.save_weights("model.h5")
     print("Saved model to disk")
-
-
-def vnect(train_dataset, valid_dataset, resume_train=True):
-    train_heat_maps, train_img_rgb, test_img_rgb, train_skel, test_skel, n_samples, total_batch = getData(
-        train_dataset, valid_dataset, batch_size)
-    if resume_train:
-        head_model = load_model()
-    else:
-        head_model = build_model()
-
-    head_model = train(head_model, train_img_rgb, train_heat_maps)
-    predict(head_model, test_img_rgb, total_batch)
-    return 1
 
 def train(head_model,train_img_rgb,train_heat_maps):
     #compile the model
@@ -131,19 +121,35 @@ def predict(head_model, test_img_rgb, total_batch):
         sample_dir, epochs, total_batch), skel=(skel+input_size)/(input_size*2))
     print("saved prediction")
 
+def vnect(train_dataset, valid_dataset, resume_train=False):
+
+    if resume_train:
+        head_model = load_model()
+    else:
+        head_model = build_model()
+
+    train_heat_maps, train_img_rgb, test_img_rgb, train_skel, test_skel, n_samples, total_batch = getData(
+        train_dataset, valid_dataset, batch_size)
+
+    head_model = train(head_model, train_img_rgb, train_heat_maps)
+    predict(head_model, test_img_rgb, total_batch)
+    return 1
+
+
+
 if __name__ == '__main__':
     if globalConfig.dataset == 'H36M':
         import data.h36m as h36m
         ds = Dataset()
         # ds.loadH36M_expended(64*10, mode='train',
         #                      tApp=True, replace=False)
-        ds.loadH36M(64*100, mode='train',
-                    tApp=True, replace=False)
+        # ds.loadH36M(64*100, mode='train',
+        #             tApp=True, replace=False)
         val_ds = Dataset()
         # val_ds.loadH36M_all('all', mode='valid',
         #                     tApp=True, replace=False)
-        val_ds.loadH36M(64, mode='valid',
-                        tApp=True, replace=False)
+        # val_ds.loadH36M(64, mode='valid',
+        #                 tApp=True, replace=False)
         Vnect = vnect(ds, val_ds)
 
     elif globalConfig.dataset == 'APE':
