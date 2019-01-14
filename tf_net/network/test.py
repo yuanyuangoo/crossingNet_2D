@@ -16,7 +16,7 @@ import globalConfig
 input_size = 224
 output_size = 28
 batch_size = 64
-epochs = 200
+epochs = 100
 
 def getData(train_dataset, valid_dataset, batch_size):
     _, train_skel, _, train_img_rgb, n_samples, total_batch = prep_data(
@@ -66,9 +66,10 @@ def build_model():
 
     res5a = base_model.get_layer('activation_43')
     res4d = base_model.get_layer('activation_34')
+    L = base_model.get_layer('activation_25')
 
     all_layers = base_model.layers
-    for i in range(base_model.layers.index(res4d)):
+    for i in range(base_model.layers.index(L)):
         all_layers[i].trainable = False
 
     outputs = []
@@ -81,16 +82,15 @@ def build_model():
 
     res5a_heatmap1a = Conv2DTranspose(
         17, 4, strides=4, padding='same', activation='sigmoid', name='res5a_heatmap1a')(res5a.output)
-    res5a_heatmap_fc = Reshape((28, 28, 17))(Dense(
-        28*28*17, activation='sigmoid')(Flatten()(res5a_heatmap1a)))
-    
+    # res5a_heatmap_fc = Reshape((28, 28, 17))(Dense(
+    #     28*28*17, activation='sigmoid')(Flatten()(res5a_heatmap1a)))
+
     res5a_heatmap_bn = BatchNormalization(
-        name='res5a_heatmap_bn')(res5a_heatmap_fc)
+        name='res5a_heatmap_bn')(res5a_heatmap1a)
     outputs.append(res5a_heatmap_bn)
 
     #create graph of your new model
     head_model = Model(input=base_model.input, output=outputs)
-
     return head_model
 
 
@@ -121,9 +121,9 @@ def predict(head_model, test_img_rgb, total_batch):
         sample_dir, epochs, total_batch), skel=(skel+input_size)/(input_size*2))
     print("saved prediction")
 
-def vnect(train_dataset, valid_dataset, resume_train=False):
+def vnect(train_dataset, valid_dataset, resume_train=True):
 
-    if resume_train:
+    if resume_train and os.path.exists('model.json'):
         head_model = load_model()
     else:
         head_model = build_model()
@@ -143,13 +143,13 @@ if __name__ == '__main__':
         ds = Dataset()
         # ds.loadH36M_expended(64*10, mode='train',
         #                      tApp=True, replace=False)
-        # ds.loadH36M(64*100, mode='train',
-        #             tApp=True, replace=False)
+        ds.loadH36M(64*100, mode='train',
+                    tApp=True, replace=False)
         val_ds = Dataset()
         # val_ds.loadH36M_all('all', mode='valid',
         #                     tApp=True, replace=False)
-        # val_ds.loadH36M(64, mode='valid',
-        #                 tApp=True, replace=False)
+        val_ds.loadH36M(64, mode='valid',
+                        tApp=True, replace=False)
         Vnect = vnect(ds, val_ds)
 
     elif globalConfig.dataset == 'APE':
