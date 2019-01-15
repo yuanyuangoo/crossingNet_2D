@@ -1,10 +1,11 @@
 import time
 import sys
-from keras.layers import Flatten, Dense, Dropout, Conv2DTranspose, Reshape, Lambda, Multiply
+from keras.layers import Flatten, Dense, Dropout, Conv2DTranspose, Reshape, Lambda, Multiply, Input
 from keras.layers.normalization import BatchNormalization
 from keras.models import Model, model_from_json
 from keras.applications.resnet50 import ResNet50
 from keras.activations import hard_sigmoid
+from keras import backend as K
 
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
@@ -62,7 +63,7 @@ def load_model():
 def build_model():
     #load ResNet50 without dense lainput_scalaryer and with theano dim ordering
     base_model = ResNet50(weights='imagenet', include_top=False,
-                          input_shape=(224, 224, 3))
+                          input_shape=(input_size, input_size, 3))
 
     res5a = base_model.get_layer('activation_43')
     res4d = base_model.get_layer('activation_34')
@@ -71,15 +72,15 @@ def build_model():
     all_layers = base_model.layers
     for i in range(base_model.layers.index(L)):
         all_layers[i].trainable = False
-
+    input = Input(
+        shape=(batch_size, output_size, output_size, 17))
     outputs = []
-
     res4d_heatmap1a = Conv2DTranspose(
         17, 4, strides=2, padding='same', activation='sigmoid', name='res4d_heatmap1a')(res4d.output)
     res4d_heatmap_bn = BatchNormalization(
         name='res4d_heatmap_bn')(res4d_heatmap1a)
-    sc_mult1 = Lambda(lambda x: x * input_scalar)(res4d_heatmap_bn)
-    # sc_mult1=Multiply()([res4d_heatmap_bn,100])
+    # sc_mult1 = Lambda(lambda x: x * input_scalar)(res4d_heatmap_bn)
+    sc_mult1 = Multiply()([res4d_heatmap_bn, input])
     outputs.append(sc_mult1)
 
     res5a_heatmap1a = Conv2DTranspose(
@@ -89,13 +90,18 @@ def build_model():
 
     res5a_heatmap_bn = BatchNormalization(
         name='res5a_heatmap_bn')(res5a_heatmap1a)
-    sc_mult2 = Lambda(lambda x: x * input_scalar)(res5a_heatmap_bn)
-    # sc_mult2 = Multiply()([res5a_heatmap_bn, 100])
+    # sc_mult2 = Lambda(lambda x: x * input_scalar)(res5a_heatmap_bn)
+    sc_mult2 = Multiply()([res5a_heatmap_bn, input])
 
     outputs.append(sc_mult2)
     
     #create graph of your new model
-    head_model = Model(input=base_model.input, output=outputs)
+    inputs=[]
+
+
+    inputs.append(base_model.input)
+    inputs.append(input)
+    head_model = Model(input=inputs, output=outputs)
     return head_model
 
 
@@ -110,9 +116,10 @@ def save_model(head_model):
 
 def train(head_model,train_img_rgb,train_heat_maps):
     #compile the model
+    input = np.ones((batch_size, output_size, output_size, 17))*100
     head_model.compile(optimizer='rmsprop',
                        loss='mean_absolute_error', metrics=['accuracy'])
-    head_model.fit(x=train_img_rgb, y=train_heat_maps*100,
+    head_model.fit(x=[train_img_rgb,input], y=train_heat_maps*100,
                    batch_size=batch_size, epochs=epochs)
 
     save_model(head_model)
@@ -148,13 +155,13 @@ if __name__ == '__main__':
         ds = Dataset()
         # ds.loadH36M_expended(64*10, mode='train',
         #                      tApp=True, replace=False)
-        ds.loadH36M(64*100, mode='train',
-                    tApp=True, replace=False)
+        # ds.loadH36M(64*100, mode='train',
+        #             tApp=True, replace=False)
         val_ds = Dataset()
         # val_ds.loadH36M_all('all', mode='valid',
                             # tApp=True, replace=False)
-        val_ds.loadH36M(64, mode='valid',
-                        tApp=True, replace=False)
+        # val_ds.loadH36M(64, mode='valid',
+        #                 tApp=True, replace=False)
         Vnect = vnect(ds, val_ds)
 
     elif globalConfig.dataset == 'APE':
