@@ -1,4 +1,3 @@
-import time
 import sys
 from keras.layers import Flatten, Dense, Dropout, Conv2DTranspose, Reshape, Lambda, Multiply
 from keras.layers.normalization import BatchNormalization
@@ -9,15 +8,16 @@ from keras.activations import hard_sigmoid
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 sys.path.append('./')
-from data.util import *
-from data.dataset import *
 import globalConfig
+from data.dataset import *
+from data.util import *
 
 input_size = 224
 output_size = 28
 batch_size = 64
-epochs = 100
-input_scalar=100
+epochs = 300
+input_scalar = 100
+
 def getData(train_dataset, valid_dataset, batch_size):
     _, train_skel, _, train_img_rgb, n_samples, total_batch = prep_data(
         train_dataset, batch_size)
@@ -41,8 +41,8 @@ def getData(train_dataset, valid_dataset, batch_size):
             input_size, output_size, 224*(test_skel[idx]*2-1))
 
     train_heat_maps = []
-    train_heat_maps.append(train_heat_map)
-    train_heat_maps.append(train_heat_map)
+    train_heat_maps.append(train_heat_map*100)
+    train_heat_maps.append(train_heat_map*100)
     print("Prepare heatmap completed!")
     return train_heat_maps, train_img_rgb, test_img_rgb, train_skel, test_skel, n_samples, total_batch
 
@@ -78,9 +78,7 @@ def build_model():
         17, 4, strides=2, padding='same', activation='sigmoid', name='res4d_heatmap1a')(res4d.output)
     res4d_heatmap_bn = BatchNormalization(
         name='res4d_heatmap_bn')(res4d_heatmap1a)
-    sc_mult1 = Lambda(lambda x: x * input_scalar)(res4d_heatmap_bn)
-    # sc_mult1=Multiply()([res4d_heatmap_bn,100])
-    outputs.append(sc_mult1)
+    outputs.append(res4d_heatmap_bn)
 
     res5a_heatmap1a = Conv2DTranspose(
         17, 4, strides=4, padding='same', activation='sigmoid', name='res5a_heatmap1a')(res5a.output)
@@ -89,11 +87,9 @@ def build_model():
 
     res5a_heatmap_bn = BatchNormalization(
         name='res5a_heatmap_bn')(res5a_heatmap1a)
-    sc_mult2 = Lambda(lambda x: x * input_scalar)(res5a_heatmap_bn)
-    # sc_mult2 = Multiply()([res5a_heatmap_bn, 100])
 
-    outputs.append(sc_mult2)
-    
+    outputs.append(res5a_heatmap_bn)
+
     #create graph of your new model
     head_model = Model(input=base_model.input, output=outputs)
     return head_model
@@ -108,15 +104,17 @@ def save_model(head_model):
     head_model.save_weights("model.h5")
     print("Saved model to disk")
 
-def train(head_model,train_img_rgb,train_heat_maps):
+
+def train(head_model, train_img_rgb, train_heat_maps):
     #compile the model
     head_model.compile(optimizer='rmsprop',
                        loss='mean_absolute_error', metrics=['accuracy'])
-    head_model.fit(x=train_img_rgb, y=train_heat_maps*100,
+    head_model.fit(x=train_img_rgb, y=train_heat_maps,
                    batch_size=batch_size, epochs=epochs)
 
     save_model(head_model)
     return head_model
+
 
 def predict(head_model, test_img_rgb, total_batch):
     predict = head_model.predict(test_img_rgb)
@@ -125,6 +123,7 @@ def predict(head_model, test_img_rgb, total_batch):
     save_images(test_img_rgb, image_manifold_size(batch_size), '{}/test_{:02d}_{:04d}.png'.format(
         sample_dir, epochs, total_batch), skel=(skel+input_size)/(input_size*2))
     print("saved prediction")
+
 
 def vnect(train_dataset, valid_dataset, resume_train=True):
 
@@ -141,7 +140,6 @@ def vnect(train_dataset, valid_dataset, resume_train=True):
     return 1
 
 
-
 if __name__ == '__main__':
     if globalConfig.dataset == 'H36M':
         import data.h36m as h36m
@@ -152,7 +150,7 @@ if __name__ == '__main__':
                     tApp=True, replace=False)
         val_ds = Dataset()
         # val_ds.loadH36M_all('all', mode='valid',
-                            # tApp=True, replace=False)
+        # tApp=True, replace=False)
         val_ds.loadH36M(64, mode='valid',
                         tApp=True, replace=False)
         Vnect = vnect(ds, val_ds)
