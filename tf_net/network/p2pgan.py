@@ -260,6 +260,16 @@ class P2PGAN(object):
         test_skel = test_skel[0:64]
         test_img = test_img[0:64]
         test_img_rgb = test_img_rgb[0:64]
+        print("Preparing heatmap!")
+
+        train_heat_maps = np.zeros(
+            (self.n_samples, self.input_size//8, self.input_size//8, self.n_joints))
+        train_z_heat_maps = np.zeros(
+            (self.n_samples, self.input_size//8, self.input_size//8, self.n_joints))
+
+        for idx in tqdm(range(self.n_samples)):
+            train_heat_maps[idx], train_z_heat_maps[idx] = SkelGaussianHeatMap(
+                self.input_size, self.input_size, train_skel[idx]*256-128)
 
         with tf.Session() as self.sess:
             d_optim = tf.train.AdamOptimizer(self.learning_rate, beta1=self.beta1) \
@@ -290,11 +300,11 @@ class P2PGAN(object):
             d_loss = 10
             for epoch in xrange(self.epoch):
                 for idx in xrange(0, int(batch_idxs)):
-                    batch_target = train_img_rgb[idx *
+                    batch_target = train_heat_maps[idx *
                                                  self.batch_size:(idx+1)*self.batch_size]
                     batch_labels = train_labels[idx *
                                                 self.batch_size:(idx+1)*self.batch_size]
-                    batch_input = train_img[idx *
+                    batch_input = train_img_rgb[idx *
                                             self.batch_size:(idx+1)*self.batch_size]
 
                     # # add salt & pepper noise
